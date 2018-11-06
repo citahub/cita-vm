@@ -1,0 +1,9 @@
+[package]
+name = "cita-evm"
+version = "0.1.0"
+authors = ["yejiayu <yejiayu.fe@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+ethereum-types = "0.4.0"
+sha3 = "0.8.0"
