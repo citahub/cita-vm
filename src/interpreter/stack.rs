@@ -35,11 +35,11 @@ impl<T: Clone + Copy> Stack<T> {
 
     pub fn swap(&mut self, n: usize) {
         let len = self.data.len();
-        self.data.swap(len - n - 1, len - 1)
+        self.data.swap(len - n, len - 1)
     }
 
     pub fn dup(&mut self, n: usize) {
-        let d = self.back(n);
+        let d = self.back(n - 1);
         self.data.push(d)
     }
 
