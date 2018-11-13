@@ -61,12 +61,3 @@ impl Display for OpCode {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_opcode() {
-        println!("opcode {}", OpCode::STOP);
-    }
-}

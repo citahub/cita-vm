@@ -3,7 +3,11 @@ pub struct Stack<T> {
 }
 
 impl<T: Clone + Copy> Stack<T> {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new() -> Stack<T> {
+        Stack { data: Vec::new() }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
         Stack {
             data: Vec::with_capacity(capacity),
         }
@@ -22,10 +26,7 @@ impl<T: Clone + Copy> Stack<T> {
     }
 
     pub fn pop(&mut self) -> T {
-        match self.data.pop() {
-            Some(v) => v,
-            None => panic!("Tried to pop from empty stack."),
-        }
+        self.data.pop().unwrap()
     }
 
     pub fn len(&self) -> usize {
@@ -38,22 +39,19 @@ impl<T: Clone + Copy> Stack<T> {
     }
 
     pub fn dup(&mut self, n: usize) {
-        let d = self.data[n];
+        let d = self.back(n);
         self.data.push(d)
     }
 
-    pub fn peek(&self) -> &T {
-        &self.data[self.data.len() - 1]
+    pub fn back(&self, n: usize) -> T {
+        self.data[self.data.len() - n - 1].clone()
     }
 
-    pub fn back(&self, n: usize) -> T {
-        match self.data.get(self.data.len() - n - 1) {
-            Some(v) => v.clone(),
-            None => panic!("Tried to back from empty stack."),
-        }
+    pub fn peek(&self) -> T {
+        self.back(0)
     }
 
     pub fn require(&self, n: usize) -> bool {
-        self.data.len() > n
+        self.data.len() >= n
     }
 }
