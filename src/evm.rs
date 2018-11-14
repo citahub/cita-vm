@@ -3,6 +3,8 @@ use ethereum_types::{Address, H256, U256};
 use super::interpreter::memory::Memory;
 use super::interpreter::stack::Stack;
 use super::statedb::statedb::StateDB;
+use super::opcode::OpCode;
+use super::opcode::u8_2_opcode;
 
 pub struct EVMContext {
     pub stack: Stack<U256>,
@@ -14,6 +16,9 @@ pub struct EVMContext {
     pub return_data: Vec<u8>,
 
     pub info: EVMInfo,
+
+    pub depth: u64,
+    pub abort: bool,
 }
 
 pub struct EVMInfo {
@@ -35,4 +40,25 @@ pub struct Contract {
 
     pub quota: u64,
     pub value: U256,
+}
+
+impl Contract {
+    pub fn get_byte(&mut self, n: u64) -> u8 {
+        if n < self.code.len() as u64 {
+            return *self.code.get(n as usize).unwrap();
+        }
+        0
+    }
+
+    pub fn get_opcode(&mut self, n:u64) -> OpCode {
+         u8_2_opcode(self.get_byte(n))
+    }
+
+    pub fn use_gas(&mut self, gas: u64) -> bool {
+        if self.quota < gas {
+            return false
+        }
+        self.quota -= gas;
+        return true
+    }
 }
