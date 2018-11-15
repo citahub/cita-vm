@@ -9,6 +9,7 @@ use ethereum_types::U256;
 use std::collections::HashMap;
 use std::error::Error;
 use std::u64;
+use crate::interpreter::common::to_word_size;
 
 pub struct Config {
     pub jump_table: HashMap<u8, jump_table::Operation>,
@@ -27,7 +28,7 @@ impl Interpreter {
         Interpreter {
             ctx: ctx,
             cfg: cfg,
-            gas_table: gas_table::GAS_TABLE_CONSTANTINOPLE,
+            gas_table: gas_table::GAS_TABLE,
             read_only: false,
             return_data: Vec::new(),
         }
@@ -91,9 +92,9 @@ impl Interpreter {
 
             // TODO: in go-ethereum there are some checks.
             let memory_size = (operation.memory_size)(&mut self.ctx);
-            let memory_size = to_word_size(memory_size);
+            let memory_size = to_word_size(memory_size.as_u64());
 
-            cost = (operation.gas_cost)(&mut self.gas_table, &mut self.ctx, &contract)?;
+            cost = (operation.gas_cost)(&mut self.gas_table, &mut self.ctx, &contract, memory_size)?;
             if !contract.use_gas(cost) {
                 return Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -134,11 +135,4 @@ impl Interpreter {
     pub fn can_run(&self) -> bool {
         false
     }
-}
-
-pub fn to_word_size(size: u64) -> u64 {
-    if size > u64::MAX - 31 {
-        return u64::MAX / 32 + 1;
-    }
-    return (size + 31) / 32;
 }

@@ -1,10 +1,11 @@
 pub struct Memory {
     store: Vec<u8>,
+    pub last_gas_cost: u64,
 }
 
 impl Memory {
     pub fn new() -> Memory {
-        Memory { store: vec![] }
+        Memory { store: vec![], last_gas_cost: 0 }
     }
 
     pub fn set(&mut self, offset: usize, val: &[u8]) {
