@@ -25,8 +25,8 @@ pub enum CodecError {
 
 impl Error for CodecError {
 	fn description(&self) -> &str {
-		"codec error"
-	}
+        "codec error"
+    }
 }
 
 impl fmt::Display for CodecError {
@@ -73,23 +73,19 @@ impl<H: Hasher> NodeCodec<H> for RLPNodeCodec<H> {
                 }
             },
             Prototype::List(17) => {
-                let mut nodes: [Option<&[u8]>; 16] = 
-                    [
-                        None, None, None, None,
-                        None, None, None, None,
-                        None, None, None, None,
-                        None, None, None, None,
-                    ];
+                let mut nodes = [None; 16];
                 for i in 0..16 {
-                    if !r.at(i)?.is_empty() {
-                        nodes[i] = Some(r.at(i)?.as_raw());
+                    let data = r.at(i)?;
+                    if !data.is_empty() {
+                        nodes[i] = Some(data.as_raw());
                     }
                 };
 
-                let value_node = if r.at(16)?.is_empty() { 
+                let value = r.at(16)?;
+                let value_node = if value.is_empty() { 
                     None 
                 } else { 
-                    Some(r.at(16)?.data()?) 
+                    Some(value.data()?) 
                 };
 
                 Ok(Node::Branch(nodes, value_node))
@@ -117,17 +113,17 @@ impl<H: Hasher> NodeCodec<H> for RLPNodeCodec<H> {
 
     fn leaf_node(partial: &[u8], value: &[u8]) -> Vec<u8> {
         let mut stream = RlpStream::new_list(2);
-        stream.append(&&*partial);
-        stream.append(&&*value);
+        stream.append(&partial);
+        stream.append(&value);
         stream.out()
     }
 
     fn ext_node(partial: &[u8], child_ref: ChildReference<H::Out>) -> Vec<u8> {
         let mut stream = RlpStream::new_list(2);
-        stream.append(&&*partial);
+        stream.append(&partial);
         match child_ref {
-			ChildReference::Hash(h) => stream.append(&AsRef::<[u8]>::as_ref(h.as_ref())),
-			ChildReference::Inline(inline_data, len) => stream.append(&AsRef::<[u8]>::as_ref(&inline_data.as_ref())[..len].as_ref()),
+			ChildReference::Hash(h) => stream.append(&h.as_ref()),
+			ChildReference::Inline(inline_data, len) => stream.append(&&inline_data.as_ref()[..len]),
 		};
         stream.out()
     }
@@ -139,7 +135,7 @@ impl<H: Hasher> NodeCodec<H> for RLPNodeCodec<H> {
              match child {
                 Some(ChildReference::Hash(h)) => stream.append_raw(h.as_ref(), 1),
                  Some(ChildReference::Inline(inline_data, len)) => stream.
-                    append_raw(&AsRef::<[u8]>::as_ref(&inline_data.as_ref())[..len].as_ref(), 1),
+                    append_raw(&inline_data.as_ref()[..len], 1),
                 None => stream.append_empty_data(),
              };
          }
