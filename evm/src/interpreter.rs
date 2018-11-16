@@ -18,7 +18,7 @@ impl Interpreter {
             let op = this.context.contract.get_opcode(pc);
             println!("Opcode: {}", op);
             match op {
-                opcodes::OpCode::STOP => { break }
+                opcodes::OpCode::STOP => break,
                 opcodes::OpCode::ADD => {
                     let a = this.context.stack.pop();
                     let b = this.context.stack.pop();
@@ -89,43 +89,46 @@ impl Interpreter {
                 opcodes::OpCode::MSIZE => {}
                 opcodes::OpCode::GAS => {}
                 opcodes::OpCode::JUMPDEST => {}
-                opcodes::OpCode::PUSH1 => {
-                    pc += 1;
-                    let r = this.context.contract.get_byte(pc);
-                    let r = U256::from(r);
-                    this.context.stack.push(r);
+                opcodes::OpCode::PUSH1
+                | opcodes::OpCode::PUSH2
+                | opcodes::OpCode::PUSH3
+                | opcodes::OpCode::PUSH4
+                | opcodes::OpCode::PUSH5
+                | opcodes::OpCode::PUSH6
+                | opcodes::OpCode::PUSH7
+                | opcodes::OpCode::PUSH8
+                | opcodes::OpCode::PUSH9
+                | opcodes::OpCode::PUSH10
+                | opcodes::OpCode::PUSH11
+                | opcodes::OpCode::PUSH12
+                | opcodes::OpCode::PUSH13
+                | opcodes::OpCode::PUSH14
+                | opcodes::OpCode::PUSH15
+                | opcodes::OpCode::PUSH16
+                | opcodes::OpCode::PUSH17
+                | opcodes::OpCode::PUSH18
+                | opcodes::OpCode::PUSH19
+                | opcodes::OpCode::PUSH20
+                | opcodes::OpCode::PUSH21
+                | opcodes::OpCode::PUSH22
+                | opcodes::OpCode::PUSH23
+                | opcodes::OpCode::PUSH24
+                | opcodes::OpCode::PUSH25
+                | opcodes::OpCode::PUSH26
+                | opcodes::OpCode::PUSH27
+                | opcodes::OpCode::PUSH28
+                | opcodes::OpCode::PUSH29
+                | opcodes::OpCode::PUSH30
+                | opcodes::OpCode::PUSH31
+                | opcodes::OpCode::PUSH32 => {
+                    let n = op as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
+                    for _ in 0..n {
+                        pc += 1;
+                        let r = this.context.contract.get_byte(pc);
+                        let r = U256::from(r);
+                        this.context.stack.push(r);
+                    }
                 }
-                opcodes::OpCode::PUSH2 => {}
-                opcodes::OpCode::PUSH3 => {}
-                opcodes::OpCode::PUSH4 => {}
-                opcodes::OpCode::PUSH5 => {}
-                opcodes::OpCode::PUSH6 => {}
-                opcodes::OpCode::PUSH7 => {}
-                opcodes::OpCode::PUSH8 => {}
-                opcodes::OpCode::PUSH9 => {}
-                opcodes::OpCode::PUSH10 => {}
-                opcodes::OpCode::PUSH11 => {}
-                opcodes::OpCode::PUSH12 => {}
-                opcodes::OpCode::PUSH13 => {}
-                opcodes::OpCode::PUSH14 => {}
-                opcodes::OpCode::PUSH15 => {}
-                opcodes::OpCode::PUSH16 => {}
-                opcodes::OpCode::PUSH17 => {}
-                opcodes::OpCode::PUSH18 => {}
-                opcodes::OpCode::PUSH19 => {}
-                opcodes::OpCode::PUSH20 => {}
-                opcodes::OpCode::PUSH21 => {}
-                opcodes::OpCode::PUSH22 => {}
-                opcodes::OpCode::PUSH23 => {}
-                opcodes::OpCode::PUSH24 => {}
-                opcodes::OpCode::PUSH25 => {}
-                opcodes::OpCode::PUSH26 => {}
-                opcodes::OpCode::PUSH27 => {}
-                opcodes::OpCode::PUSH28 => {}
-                opcodes::OpCode::PUSH29 => {}
-                opcodes::OpCode::PUSH30 => {}
-                opcodes::OpCode::PUSH31 => {}
-                opcodes::OpCode::PUSH32 => {}
                 opcodes::OpCode::DUP1 => {}
                 opcodes::OpCode::DUP2 => {}
                 opcodes::OpCode::DUP3 => {}
@@ -168,10 +171,10 @@ impl Interpreter {
                 opcodes::OpCode::CALLCODE => {}
                 opcodes::OpCode::RETURN => {
                     let init_off = this.context.stack.pop().as_u64() as usize;
-				    let init_size = this.context.stack.pop().as_u64() as usize;
+                    let init_size = this.context.stack.pop().as_u64() as usize;
                     let r = this.context.memory.get(init_off, init_size);
                     this.context.return_data = Vec::from(r);
-                    break
+                    break;
                 }
                 opcodes::OpCode::DELEGATECALL => {}
                 opcodes::OpCode::CREATE2 => {}
