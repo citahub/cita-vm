@@ -5,3 +5,4 @@ authors = ["Cryptape Technologies <contact@cryptape.com>"]
 edition = "2018"
 
 [dependencies]
+ethereum-types = "0.4.0"
