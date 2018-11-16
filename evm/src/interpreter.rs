@@ -18,7 +18,9 @@ impl Interpreter {
             let op = this.context.contract.get_opcode(pc);
             println!("Opcode: {}", op);
             match op {
-                opcodes::OpCode::STOP => break,
+                opcodes::OpCode::STOP => {
+                    break
+                }
                 opcodes::OpCode::ADD => {
                     let a = this.context.stack.pop();
                     let b = this.context.stack.pop();
@@ -121,13 +123,11 @@ impl Interpreter {
                 | opcodes::OpCode::PUSH30
                 | opcodes::OpCode::PUSH31
                 | opcodes::OpCode::PUSH32 => {
+                    pc += 1;
                     let n = op as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
-                    for _ in 0..n {
-                        pc += 1;
-                        let r = this.context.contract.get_byte(pc);
-                        let r = U256::from(r);
-                        this.context.stack.push(r);
-                    }
+                    let r = U256::from(&this.context.contract.code[pc as usize..(pc+n as u64) as usize]);
+                    pc += n as u64 - 1;
+                    this.context.stack.push(r);
                 }
                 opcodes::OpCode::DUP1 => {}
                 opcodes::OpCode::DUP2 => {}
@@ -184,5 +184,28 @@ impl Interpreter {
             }
             pc += 1;
         }
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_interpreter_execute_0x01() {
+        let mut context = core::EVMContext::new();
+        context.contract.code = vec![
+            opcodes::OpCode::PUSH1 as u8, 10,
+            opcodes::OpCode::PUSH1 as u8, 0,
+            opcodes::OpCode::MSTORE as u8,
+            opcodes::OpCode::PUSH1 as u8, 32,
+            opcodes::OpCode::PUSH1 as u8, 0,
+            opcodes::OpCode::RETURN as u8,
+        ];
+        let mut it = Interpreter::new(context);
+        it.run();
+        let r = U256::from_big_endian(&it.context.return_data[..]);
+        assert_eq!(r, U256::from(10));
     }
 }
