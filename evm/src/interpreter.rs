@@ -1,95 +1,837 @@
-use super::core;
+use super::common;
+use super::err;
+use super::ext;
+use super::extmock;
+use super::memory;
 use super::opcodes;
+use super::stack;
 use ethereum_types::*;
+use std::cmp;
+
+#[derive(Clone)]
+pub struct Context {
+    pub origin: Address,
+    pub gas_price: U256,
+    pub gas_limit: u64,
+    pub coinbase: Address,
+    pub number: U256,
+    pub timestamp: u64,
+    pub difficulty: U256,
+}
+
+impl Context {
+    pub fn default() -> Self {
+        Context {
+            origin: Address::zero(),
+            gas_price: U256::one(),
+            gas_limit: 1000000,
+            coinbase: Address::zero(),
+            number: U256::zero(),
+            timestamp: 0,
+            difficulty: U256::zero(),
+        }
+    }
+}
+
+// Log is the data struct for LOG0...LOG4.
+// The members are "Topics: Vec<H256>, Body: Vec<u8>"
+#[derive(Clone)]
+pub struct Log(pub Vec<H256>, pub Vec<u8>);
+
+pub enum InterpreterResult {
+    // Return data, remain gas and Logs.
+    Normal(Vec<u8>, u64, Vec<Log>),
+    Revert(Vec<u8>, u64, Vec<Log>),
+    // Return data, contract address and remain gas.
+    Create(Vec<u8>, Address, u64),
+}
+
+#[derive(Clone)]
+pub struct InterpreterConf {
+    pub print_op: bool,
+    pub print_gas_used: bool,
+    pub print_stack: bool,
+    pub print_mem: bool,
+    pub eip1283: bool,
+    pub stack_limit: u64,
+
+    pub gas_tier_step: [u64; 8],
+    pub gas_exp: u64,
+    pub gas_exp_byte: u64,
+    pub gas_sha3: u64,
+    pub gas_sha3_word: u64,
+    pub gas_memory: u64,
+    pub gas_sload: u64,
+    pub gas_sstore_noop: u64,
+    pub gas_sstore_init: u64,
+    pub gas_sstore_clear_refund: u64,
+    pub gas_sstore_clean: u64,
+    pub gas_sstore_dirty: u64,
+    pub gas_sstore_reset_clear_refund: u64,
+    pub gas_sstore_reset_refund: u64,
+    pub gas_sstore_set: u64,
+    pub gas_sstore_clear: u64,
+    pub gas_sstore_reset: u64,
+    pub gas_sstore_refund: u64,
+    pub gas_log: u64,
+    pub gas_log_data: u64,
+    pub gas_log_topic: u64,
+    pub gas_create: u64,
+    pub gas_jumpdest: u64,
+    pub gas_copy: u64,
+    pub gas_call: u64,
+    pub gas_call_new_account: u64,
+    pub gas_call_value_transfer: u64,
+    pub gas_call_stipend: u64,
+    pub gas_self_destruct: u64,
+    pub gas_extcode_size: u64,
+}
+
+impl InterpreterConf {
+    // The default is version "2d0661f 2018-11-08" of https://ethereum.github.io/yellowpaper/paper.pdf
+    // But in order to pass the test, Some modifications must needed.
+    //
+    // If you want to step through the steps, let the
+    //   conf.print_op = true;
+    //   conf.print_gas_used = true;
+    //   conf.print_stack = true;
+    //   conf.print_mem = true;
+    pub fn default() -> Self {
+        InterpreterConf {
+            print_op: false,
+            print_gas_used: false,
+            print_stack: false,
+            print_mem: false,
+            eip1283: false,
+            stack_limit: 1024,
+
+            gas_tier_step: [0, 2, 3, 5, 8, 10, 20, 0],
+            gas_exp: 10,
+            gas_exp_byte: 50,
+            gas_sha3: 30,
+            gas_sha3_word: 6,
+            gas_memory: 3,
+            gas_sload: 200,
+            gas_sstore_noop: 200,
+            gas_sstore_init: 20000,
+            gas_sstore_clear_refund: 15000,
+            gas_sstore_clean: 5000,
+            gas_sstore_dirty: 200,
+            gas_sstore_reset_clear_refund: 19800,
+            gas_sstore_reset_refund: 4800,
+            gas_sstore_set: 20000,
+            gas_sstore_clear: 5000,
+            gas_sstore_reset: 5000,
+            gas_sstore_refund: 15000,
+            gas_log: 375,
+            gas_log_data: 8,
+            gas_log_topic: 375,
+            gas_create: 32000,
+            gas_jumpdest: 1,
+            gas_copy: 3,
+            gas_call: 700,
+            gas_call_new_account: 25000,
+            gas_call_value_transfer: 9000,
+            gas_call_stipend: 2300,
+            gas_self_destruct: 5000,
+            gas_extcode_size: 20,
+        }
+    }
+}
 
 pub struct Interpreter {
-    pub context: core::EVMContext,
+    // These parameters need to be provided at initialization time.
+    // Example:
+    //   let it = Interpreter::default();
+    //   it.content = ...;
+    //   it.cfg = ...;
+    pub context: Context,
+    pub cfg: InterpreterConf,
+    pub data_provider: Box<ext::DataProvider>,
+    pub code_address: Address,
+    pub code_data: Vec<u8>,
+    pub address: Address,
+    pub sender: Address,
+    pub value: U256,
+    pub input: Vec<u8>,
+    pub gas: u64,
+    pub read_only: bool,
+
+    stack: stack::Stack<U256>,
+    mem: memory::Memory,
+    logs: Vec<Log>,
+    return_data: Vec<u8>,
+    mem_gas: u64,
+    gas_tmp: u64,
 }
 
 impl Interpreter {
-    pub fn new(context: core::EVMContext) -> Self {
-        Interpreter { context: context }
+    pub fn default() -> Self {
+        Interpreter {
+            context: Context::default(),
+            cfg: InterpreterConf::default(),
+            stack: stack::Stack::with_capacity(1024),
+            mem: memory::Memory::new(),
+            data_provider: Box::new(extmock::DataProviderMock::new()),
+            mem_gas: 0,
+            return_data: Vec::new(),
+            code_address: Address::zero(),
+            code_data: Vec::new(),
+            address: Address::zero(),
+            sender: Address::zero(),
+            value: U256::zero(),
+            input: Vec::new(),
+            gas: 1000000,
+            gas_tmp: 0,
+            read_only: false,
+            logs: Vec::new(),
+        }
     }
 
-    pub fn run(&mut self) {
+    // Run means: Let's go, interpreter!
+    pub fn run(&mut self) -> Result<InterpreterResult, err::Error> {
         let this = &mut *self;
         let mut pc = 0;
         loop {
-            let op = this.context.contract.get_opcode(pc);
-            println!("Opcode: {}", op);
+            // Step 0: Get opcode
+            let op = this.get_op(pc);
+            pc += 1;
+            // Step 1: Log opcode(if necessary)
+            if this.cfg.print_op {
+                if op.clone() as u8 >= 0x60 && op.clone() as u8 <= 0x7F {
+                    let n = op.clone() as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
+                    let r = {
+                        if pc + n as u64 > this.code_data.len() as u64 {
+                            U256::zero()
+                        } else {
+                            U256::from(&this.code_data[pc as usize..(pc + n as u64) as usize])
+                        }
+                    };
+                    println!("[>>>] {} {:#x}", op, r);
+                } else {
+                    println!("[>>>] {}", op);
+                }
+                if this.cfg.print_stack {
+                    let l = this.stack.data().len();
+                    for i in 0..l {
+                        println!("[{}] {:#x}", i, this.stack.back(i));
+                    }
+                }
+                if this.cfg.print_mem {
+                    println!("[Mem] {}", this.mem.len());
+                }
+            }
+            // Step 2: Valid stack
+            let stack_require = op.stack_require();
+            if !this.stack.require(stack_require as usize) {
+                return Err(err::Error::OutOfStack);
+            }
+            if this.stack.len() as u64 - op.stack_require() + op.stack_returns()
+                > this.cfg.stack_limit
+            {
+                return Err(err::Error::OutOfStack);
+            }
+            // Step 3: Valid state mod
+            if this.read_only && op.state_changes() {
+                return Err(err::Error::MutableCallInStaticContext);
+            }
+            // Step 4: Gas cost and mem expand.
+            let op_gas = this.cfg.gas_tier_step[op.gas_price_tier().idx()];
+            if this.use_gas(op_gas).is_err() {
+                return Err(err::Error::OutOfGas);
+            }
             match op {
-                opcodes::OpCode::STOP => {
-                    break
+                opcodes::OpCode::EXP => {
+                    let expon = this.stack.back(1);
+                    let bytes = ((expon.bits() + 7) / 8) as u64;
+                    let gas = this.cfg.gas_exp + this.cfg.gas_exp_byte * bytes;
+                    this.use_gas(gas)?;
                 }
-                opcodes::OpCode::ADD => {
-                    let a = this.context.stack.pop();
-                    let b = this.context.stack.pop();
-                    this.context.stack.push(a + b);
+                opcodes::OpCode::SHA3 => {
+                    let mem_offset = this.stack.back(0);
+                    let mem_len = this.stack.back(1);
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                    this.use_gas(this.cfg.gas_sha3)?;
+                    this.use_gas(common::to_word_size(mem_len.low_u64()) * this.cfg.gas_sha3_word)?;
                 }
-                opcodes::OpCode::MUL => {}
-                opcodes::OpCode::SUB => {}
-                opcodes::OpCode::DIV => {}
-                opcodes::OpCode::SDIV => {}
-                opcodes::OpCode::MOD => {}
-                opcodes::OpCode::SMOD => {}
-                opcodes::OpCode::ADDMOD => {}
-                opcodes::OpCode::MULMOD => {}
-                opcodes::OpCode::EXP => {}
-                opcodes::OpCode::SIGNEXTEND => {}
-                opcodes::OpCode::LT => {}
-                opcodes::OpCode::GT => {}
-                opcodes::OpCode::SLT => {}
-                opcodes::OpCode::SGT => {}
-                opcodes::OpCode::EQ => {}
-                opcodes::OpCode::ISZERO => {}
-                opcodes::OpCode::AND => {}
-                opcodes::OpCode::OR => {}
-                opcodes::OpCode::XOR => {}
-                opcodes::OpCode::NOT => {}
-                opcodes::OpCode::BYTE => {}
-                opcodes::OpCode::SHL => {}
-                opcodes::OpCode::SHR => {}
-                opcodes::OpCode::SAR => {}
-                opcodes::OpCode::SHA3 => {}
-                opcodes::OpCode::ADDRESS => {}
-                opcodes::OpCode::BALANCE => {}
-                opcodes::OpCode::ORIGIN => {}
-                opcodes::OpCode::CALLER => {}
-                opcodes::OpCode::CALLVALUE => {}
-                opcodes::OpCode::CALLDATALOAD => {}
-                opcodes::OpCode::CALLDATASIZE => {}
-                opcodes::OpCode::CALLDATACOPY => {}
-                opcodes::OpCode::CODESIZE => {}
-                opcodes::OpCode::CODECOPY => {}
-                opcodes::OpCode::GASPRICE => {}
-                opcodes::OpCode::EXTCODESIZE => {}
-                opcodes::OpCode::EXTCODECOPY => {}
-                opcodes::OpCode::RETURNDATASIZE => {}
-                opcodes::OpCode::RETURNDATACOPY => {}
-                opcodes::OpCode::EXTCODEHASH => {}
-                opcodes::OpCode::BLOCKHASH => {}
-                opcodes::OpCode::COINBASE => {}
-                opcodes::OpCode::TIMESTAMP => {}
-                opcodes::OpCode::NUMBER => {}
-                opcodes::OpCode::DIFFICULTY => {}
-                opcodes::OpCode::GASLIMIT => {}
-                opcodes::OpCode::POP => {}
-                opcodes::OpCode::MLOAD => {}
+                opcodes::OpCode::CALLDATACOPY => {
+                    let mem_offset = this.stack.back(0);
+                    let mem_len = this.stack.back(2);
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                    let gas = common::to_word_size(mem_len.low_u64()) * this.cfg.gas_copy;
+                    this.use_gas(gas)?;
+                }
+                opcodes::OpCode::CODECOPY => {
+                    let mem_offset = this.stack.back(0);
+                    let mem_len = this.stack.back(2);
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                    let gas = common::to_word_size(mem_len.low_u64()) * this.cfg.gas_copy;
+                    this.use_gas(gas)?;
+                }
+                opcodes::OpCode::EXTCODESIZE => {
+                    this.use_gas(this.cfg.gas_extcode_size)?;
+                }
+                opcodes::OpCode::MLOAD => {
+                    let mem_offset = this.stack.back(0);
+                    let mem_len = U256::from(32);
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                }
                 opcodes::OpCode::MSTORE => {
-                    let offset = this.context.stack.pop();
-                    let word = this.context.stack.pop();
-                    let word = &<[u8; 32]>::from(word)[..];
-                    this.context.memory.expand(offset.as_u64() as usize + 32);
-                    this.context.memory.set(offset.as_u64() as usize, word);
+                    let mem_offset = this.stack.back(0);
+                    let mem_len = U256::from(32);
+                    this.mem_gas_work(mem_offset, mem_len)?;
                 }
-                opcodes::OpCode::MSTORE8 => {}
-                opcodes::OpCode::SLOAD => {}
-                opcodes::OpCode::SSTORE => {}
-                opcodes::OpCode::JUMP => {}
-                opcodes::OpCode::JUMPI => {}
-                opcodes::OpCode::PC => {}
-                opcodes::OpCode::MSIZE => {}
-                opcodes::OpCode::GAS => {}
+                opcodes::OpCode::MSTORE8 => {
+                    let mem_offset = this.stack.back(0);
+                    let mem_len = U256::from(8);
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                }
+                opcodes::OpCode::SLOAD => {
+                    this.use_gas(this.cfg.gas_sload)?;
+                }
+                opcodes::OpCode::SSTORE => {
+                    let address = H256::from(&this.stack.back(0));
+                    let current_value =
+                        U256::from(&*this.data_provider.get_storage(&this.code_address, &address));
+                    let new_value = this.stack.back(1);
+                    let original_value = U256::from(
+                        &*this
+                            .data_provider
+                            .get_storage_origin(&this.code_address, &address),
+                    );
+                    let gas: u64 = {
+                        if this.cfg.eip1283 {
+                            // See https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1283.md
+                            if current_value == new_value {
+                                this.cfg.gas_sstore_noop
+                            } else {
+                                if original_value == current_value {
+                                    if original_value.is_zero() {
+                                        this.cfg.gas_sstore_init
+                                    } else {
+                                        if new_value.is_zero() {
+                                            this.data_provider
+                                                .add_refund(this.cfg.gas_sstore_clear_refund);
+                                        }
+                                        this.cfg.gas_sstore_clean
+                                    }
+                                } else {
+                                    if !original_value.is_zero() {
+                                        if current_value.is_zero() {
+                                            this.data_provider
+                                                .sub_refund(this.cfg.gas_sstore_clear_refund);
+                                        } else if new_value.is_zero() {
+                                            this.data_provider
+                                                .add_refund(this.cfg.gas_sstore_clear_refund);
+                                        }
+                                    }
+                                    if original_value == new_value {
+                                        if original_value.is_zero() {
+                                            this.data_provider
+                                                .add_refund(this.cfg.gas_sstore_reset_clear_refund);
+                                        } else {
+                                            this.data_provider
+                                                .add_refund(this.cfg.gas_sstore_reset_refund);
+                                        }
+                                    }
+                                    this.cfg.gas_sstore_dirty
+                                }
+                            }
+                        } else {
+                            if current_value.is_zero() && !new_value.is_zero() {
+                                this.cfg.gas_sstore_set
+                            } else if !current_value.is_zero() && new_value.is_zero() {
+                                this.data_provider.add_refund(this.cfg.gas_sstore_refund);
+                                this.cfg.gas_sstore_clear
+                            } else {
+                                this.cfg.gas_sstore_reset
+                            }
+                        }
+                    };
+                    this.use_gas(gas)?;
+                }
+                opcodes::OpCode::JUMPDEST => {
+                    this.use_gas(this.cfg.gas_jumpdest)?;
+                }
+                opcodes::OpCode::LOG0
+                | opcodes::OpCode::LOG1
+                | opcodes::OpCode::LOG2
+                | opcodes::OpCode::LOG3
+                | opcodes::OpCode::LOG4 => {
+                    let n = op.clone() as u8 - opcodes::OpCode::LOG0 as u8;
+                    let mem_offset = this.stack.back(0);
+                    let mem_len = this.stack.back(1);
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                    let gas = this.cfg.gas_log
+                        + this.cfg.gas_log_topic * n as u64
+                        + this.cfg.gas_log_data * mem_len.low_u64();
+                    this.use_gas(gas)?;
+                }
+                opcodes::OpCode::CREATE => {
+                    let mem_offset = this.stack.back(1);
+                    let mem_len = this.stack.back(2);
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                    this.use_gas(this.cfg.gas_create)?;
+                    this.gas_tmp = this.gas - this.gas / 64;
+                    this.use_gas(this.gas_tmp)?;
+                }
+                opcodes::OpCode::CALL | opcodes::OpCode::CALLCODE => {
+                    let gas_req = this.stack.back(0);
+                    let address = common::u256_to_address(&this.stack.back(1));
+                    let value = this.stack.back(2);
+                    let mem_offset = this.stack.back(3);
+                    let mem_len = this.stack.back(4);
+                    let out_offset = this.stack.back(5);
+                    let out_len = this.stack.back(6);
+
+                    if gas_req.bits() > 64 {
+                        return Err(err::Error::OutOfGas);
+                    }
+                    this.use_gas(this.cfg.gas_call)?;
+
+                    let is_value_transfer = !value.is_zero();
+                    if op == opcodes::OpCode::CALL
+                        && is_value_transfer
+                        && this.data_provider.is_empty(&address)
+                    {
+                        this.use_gas(this.cfg.gas_call_new_account)?;
+                    }
+                    if is_value_transfer {
+                        this.use_gas(this.cfg.gas_call_value_transfer)?;
+                    }
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                    this.mem_gas_work(out_offset, out_len)?;
+                    this.gas_tmp = this.gas - this.gas / 64;
+                    this.use_gas(this.gas_tmp)?;
+                }
+                opcodes::OpCode::RETURN => {
+                    let mem_offset = this.stack.back(0);
+                    let mem_len = this.stack.back(1);
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                }
+                opcodes::OpCode::DELEGATECALL | opcodes::OpCode::STATICCALL => {
+                    let gas_req = this.stack.back(0);
+                    let mem_offset = this.stack.back(2);
+                    let mem_len = this.stack.back(3);
+                    let out_offset = this.stack.back(4);
+                    let out_len = this.stack.back(5);
+                    if gas_req.bits() > 64 {
+                        return Err(err::Error::OutOfGas);
+                    }
+                    this.use_gas(this.cfg.gas_call)?;
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                    this.mem_gas_work(out_offset, out_len)?;
+                    this.gas_tmp = this.gas - this.gas / 64;
+                    this.use_gas(this.gas_tmp)?;
+                }
+                opcodes::OpCode::CREATE2 => {
+                    let mem_offset = this.stack.back(1);
+                    let mem_len = this.stack.back(2);
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                    this.use_gas(this.cfg.gas_create)?;
+                    this.use_gas(common::to_word_size(mem_len.low_u64()) * this.cfg.gas_sha3_word)?;
+                    this.gas_tmp = this.gas - this.gas / 64;
+                    this.use_gas(this.gas_tmp)?;
+                }
+                opcodes::OpCode::REVERT => {
+                    let mem_offset = this.stack.back(0);
+                    let mem_len = this.stack.back(1);
+                    this.mem_gas_work(mem_offset, mem_len)?;
+                }
+                opcodes::OpCode::SELFDESTRUCT => {
+                    this.use_gas(this.cfg.gas_self_destruct)?;
+                }
+                _ => {}
+            }
+            // Step 5: Let's dance!
+            match op {
+                opcodes::OpCode::STOP => break,
+                opcodes::OpCode::ADD => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack.push(a.overflowing_add(b).0);
+                }
+                opcodes::OpCode::MUL => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack.push(a.overflowing_mul(b).0);
+                }
+                opcodes::OpCode::SUB => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack.push(a.overflowing_sub(b).0);
+                }
+                opcodes::OpCode::DIV => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack
+                        .push(if b.is_zero() { U256::zero() } else { a / b })
+                }
+                opcodes::OpCode::SDIV => {
+                    let (a, neg_a) = common::get_sign(this.stack.pop());
+                    let (b, neg_b) = common::get_sign(this.stack.pop());
+                    let min = (U256::one() << 255) - U256::one();
+                    this.stack.push(if b.is_zero() {
+                        U256::zero()
+                    } else if a == min && b == !U256::one() {
+                        min
+                    } else {
+                        common::set_sign(a / b, neg_a ^ neg_b)
+                    })
+                }
+                opcodes::OpCode::MOD => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack
+                        .push(if !b.is_zero() { a % b } else { U256::zero() });
+                }
+                opcodes::OpCode::SMOD => {
+                    let ua = this.stack.pop();
+                    let ub = this.stack.pop();
+                    let (a, sign_a) = common::get_sign(ua);
+                    let b = common::get_sign(ub).0;
+                    this.stack.push(if !b.is_zero() {
+                        let c = a % b;
+                        common::set_sign(c, sign_a)
+                    } else {
+                        U256::zero()
+                    });
+                }
+                opcodes::OpCode::ADDMOD => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    let c = this.stack.pop();
+                    this.stack.push(if !c.is_zero() {
+                        let a5 = U512::from(a);
+                        let res = a5.overflowing_add(U512::from(b)).0;
+                        let x = res % U512::from(c);
+                        U256::from(x)
+                    } else {
+                        U256::zero()
+                    });
+                }
+                opcodes::OpCode::MULMOD => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    let c = this.stack.pop();
+                    this.stack.push(if !c.is_zero() {
+                        let a5 = U512::from(a);
+                        let res = a5.overflowing_mul(U512::from(b)).0;
+                        let x = res % U512::from(c);
+                        U256::from(x)
+                    } else {
+                        U256::zero()
+                    });
+                }
+                opcodes::OpCode::EXP => {
+                    let base = this.stack.pop();
+                    let expon = this.stack.pop();
+                    let res = base.overflowing_pow(expon).0;
+                    this.stack.push(res);
+                }
+                opcodes::OpCode::SIGNEXTEND => {
+                    let bit = this.stack.pop();
+                    if bit < U256::from(32) {
+                        let number = this.stack.pop();
+                        let bit_position = (bit.low_u64() * 8 + 7) as usize;
+                        let bit = number.bit(bit_position);
+                        let mask = (U256::one() << bit_position) - U256::one();
+                        this.stack
+                            .push(if bit { number | !mask } else { number & mask });
+                    }
+                }
+                opcodes::OpCode::LT => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack.push(common::bool_to_u256(a < b));
+                }
+                opcodes::OpCode::GT => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack.push(common::bool_to_u256(a > b));
+                }
+                opcodes::OpCode::SLT => {
+                    let (a, neg_a) = common::get_sign(this.stack.pop());
+                    let (b, neg_b) = common::get_sign(this.stack.pop());
+                    let is_positive_lt = a < b && !(neg_a | neg_b);
+                    let is_negative_lt = a > b && (neg_a & neg_b);
+                    let has_different_signs = neg_a && !neg_b;
+                    this.stack.push(common::bool_to_u256(
+                        is_positive_lt | is_negative_lt | has_different_signs,
+                    ));
+                }
+                opcodes::OpCode::SGT => {
+                    let (a, neg_a) = common::get_sign(this.stack.pop());
+                    let (b, neg_b) = common::get_sign(this.stack.pop());
+                    let is_positive_gt = a > b && !(neg_a | neg_b);
+                    let is_negative_gt = a < b && (neg_a & neg_b);
+                    let has_different_signs = !neg_a && neg_b;
+                    this.stack.push(common::bool_to_u256(
+                        is_positive_gt | is_negative_gt | has_different_signs,
+                    ));
+                }
+                opcodes::OpCode::EQ => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack.push(common::bool_to_u256(a == b));
+                }
+                opcodes::OpCode::ISZERO => {
+                    let a = this.stack.pop();
+                    this.stack.push(common::bool_to_u256(a.is_zero()));
+                }
+                opcodes::OpCode::AND => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack.push(a & b);
+                }
+                opcodes::OpCode::OR => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack.push(a | b);
+                }
+                opcodes::OpCode::XOR => {
+                    let a = this.stack.pop();
+                    let b = this.stack.pop();
+                    this.stack.push(a ^ b);
+                }
+                opcodes::OpCode::NOT => {
+                    let a = this.stack.pop();
+                    this.stack.push(!a);
+                }
+                opcodes::OpCode::BYTE => {
+                    let word = this.stack.pop();
+                    let val = this.stack.pop();
+                    let byte = match word < U256::from(32) {
+                        true => (val >> (8 * (31 - word.low_u64() as usize))) & U256::from(0xff),
+                        false => U256::zero(),
+                    };
+                    this.stack.push(byte);
+                }
+                opcodes::OpCode::SHL => {
+                    const CONST_256: U256 = U256([256, 0, 0, 0]);
+                    let shift = this.stack.pop();
+                    let value = this.stack.pop();
+                    let result = if shift >= CONST_256 {
+                        U256::zero()
+                    } else {
+                        value << (shift.as_u32() as usize)
+                    };
+                    this.stack.push(result);
+                }
+                opcodes::OpCode::SHR => {
+                    const CONST_256: U256 = U256([256, 0, 0, 0]);
+                    let shift = this.stack.pop();
+                    let value = this.stack.pop();
+                    let result = if shift >= CONST_256 {
+                        U256::zero()
+                    } else {
+                        value >> (shift.as_u32() as usize)
+                    };
+                    this.stack.push(result);
+                }
+                opcodes::OpCode::SAR => {
+                    const CONST_256: U256 = U256([256, 0, 0, 0]);
+                    const CONST_HIBIT: U256 = U256([0, 0, 0, 0x8000000000000000]);
+                    let shift = this.stack.pop();
+                    let value = this.stack.pop();
+                    let sign = value & CONST_HIBIT != U256::zero();
+                    let result = if shift >= CONST_256 {
+                        if sign {
+                            U256::max_value()
+                        } else {
+                            U256::zero()
+                        }
+                    } else {
+                        let shift = shift.as_u32() as usize;
+                        let mut shifted = value >> shift;
+                        if sign {
+                            shifted = shifted | (U256::max_value() << (256 - shift));
+                        }
+                        shifted
+                    };
+                    this.stack.push(result);
+                }
+                opcodes::OpCode::SHA3 => {
+                    let mem_offset = this.stack.pop();
+                    let mem_len = this.stack.pop();
+                    let k = this.data_provider.sha3(
+                        this.mem
+                            .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize),
+                    );
+                    this.stack.push(U256::from(k));
+                }
+                opcodes::OpCode::ADDRESS => {
+                    this.stack
+                        .push(common::address_to_u256(this.address.clone()));
+                }
+                opcodes::OpCode::BALANCE => {
+                    let address = common::u256_to_address(&this.stack.pop());
+                    let balance = this.data_provider.get_balance(&address);
+                    this.stack.push(balance);
+                }
+                opcodes::OpCode::ORIGIN => {
+                    this.stack
+                        .push(common::address_to_u256(this.context.origin.clone()));
+                }
+                opcodes::OpCode::CALLER => {
+                    this.stack
+                        .push(common::address_to_u256(this.sender.clone()));
+                }
+                opcodes::OpCode::CALLVALUE => {
+                    this.stack.push(this.value);
+                }
+                opcodes::OpCode::CALLDATALOAD => {
+                    let big_id = this.stack.pop();
+                    let id = big_id.low_u64() as usize;
+                    let max = id.wrapping_add(32);
+                    if this.input.len() > 0 {
+                        let bound = cmp::min(this.input.len(), max);
+                        if id < bound && big_id < U256::from(this.input.len()) {
+                            let mut v = [0u8; 32];
+                            v[0..bound - id].clone_from_slice(&this.input[id..bound]);
+                            this.stack.push(U256::from(&v[..]))
+                        } else {
+                            this.stack.push(U256::zero())
+                        }
+                    } else {
+                        this.stack.push(U256::zero())
+                    }
+                }
+                opcodes::OpCode::CALLDATASIZE => {
+                    this.stack.push(U256::from(this.input.len()));
+                }
+                opcodes::OpCode::CALLDATACOPY => {
+                    let mem_offset = this.stack.pop();
+                    let raw_offset = this.stack.pop();
+                    let size = this.stack.pop();
+
+                    let data = common::copy_data(this.input.as_slice(), raw_offset, size);
+                    this.mem.set(mem_offset.as_usize(), data.as_slice());
+                }
+                opcodes::OpCode::CODESIZE => {
+                    this.stack.push(U256::from(this.code_data.len()));
+                }
+                opcodes::OpCode::CODECOPY => {
+                    let mem_offset = this.stack.pop();
+                    let raw_offset = this.stack.pop();
+                    let size = this.stack.pop();
+                    let data = common::copy_data(this.code_data.as_slice(), raw_offset, size);
+                    this.mem.set(mem_offset.as_usize(), data.as_slice());
+                }
+                opcodes::OpCode::GASPRICE => {
+                    this.stack.push(this.context.gas_price.clone());
+                }
+                opcodes::OpCode::EXTCODESIZE => {
+                    let address = common::u256_to_address(&this.stack.pop());
+                    let len = this.data_provider.get_code_size(&address);
+                    this.stack.push(U256::from(len));
+                }
+                opcodes::OpCode::EXTCODECOPY => {
+                    let address = common::u256_to_address(&this.stack.pop());
+                    let code_offset = this.stack.pop();
+                    let len = this.stack.pop();
+                    let code = this.data_provider.get_code(&address);
+                    let val = common::copy_data(code, code_offset, len);
+                    this.mem.set(code_offset.as_usize(), val.as_slice())
+                }
+                opcodes::OpCode::RETURNDATASIZE => {
+                    this.stack.push(U256::from(this.return_data.len()))
+                }
+                opcodes::OpCode::RETURNDATACOPY => {
+                    let mem_offset = this.stack.pop();
+                    let raw_offset = this.stack.pop();
+                    let size = this.stack.pop();
+                    let return_data_len = U256::from(this.return_data.len());
+                    if raw_offset.saturating_add(size) > return_data_len {
+                        return Err(err::Error::OutOfBounds);
+                    }
+                    let data = common::copy_data(&this.return_data, raw_offset, size);
+                    this.mem.set(mem_offset.as_usize(), data.as_slice())
+                }
+                opcodes::OpCode::EXTCODEHASH => {
+                    let address = common::u256_to_address(&this.stack.pop());
+                    let hash = this.data_provider.get_code_hash(&address);
+                    this.stack.push(U256::from(hash));
+                }
+                opcodes::OpCode::BLOCKHASH => {
+                    let block_number = this.stack.pop();
+                    let block_hash = this.data_provider.get_block_hash(&block_number);
+                    this.stack.push(U256::from(&*block_hash));
+                }
+                opcodes::OpCode::COINBASE => {
+                    this.stack
+                        .push(common::address_to_u256(this.context.coinbase.clone()));
+                }
+                opcodes::OpCode::TIMESTAMP => {
+                    this.stack.push(U256::from(this.context.timestamp));
+                }
+                opcodes::OpCode::NUMBER => {
+                    this.stack.push(U256::from(this.context.number));
+                }
+                opcodes::OpCode::DIFFICULTY => {
+                    this.stack.push(this.context.difficulty.clone());
+                }
+                opcodes::OpCode::GASLIMIT => {
+                    this.stack.push(U256::from(this.context.gas_limit));
+                }
+                opcodes::OpCode::POP => {
+                    this.stack.pop();
+                }
+                opcodes::OpCode::MLOAD => {
+                    let offset = this.stack.pop().as_u64();
+                    let word = this.mem.get(offset as usize, 32);
+                    this.stack.push(U256::from(word));
+                }
+                opcodes::OpCode::MSTORE => {
+                    let offset = this.stack.pop();
+                    let word = this.stack.pop();
+                    let word = &<[u8; 32]>::from(word)[..];
+                    this.mem.set(offset.low_u64() as usize, word);
+                }
+                opcodes::OpCode::MSTORE8 => {
+                    let offset = this.stack.pop();
+                    let word = this.stack.pop();
+                    this.mem
+                        .set(offset.low_u64() as usize, &[word.low_u64() as u8]);
+                }
+                opcodes::OpCode::SLOAD => {
+                    let key = H256::from(this.stack.pop());
+                    let word =
+                        U256::from(&*this.data_provider.get_storage(&this.code_address, &key));
+                    this.stack.push(word);
+                }
+                opcodes::OpCode::SSTORE => {
+                    let address = H256::from(&this.stack.pop());
+                    let value = this.stack.pop();
+                    this.data_provider
+                        .set_storage(&this.code_address, address, H256::from(&value));
+                }
+                opcodes::OpCode::JUMP => {
+                    let jump = this.stack.pop().low_u64();
+                    if jump >= this.code_data.len() as u64 {
+                        return Err(err::Error::OutOfCode);
+                    }
+                    pc = jump;
+                }
+                opcodes::OpCode::JUMPI => {
+                    let jump = this.stack.pop().low_u64();
+                    let condition = this.stack.pop();
+                    if !condition.is_zero() {
+                        if jump >= this.code_data.len() as u64 {
+                            return Err(err::Error::OutOfCode);
+                        }
+                        pc = jump;
+                    }
+                }
+                opcodes::OpCode::PC => {
+                    this.stack.push(U256::from(pc - 1));
+                }
+                opcodes::OpCode::MSIZE => {
+                    this.stack.push(U256::from(this.mem.len()));
+                }
+                opcodes::OpCode::GAS => {
+                    this.stack.push(U256::from(this.gas));
+                }
                 opcodes::OpCode::JUMPDEST => {}
                 opcodes::OpCode::PUSH1
                 | opcodes::OpCode::PUSH2
@@ -123,89 +865,812 @@ impl Interpreter {
                 | opcodes::OpCode::PUSH30
                 | opcodes::OpCode::PUSH31
                 | opcodes::OpCode::PUSH32 => {
-                    pc += 1;
                     let n = op as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
-                    let r = U256::from(&this.context.contract.code[pc as usize..(pc+n as u64) as usize]);
-                    pc += n as u64 - 1;
-                    this.context.stack.push(r);
+                    let e = pc + n as u64;
+                    let e = cmp::min(e, this.code_data.len() as u64);
+                    let r = U256::from(&this.code_data[pc as usize..e as usize]);
+                    pc = e;
+                    this.stack.push(r);
                 }
-                opcodes::OpCode::DUP1 => {}
-                opcodes::OpCode::DUP2 => {}
-                opcodes::OpCode::DUP3 => {}
-                opcodes::OpCode::DUP4 => {}
-                opcodes::OpCode::DUP5 => {}
-                opcodes::OpCode::DUP6 => {}
-                opcodes::OpCode::DUP7 => {}
-                opcodes::OpCode::DUP8 => {}
-                opcodes::OpCode::DUP9 => {}
-                opcodes::OpCode::DUP10 => {}
-                opcodes::OpCode::DUP11 => {}
-                opcodes::OpCode::DUP12 => {}
-                opcodes::OpCode::DUP13 => {}
-                opcodes::OpCode::DUP14 => {}
-                opcodes::OpCode::DUP15 => {}
-                opcodes::OpCode::DUP16 => {}
-                opcodes::OpCode::SWAP1 => {}
-                opcodes::OpCode::SWAP2 => {}
-                opcodes::OpCode::SWAP3 => {}
-                opcodes::OpCode::SWAP4 => {}
-                opcodes::OpCode::SWAP5 => {}
-                opcodes::OpCode::SWAP6 => {}
-                opcodes::OpCode::SWAP7 => {}
-                opcodes::OpCode::SWAP8 => {}
-                opcodes::OpCode::SWAP9 => {}
-                opcodes::OpCode::SWAP10 => {}
-                opcodes::OpCode::SWAP11 => {}
-                opcodes::OpCode::SWAP12 => {}
-                opcodes::OpCode::SWAP13 => {}
-                opcodes::OpCode::SWAP14 => {}
-                opcodes::OpCode::SWAP15 => {}
-                opcodes::OpCode::SWAP16 => {}
-                opcodes::OpCode::LOG0 => {}
-                opcodes::OpCode::LOG1 => {}
-                opcodes::OpCode::LOG2 => {}
-                opcodes::OpCode::LOG3 => {}
-                opcodes::OpCode::LOG4 => {}
-                opcodes::OpCode::CREATE => {}
-                opcodes::OpCode::CALL => {}
-                opcodes::OpCode::CALLCODE => {}
+                opcodes::OpCode::DUP1
+                | opcodes::OpCode::DUP2
+                | opcodes::OpCode::DUP3
+                | opcodes::OpCode::DUP4
+                | opcodes::OpCode::DUP5
+                | opcodes::OpCode::DUP6
+                | opcodes::OpCode::DUP7
+                | opcodes::OpCode::DUP8
+                | opcodes::OpCode::DUP9
+                | opcodes::OpCode::DUP10
+                | opcodes::OpCode::DUP11
+                | opcodes::OpCode::DUP12
+                | opcodes::OpCode::DUP13
+                | opcodes::OpCode::DUP14
+                | opcodes::OpCode::DUP15
+                | opcodes::OpCode::DUP16 => {
+                    let p = op as u8 - opcodes::OpCode::DUP1 as u8;
+                    this.stack.dup(p as usize);
+                }
+                opcodes::OpCode::SWAP1
+                | opcodes::OpCode::SWAP2
+                | opcodes::OpCode::SWAP3
+                | opcodes::OpCode::SWAP4
+                | opcodes::OpCode::SWAP5
+                | opcodes::OpCode::SWAP6
+                | opcodes::OpCode::SWAP7
+                | opcodes::OpCode::SWAP8
+                | opcodes::OpCode::SWAP9
+                | opcodes::OpCode::SWAP10
+                | opcodes::OpCode::SWAP11
+                | opcodes::OpCode::SWAP12
+                | opcodes::OpCode::SWAP13
+                | opcodes::OpCode::SWAP14
+                | opcodes::OpCode::SWAP15
+                | opcodes::OpCode::SWAP16 => {
+                    let p = op as u8 - opcodes::OpCode::SWAP1 as u8 + 1;
+                    this.stack.swap(p as usize);
+                }
+                opcodes::OpCode::LOG0
+                | opcodes::OpCode::LOG1
+                | opcodes::OpCode::LOG2
+                | opcodes::OpCode::LOG3
+                | opcodes::OpCode::LOG4 => {
+                    let n = op as u8 - opcodes::OpCode::LOG0 as u8;
+                    let mem_offset = this.stack.pop();
+                    let mem_len = this.stack.pop();
+                    let mut topics: Vec<H256> = Vec::new();
+                    for _ in 0..n {
+                        let r = H256::from(this.stack.pop());
+                        topics.push(r);
+                    }
+                    let data = this
+                        .mem
+                        .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
+                    this.logs.push(Log(topics, Vec::from(data)));
+                }
+                opcodes::OpCode::CREATE => {
+                    let value = this.stack.pop();
+                    let mem_offset = this.stack.pop();
+                    let mem_len = this.stack.pop();
+                    let data = this
+                        .mem
+                        .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
+                    let r =
+                        this.data_provider
+                            .call(&Address::zero(), data, this.gas_tmp, value, op);
+                    match r {
+                        Ok(data) => match data {
+                            InterpreterResult::Create(_, add, gas) => {
+                                this.stack.push(common::address_to_u256(add));
+                                this.gas += gas;
+                            }
+                            InterpreterResult::Revert(ret, gas, _) => {
+                                this.stack.push(U256::zero());
+                                this.gas += gas;
+                                this.return_data = ret;
+                                break;
+                            }
+                            _ => {}
+                        },
+                        Err(_) => {
+                            this.stack.push(U256::zero());
+                        }
+                    }
+                }
+                opcodes::OpCode::CALL
+                | opcodes::OpCode::CALLCODE
+                | opcodes::OpCode::DELEGATECALL
+                | opcodes::OpCode::STATICCALL => {
+                    let _ = this.stack.pop();
+                    let address = common::u256_to_address(&this.stack.pop());
+                    let value = {
+                        if op == opcodes::OpCode::CALL || op == opcodes::OpCode::CALLCODE {
+                            this.stack.pop()
+                        } else {
+                            U256::zero()
+                        }
+                    };
+                    let mem_offset = this.stack.pop();
+                    let mem_len = this.stack.pop();
+                    let out_offset = this.stack.pop();
+                    let _ = this.stack.pop();
+
+                    let mut gas = this.gas_tmp;
+                    if !value.is_zero() {
+                        gas += this.cfg.gas_call_stipend;
+                    }
+
+                    let data = this
+                        .mem
+                        .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
+                    let r = this.data_provider.call(&address, data, gas, value, op);
+                    match r {
+                        Ok(data) => match data {
+                            InterpreterResult::Normal(ret, gas, _) => {
+                                this.stack.push(U256::one());
+                                this.mem.set(out_offset.low_u64() as usize, ret.as_slice());
+                                this.gas += gas;
+                            }
+                            InterpreterResult::Revert(ret, gas, _) => {
+                                this.stack.push(U256::zero());
+                                this.mem.set(out_offset.low_u64() as usize, ret.as_slice());
+                                this.gas += gas;
+                            }
+                            _ => {}
+                        },
+                        Err(_) => {
+                            this.stack.push(U256::zero());
+                        }
+                    }
+                }
                 opcodes::OpCode::RETURN => {
-                    let init_off = this.context.stack.pop().as_u64() as usize;
-                    let init_size = this.context.stack.pop().as_u64() as usize;
-                    let r = this.context.memory.get(init_off, init_size);
-                    this.context.return_data = Vec::from(r);
+                    let mem_offset = this.stack.pop();
+                    let mem_len = this.stack.pop();
+                    let r = this
+                        .mem
+                        .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
+                    this.return_data = Vec::from(r);
                     break;
                 }
-                opcodes::OpCode::DELEGATECALL => {}
-                opcodes::OpCode::CREATE2 => {}
-                opcodes::OpCode::REVERT => {}
-                opcodes::OpCode::STATICCALL => {}
-                opcodes::OpCode::SUICIDE => {}
+                opcodes::OpCode::CREATE2 => {
+                    // Unimplemented.
+                    break;
+                }
+                opcodes::OpCode::REVERT => {
+                    let mem_offset = this.stack.pop();
+                    let mem_len = this.stack.pop();
+                    let r = this
+                        .mem
+                        .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
+                    this.return_data = Vec::from(r);
+                    return Ok(InterpreterResult::Revert(
+                        this.return_data.clone(),
+                        this.gas,
+                        this.logs.clone(),
+                    ));
+                }
+                opcodes::OpCode::SELFDESTRUCT => {
+                    let address = this.stack.pop();
+                    this.data_provider
+                        .suicide(&common::u256_to_address(&address));
+                    break;
+                }
             }
-            pc += 1;
+            if this.cfg.print_op {
+                println!("");
+            }
         }
+        return Ok(InterpreterResult::Normal(
+            this.return_data.clone(),
+            this.gas,
+            this.logs.clone(),
+        ));
+    }
+
+    fn use_gas(&mut self, gas: u64) -> Result<(), err::Error> {
+        if self.cfg.print_gas_used {
+            if gas != 0 {
+                println!("[Gas] - {}", gas);
+            }
+        }
+        if self.gas < gas {
+            return Err(err::Error::OutOfGas);
+        }
+        self.gas -= gas;
+        return Ok(());
+    }
+
+    fn mem_gas_cost(&mut self, size: u64) -> u64 {
+        let goc = common::mem_gas_cost(size, self.cfg.gas_memory);
+        if goc > self.mem_gas {
+            let fee = goc - self.mem_gas;
+            self.mem_gas = goc;
+            fee
+        } else {
+            0
+        }
+    }
+
+    fn mem_gas_work(&mut self, mem_offset: U256, mem_len: U256) -> Result<(), err::Error> {
+        let (mem_sum, b) = mem_offset.overflowing_add(mem_len);
+        if b || mem_sum.bits() > 64 {
+            return Err(err::Error::OutOfGas);
+        }
+        if mem_len != U256::zero() {
+            let gas = self.mem_gas_cost(mem_sum.low_u64());
+            self.use_gas(gas)?;
+        }
+        self.mem.expand(mem_sum.low_u64() as usize);
+        Ok(())
+    }
+
+    fn get_byte(&self, n: u64) -> u8 {
+        if n < self.code_data.len() as u64 {
+            return *self.code_data.get(n as usize).unwrap();
+        }
+        0
+    }
+
+    fn get_op(&self, n: u64) -> opcodes::OpCode {
+        opcodes::OpCode::from(self.get_byte(n))
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
+    // Just carried the unit test from go-ethereum. So smart.
     use super::*;
+    use rustc_hex::FromHex;
+
     #[test]
-    fn test_interpreter_execute_0x01() {
-        let mut context = core::EVMContext::new();
-        context.contract.code = vec![
-            opcodes::OpCode::PUSH1 as u8, 10,
-            opcodes::OpCode::PUSH1 as u8, 0,
+    fn test_interpreter_execute() {
+        let mut it = Interpreter::default();
+        it.code_data = vec![
+            opcodes::OpCode::PUSH1 as u8,
+            10,
+            opcodes::OpCode::PUSH1 as u8,
+            0,
             opcodes::OpCode::MSTORE as u8,
-            opcodes::OpCode::PUSH1 as u8, 32,
-            opcodes::OpCode::PUSH1 as u8, 0,
+            opcodes::OpCode::PUSH1 as u8,
+            32,
+            opcodes::OpCode::PUSH1 as u8,
+            0,
             opcodes::OpCode::RETURN as u8,
         ];
-        let mut it = Interpreter::new(context);
-        it.run();
-        let r = U256::from_big_endian(&it.context.return_data[..]);
+        it.run().unwrap();
+        let r = U256::from_big_endian(&it.return_data[..]);
         assert_eq!(r, U256::from(10));
+    }
+
+    #[test]
+    fn test_op_byte() {
+        let data = vec![
+            (
+                "ABCDEF0908070605040302010000000000000000000000000000000000000000",
+                "0",
+                "AB",
+            ),
+            (
+                "ABCDEF0908070605040302010000000000000000000000000000000000000000",
+                "1",
+                "CD",
+            ),
+            (
+                "00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff",
+                "0",
+                "00",
+            ),
+            (
+                "ABCDEF0908070605040302010000000000000000000000000000000000000000",
+                "1",
+                "CD",
+            ),
+            (
+                "00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff",
+                "0",
+                "00",
+            ),
+            (
+                "00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff",
+                "1",
+                "CD",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000102030",
+                "31",
+                "30",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000102030",
+                "30",
+                "20",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "32",
+                "00",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "4294967295",
+                "00",
+            ),
+        ];
+        for (val, th, except) in data {
+            let mut it = Interpreter::default();
+            it.stack.push_n(&vec![
+                U256::from(val),
+                U256::from(th.parse::<u64>().unwrap()),
+            ]);
+            it.code_data = vec![opcodes::OpCode::BYTE as u8];
+            it.run().unwrap();
+            assert_eq!(it.stack.pop(), U256::from(except));
+        }
+    }
+
+    #[test]
+    fn test_op_shl() {
+        let data = vec![
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "00",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "01",
+                "0000000000000000000000000000000000000000000000000000000000000002",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "ff",
+                "8000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0100",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0101",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "00",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "01",
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "ff",
+                "8000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0100",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000000",
+                "01",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "01",
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+            ),
+        ];
+        for (x, y, except) in data {
+            let mut it = Interpreter::default();
+            it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
+            it.code_data = vec![opcodes::OpCode::SHL as u8];
+            it.run().unwrap();
+            assert_eq!(it.stack.pop(), U256::from(except));
+        }
+    }
+
+    #[test]
+    fn test_op_shr() {
+        let data = vec![
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "00",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "01",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000000",
+                "01",
+                "4000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000000",
+                "ff",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000000",
+                "0100",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000000",
+                "0101",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "00",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "01",
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "ff",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0100",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000000",
+                "01",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+        ];
+        for (x, y, except) in data {
+            let mut it = Interpreter::default();
+            it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
+            it.code_data = vec![opcodes::OpCode::SHR as u8];
+            it.run().unwrap();
+            assert_eq!(it.stack.pop(), U256::from(except));
+        }
+    }
+
+    #[test]
+    fn test_op_sar() {
+        let data = vec![
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "00",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "01",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000000",
+                "01",
+                "c000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000000",
+                "ff",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000000",
+                "0100",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000000",
+                "0101",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "00",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "01",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "ff",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0100",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000000",
+                "01",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "4000000000000000000000000000000000000000000000000000000000000000",
+                "fe",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "f8",
+                "000000000000000000000000000000000000000000000000000000000000007f",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "fe",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "ff",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0100",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+        ];
+        for (x, y, except) in data {
+            let mut it = Interpreter::default();
+            it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
+            it.code_data = vec![opcodes::OpCode::SAR as u8];
+            it.run().unwrap();
+            assert_eq!(it.stack.pop(), U256::from(except));
+        }
+    }
+
+    #[test]
+    fn test_op_sgt() {
+        let data = vec![
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000001",
+                "8000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000001",
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "8000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb",
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd",
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+        ];
+        for (x, y, except) in data {
+            let mut it = Interpreter::default();
+            it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
+            it.code_data = vec![opcodes::OpCode::SGT as u8];
+            it.run().unwrap();
+            assert_eq!(it.stack.pop(), U256::from(except));
+        }
+    }
+
+    #[test]
+    fn test_op_slt() {
+        let data = vec![
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000001",
+                "8000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "8000000000000000000000000000000000000000000000000000000000000001",
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "8000000000000000000000000000000000000000000000000000000000000001",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+            (
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb",
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd",
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb",
+                "0000000000000000000000000000000000000000000000000000000000000001",
+            ),
+        ];
+        for (x, y, except) in data {
+            let mut it = Interpreter::default();
+            it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
+            it.code_data = vec![opcodes::OpCode::SLT as u8];
+            it.run().unwrap();
+            assert_eq!(it.stack.pop(), U256::from(except));
+        }
+    }
+
+    #[test]
+    fn test_op_mstore() {
+        let mut it = Interpreter::default();
+        let v = "abcdef00000000000000abba000000000deaf000000c0de00100000000133700";
+        it.stack.push_n(&vec![U256::from(v), U256::zero()]);
+        it.code_data = vec![opcodes::OpCode::MSTORE as u8];
+        it.run().unwrap();
+        assert_eq!(it.mem.get(0, 32), &v.from_hex().unwrap()[..]);
+        it.stack.push_n(&vec![U256::one(), U256::zero()]);
+        it.code_data = vec![opcodes::OpCode::MSTORE as u8];
+        it.run().unwrap();
+        assert_eq!(
+            it.mem.get(0, 32),
+            &"0000000000000000000000000000000000000000000000000000000000000001"
+                .from_hex()
+                .unwrap()[..]
+        );
+    }
+
+    #[test]
+    fn test_op_sstore_eip_1283() {
+        // From https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1283.md#test-cases
+        let data = vec![
+            ("0x60006000556000600055", 412, 0, 0),
+            ("0x60006000556001600055", 20212, 0, 0),
+            ("0x60016000556000600055", 20212, 19800, 0),
+            ("0x60016000556002600055", 20212, 0, 0),
+            ("0x60016000556001600055", 20212, 0, 0),
+            ("0x60006000556000600055", 5212, 15000, 1),
+            ("0x60006000556001600055", 5212, 4800, 1),
+            ("0x60006000556002600055", 5212, 0, 1),
+            ("0x60026000556000600055", 5212, 15000, 1),
+            ("0x60026000556003600055", 5212, 0, 1),
+            ("0x60026000556001600055", 5212, 4800, 1),
+            ("0x60026000556002600055", 5212, 0, 1),
+            ("0x60016000556000600055", 5212, 15000, 1),
+            ("0x60016000556002600055", 5212, 0, 1),
+            ("0x60016000556001600055", 412, 0, 1),
+            ("0x600160005560006000556001600055", 40218, 19800, 0),
+            ("0x600060005560016000556000600055", 10218, 19800, 1),
+        ];
+        for (code, use_gas, refund, origin) in data {
+            let mut it = Interpreter::default();
+            it.cfg.eip1283 = true;
+            assert_eq!(it.gas, it.context.gas_limit);
+            it.data_provider
+                .set_storage_origin(&it.code_address, H256::zero(), H256::from(origin));
+            it.data_provider
+                .set_storage(&it.code_address, H256::zero(), H256::from(origin));
+            it.code_data = common::hex_decode(code).unwrap();
+            it.run().unwrap();
+            assert_eq!(it.gas, it.context.gas_limit - use_gas);
+            assert_eq!(it.data_provider.get_refund(), refund);
+        }
+    }
+
+    #[test]
+    fn test_op_call() {
+        let mut it = Interpreter::default();
+        it.cfg.print_op = true;
+        it.cfg.print_gas_used = true;
+        it.cfg.print_stack = true;
+        it.cfg.print_mem = true;
+        let mut data_provider = extmock::DataProviderMock::new();
+
+        let mut account0 = extmock::Account::default();
+        account0.balance = U256::from("0de0b6b3a7640000");
+        account0.code = common::hex_decode(
+            "0x6040600060406000600173100000000000000000000000000000000000000162055730f1600055",
+        )
+        .unwrap();
+        account0.nonce = U256::from(0);
+        data_provider.storage.insert(
+            Address::from("0x1000000000000000000000000000000000000000"),
+            account0,
+        );
+
+        let mut account1 = extmock::Account::default();
+        account1.balance = U256::from("0de0b6b3a7640000");
+        account1.code = common::hex_decode(
+            "0x604060006040600060027310000000000000000000000000000000000000026203d090f1600155",
+        )
+        .unwrap();
+        account1.nonce = U256::from(0);
+        data_provider.storage.insert(
+            Address::from("0x1000000000000000000000000000000000000001"),
+            account1,
+        );
+
+        let mut account2 = extmock::Account::default();
+        account2.balance = U256::zero();
+        account2.code = common::hex_decode(
+            "0x600160025533600455346007553060e6553260e8553660ec553860ee553a60f055",
+        )
+        .unwrap();
+        account2.nonce = U256::from(0);
+        data_provider.storage.insert(
+            Address::from("0x1000000000000000000000000000000000000002"),
+            account2,
+        );
+
+        it.data_provider = Box::new(data_provider);
+        it.code_data = common::hex_decode(
+            "0x6040600060406000600173100000000000000000000000000000000000000162055730f1600055",
+        )
+        .unwrap();
+        if let InterpreterResult::Normal(_, _, _) = it.run().unwrap() {
+            // TODO: Check the results.
+        }
     }
 }

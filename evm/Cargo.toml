@@ -5,4 +5,8 @@ authors = ["Cryptape Technologies <contact@cryptape.com>"]
 edition = "2018"
 
 [dependencies]
-ethereum-types = "0.4.0"
+ethereum-types = "0.4"
+hex = "0.3"
+keccak-hash = "0.1"
+rustc-hex = "1.0"
+rlp = "0.3"
