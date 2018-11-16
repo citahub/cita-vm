@@ -33,7 +33,7 @@ impl fmt::Display for CodecError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let printable = match *self {
             CodecError::DecodeErr(ref err) => format!("rlp decode {}", err),
-            CodecError::InvalidData => format!("invalid data"),
+            CodecError::InvalidData => "invalid data".to_string(),
         };
         write!(f, "{}", printable)
 	}
@@ -56,7 +56,7 @@ impl<H: Hasher> NodeCodec<H> for RLPNodeCodec<H> {
     }
   
     fn decode(data: &[u8]) -> Result<Node, Self::Error> {
-        if data == &[0] {
+        if data == [0] {
             return Ok(Node::Empty);
         }
         let r = Rlp::new(data);
@@ -74,7 +74,7 @@ impl<H: Hasher> NodeCodec<H> for RLPNodeCodec<H> {
             },
             Prototype::List(17) => {
                 let mut nodes = [None; 16];
-                for i in 0..16 {
+                for i in 0..nodes.len() {
                     let data = r.at(i)?;
                     if !data.is_empty() {
                         nodes[i] = Some(data.as_raw());
