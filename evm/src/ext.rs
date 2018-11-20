@@ -24,6 +24,8 @@ pub trait DataProvider {
     /// suicide should be called when contract commits suicide.
     /// Address to which funds should be refunded.
     fn suicide(&mut self, refund_address: &Address) -> Result<(), err::Error>;
+    /// hash returns the hash of inputs.
+    fn hash(&self, input: &[u8]) -> H256;
 }
 
 pub struct DataProviderMock {}
@@ -58,5 +60,8 @@ impl DataProvider for DataProviderMock {
     }
     fn suicide(&mut self, _: &Address) -> Result<(), err::Error> {
         Ok(())
+    }
+    fn hash(&self, _: &[u8]) -> H256 {
+        H256::zero()
     }
 }
