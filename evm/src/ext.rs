@@ -24,74 +24,6 @@ pub trait DataProvider {
     /// suicide should be called when contract commits suicide.
     /// Address to which funds should be refunded.
     fn suicide(&mut self, refund_address: &Address) -> Result<(), err::Error>;
-    /// Creates new contract from CREATE.
-    /// Returns gas_left and contract address if contract creation was succesfull.
-    fn create(
-        &mut self,
-        gas: &U256,
-        value: &U256,
-        code: &[u8],
-        create_type: CreateType,
-    ) -> Result<ContractCreateResult, err::Error>;
-    /// Message call.
-    ///
-    /// Returns Err, if we run out of gas.
-    /// Otherwise returns call_result which contains gas left
-    /// and true if subcall was successfull.
-    fn call(
-        &mut self,
-        gas: &U256,
-        sender_address: &Address,
-        receive_address: &Address,
-        value: Option<U256>,
-        data: &[u8],
-        code_address: &Address,
-        call_type: CallType,
-    ) -> Result<MessageCallResult, err::Error>;
-}
-
-#[derive(Debug)]
-/// Result of externalities create function.
-pub enum ContractCreateResult {
-    /// Returned when creation was successfull.
-    /// Contains an address of newly created contract and gas left.
-    Created(Address, U256),
-    /// Returned when contract creation failed.
-    /// VM doesn't have to know the reason.
-    Failed,
-    /// Reverted with REVERT.
-    Reverted(U256, Vec<u8>),
-}
-
-#[derive(Debug)]
-/// Result of externalities call function.
-pub enum MessageCallResult {
-    /// Returned when message call was successfull.
-    /// Contains gas left and output data.
-    Success(U256, Vec<u8>),
-    /// Returned when message call failed.
-    /// VM doesn't have to know the reason.
-    Failed,
-    /// Returned when message call was reverted.
-    /// Contains gas left and output data.
-    Reverted(U256, Vec<u8>),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum CallType {
-    Call,
-    /// CALLCODE.
-    CallCode,
-    /// DELEGATECALL.
-    DelegateCall,
-    /// STATICCALL
-    StaticCall,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum CreateType {
-    FromSenderAndNonce,
-    FromSenderSaltAndCodeHash(U256),
 }
 
 pub struct DataProviderMock {}
@@ -126,26 +58,5 @@ impl DataProvider for DataProviderMock {
     }
     fn suicide(&mut self, _: &Address) -> Result<(), err::Error> {
         Ok(())
-    }
-    fn create(
-        &mut self,
-        _: &U256,
-        _: &U256,
-        _: &[u8],
-        _: CreateType,
-    ) -> Result<ContractCreateResult, err::Error> {
-        Ok(ContractCreateResult::Failed)
-    }
-    fn call(
-        &mut self,
-        _: &U256,
-        _: &Address,
-        _: &Address,
-        _: Option<U256>,
-        _: &[u8],
-        _: &Address,
-        _: CallType,
-    ) -> Result<MessageCallResult, err::Error> {
-        Ok(MessageCallResult::Failed)
     }
 }
