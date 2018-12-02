@@ -194,7 +194,7 @@ impl Interpreter {
         let mut pc = 0;
         loop {
             // Step 0: Get opcode
-            let op = this.get_op(pc);
+            let op = this.get_op(pc)?;
             pc += 1;
             // Step 1: Log opcode(if necessary)
             if this.cfg.print_op {
@@ -1091,14 +1091,17 @@ impl Interpreter {
         0
     }
 
-    fn get_op(&self, n: u64) -> opcodes::OpCode {
-        opcodes::OpCode::from(self.get_byte(n))
+    fn get_op(&self, n: u64) -> Result<opcodes::OpCode, err::Error> {
+        if let Some(data) = opcodes::OpCode::from_u8(self.get_byte(n)) {
+            return Ok(data);
+        }
+        return Err(err::Error::InvalidOpcode);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    // Just carried the unit test from go-ethereum. So smart.
+    // The unit tests just carried from go-ethereum. So smart.
     use super::*;
     use rustc_hex::FromHex;
 
@@ -1617,6 +1620,15 @@ mod tests {
             assert_eq!(it.gas, it.context.gas_limit - use_gas);
             assert_eq!(it.data_provider.get_refund(), refund);
         }
+    }
+
+    #[test]
+    fn test_op_invalid() {
+        let mut it = Interpreter::default();
+        it.code_data = common::hex_decode("0xfb").unwrap();
+        let r = it.run();
+        assert!(r.is_err());
+        assert_eq!(r.err(), Some(err::Error::InvalidOpcode))
     }
 
     #[test]

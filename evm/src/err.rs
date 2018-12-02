@@ -9,6 +9,7 @@ pub enum Error {
     OutOfCode,
     OutOfData,
     MutableCallInStaticContext,
+    InvalidOpcode,
 }
 
 impl fmt::Display for Error {
@@ -20,6 +21,7 @@ impl fmt::Display for Error {
             Error::OutOfCode => return write!(f, "OutOfCode"),
             Error::OutOfData => return write!(f, "OutOfData"),
             Error::MutableCallInStaticContext => return write!(f, "MutableCallInStaticContext"),
+            Error::InvalidOpcode => return write!(f, "InvalidOpcode"),
         };
     }
 }
