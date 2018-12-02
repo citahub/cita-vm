@@ -188,7 +188,6 @@ impl Interpreter {
         }
     }
 
-    // Run means: Let's go, interpreter!
     pub fn run(&mut self) -> Result<InterpreterResult, err::Error> {
         let this = &mut *self;
         let mut pc = 0;
@@ -198,8 +197,9 @@ impl Interpreter {
             pc += 1;
             // Step 1: Log opcode(if necessary)
             if this.cfg.print_op {
-                if op.clone() as u8 >= 0x60 && op.clone() as u8 <= 0x7F {
-                    let n = op.clone() as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
+                let opu8 = op.clone() as u8;
+                if opu8 >= 0x60 && opu8 <= 0x7F {
+                    let n = opu8 - opcodes::OpCode::PUSH1 as u8 + 1;
                     let r = {
                         if pc + n as u64 > this.code_data.len() as u64 {
                             U256::zero()
@@ -237,9 +237,7 @@ impl Interpreter {
             }
             // Step 4: Gas cost and mem expand.
             let op_gas = this.cfg.gas_tier_step[op.gas_price_tier().idx()];
-            if this.use_gas(op_gas).is_err() {
-                return Err(err::Error::OutOfGas);
-            }
+            this.use_gas(op_gas)?;
             match op {
                 opcodes::OpCode::EXP => {
                     let expon = this.stack.back(1);
@@ -1111,7 +1109,7 @@ impl Interpreter {
 
 #[cfg(test)]
 mod tests {
-    // The unit tests just carried from go-ethereum. So smart.
+    // The unit tests just carried from go-ethereum.
     use super::*;
     use rustc_hex::FromHex;
 
