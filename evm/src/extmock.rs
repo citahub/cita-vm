@@ -129,8 +129,10 @@ impl ext::DataProvider for DataProviderMock {
         input: &[u8],
         gas: u64,
         value: U256,
+        extra: U256,
         op: opcodes::OpCode,
     ) -> (Result<interpreter::InterpreterResult, err::Error>) {
+        let _ = extra;
         match op {
             opcodes::OpCode::CREATE => {
                 let mut stream = rlp::RlpStream::new_list(2);

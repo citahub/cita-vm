@@ -928,16 +928,28 @@ impl Interpreter {
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
                     this.logs.push(Log(topics, Vec::from(data)));
                 }
-                opcodes::OpCode::CREATE => {
+                opcodes::OpCode::CREATE | opcodes::OpCode::CREATE2 => {
                     let value = this.stack.pop();
                     let mem_offset = this.stack.pop();
                     let mem_len = this.stack.pop();
+                    let salt = {
+                        match op {
+                            opcodes::OpCode::CREATE => U256::zero(),
+                            opcodes::OpCode::CREATE2 => this.stack.pop(),
+                            _ => panic!("instruction can only be CREATE/CREATE2 checked above"),
+                        }
+                    };
                     let data = this
                         .mem
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    let r =
-                        this.data_provider
-                            .call(&Address::zero(), data, this.gas_tmp, value, op);
+                    let r = this.data_provider.call(
+                        &Address::zero(),
+                        data,
+                        this.gas_tmp,
+                        value,
+                        salt,
+                        op,
+                    );
                     match r {
                         Ok(data) => match data {
                             InterpreterResult::Create(_, add, gas) => {
@@ -983,7 +995,9 @@ impl Interpreter {
                     let data = this
                         .mem
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    let r = this.data_provider.call(&address, data, gas, value, op);
+                    let r = this
+                        .data_provider
+                        .call(&address, data, gas, value, U256::zero(), op);
                     match r {
                         Ok(data) => match data {
                             InterpreterResult::Normal(ret, gas, _) => {
@@ -1010,10 +1024,6 @@ impl Interpreter {
                         .mem
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
                     this.return_data = Vec::from(r);
-                    break;
-                }
-                opcodes::OpCode::CREATE2 => {
-                    // Unimplemented.
                     break;
                 }
                 opcodes::OpCode::REVERT => {
