@@ -21,7 +21,7 @@ pub trait DataProvider {
     fn get_storage_origin(&self, address: &Address, key: &H256) -> H256;
     fn set_storage_origin(&mut self, address: &Address, key: H256, value: H256);
 
-    fn suicide(&mut self, refund_address: &Address);
+    fn selfdestruct(&mut self, refund_address: &Address);
     fn sha3(&self, input: &[u8]) -> H256;
     // is_empty returns whether the given account is empty. Empty
     // is defined according to EIP161 (balance = nonce = code = 0).

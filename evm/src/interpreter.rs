@@ -1040,7 +1040,7 @@ impl Interpreter {
                 opcodes::OpCode::SELFDESTRUCT => {
                     let address = this.stack.pop();
                     this.data_provider
-                        .suicide(&common::u256_to_address(&address));
+                        .selfdestruct(&common::u256_to_address(&address));
                     break;
                 }
             }

@@ -114,7 +114,7 @@ impl ext::DataProvider for DataProviderMock {
         self.storage_origin.insert(fullkey, value);
     }
 
-    fn suicide(&mut self, _: &Address) {}
+    fn selfdestruct(&mut self, _: &Address) {}
 
     fn sha3(&self, data: &[u8]) -> H256 {
         keccak_hash::keccak(data)
