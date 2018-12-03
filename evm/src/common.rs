@@ -17,10 +17,12 @@ pub fn mem_gas_cost(size: u64, memory_gas: u64) -> u64 {
     size * memory_gas + ((size * size) >> 9)
 }
 
+// Get the signed 256 from Unsigned 256.
 #[inline]
 pub fn get_sign(value: U256) -> (U256, bool) {
     let U256(arr) = value;
-    let sign = arr[3].leading_zeros() == 0;
+    // The highest bit is 1, indicating that it is negative
+    let sign = arr[3] >> 63 == 1;
     (set_sign(value, sign), sign)
 }
 
