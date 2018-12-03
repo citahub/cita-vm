@@ -3,6 +3,7 @@ extern crate hex;
 use ethereum_types::*;
 use std::u64;
 
+#[inline]
 pub fn to_word_size(size: u64) -> u64 {
     if size > u64::MAX - 31 {
         return u64::MAX / 32 + 1;
@@ -10,6 +11,7 @@ pub fn to_word_size(size: u64) -> u64 {
     return (size + 31) / 32;
 }
 
+#[inline]
 pub fn mem_gas_cost(size: u64, memory_gas: u64) -> u64 {
     let size = to_word_size(size);
     size * memory_gas + size * size / 512
@@ -60,15 +62,15 @@ pub fn u256_min(x: U256, y: U256) -> U256 {
 }
 
 #[inline]
-pub fn rpad(slice: Vec<u8>, l: u64) -> Vec<u8> {
+pub fn rpad(slice: Vec<u8>, n: usize) -> Vec<u8> {
     let slice_len = slice.len();
-    if l <= slice.len() as u64 {
+    if n <= slice.len() {
         slice
     } else {
-        let mut padded: Vec<u8> = Vec::new();
+        let mut padded: Vec<u8> = Vec::with_capacity(n);
         let mut part1 = Vec::from(slice);
         padded.append(&mut part1);
-        let mut part2 = vec![0; l as usize - slice_len];
+        let mut part2 = vec![0; n as usize - slice_len];
         padded.append(&mut part2);
         padded
     }
@@ -81,8 +83,7 @@ pub fn copy_data(source: &[u8], start: U256, size: U256) -> Vec<u8> {
     let e = u256_min(s + size, source_len);
 
     let data = &source[s.as_usize()..e.as_usize()];
-    let data = rpad(Vec::from(data), size.low_u64());
-    data.iter().cloned().collect()
+    rpad(Vec::from(data), size.as_usize())
 }
 
 pub fn clean_0x(s: &str) -> &str {
