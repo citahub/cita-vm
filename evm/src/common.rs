@@ -6,15 +6,15 @@ use std::u64;
 #[inline]
 pub fn to_word_size(size: u64) -> u64 {
     if size > u64::MAX - 31 {
-        return u64::MAX / 32 + 1;
+        return u64::MAX >> 5 + 1;
     }
-    return (size + 31) / 32;
+    return (size + 31) >> 5;
 }
 
 #[inline]
 pub fn mem_gas_cost(size: u64, memory_gas: u64) -> u64 {
     let size = to_word_size(size);
-    size * memory_gas + size * size / 512
+    size * memory_gas + ((size * size) >> 9)
 }
 
 #[inline]
