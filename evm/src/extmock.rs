@@ -40,13 +40,13 @@ impl ext::DataProvider for DataProviderMock {
         return U256::zero();
     }
 
-    fn add_refund(&mut self, n: u64) {
+    fn add_refund(&mut self, _: &Address, n: u64) {
         self.refund += n
     }
-    fn sub_refund(&mut self, n: u64) {
+    fn sub_refund(&mut self, _: &Address, n: u64) {
         self.refund -= n
     }
-    fn get_refund(&self) -> u64 {
+    fn get_refund(&self, _: &Address) -> u64 {
         self.refund
     }
 
@@ -114,7 +114,7 @@ impl ext::DataProvider for DataProviderMock {
         self.storage_origin.insert(fullkey, value);
     }
 
-    fn selfdestruct(&mut self, _: &Address) {}
+    fn selfdestruct(&mut self, _: &Address, _: &Address) {}
 
     fn sha3(&self, data: &[u8]) -> H256 {
         keccak_hash::keccak(data)

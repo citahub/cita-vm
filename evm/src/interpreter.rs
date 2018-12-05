@@ -197,9 +197,8 @@ impl Interpreter {
             pc += 1;
             // Step 1: Log opcode(if necessary)
             if this.cfg.print_op {
-                let opu8 = op.clone() as u8;
-                if opu8 >= 0x60 && opu8 <= 0x7F {
-                    let n = opu8 - opcodes::OpCode::PUSH1 as u8 + 1;
+                if op >= opcodes::OpCode::PUSH1 && op <= opcodes::OpCode::PUSH32 {
+                    let n = op.clone() as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
                     let r = {
                         if pc + n as u64 > this.code_data.len() as u64 {
                             U256::zero()
@@ -207,18 +206,19 @@ impl Interpreter {
                             U256::from(&this.code_data[pc as usize..(pc + n as u64) as usize])
                         }
                     };
-                    println!("[>>>] {} {:#x}", op, r);
+                    println!("[OP] {} {:#x}", op, r);
                 } else {
-                    println!("[>>>] {}", op);
+                    println!("[OP] {}", op);
                 }
                 if this.cfg.print_stack {
+                    println!("[STACK]");
                     let l = this.stack.data().len();
                     for i in 0..l {
                         println!("[{}] {:#x}", i, this.stack.back(i));
                     }
                 }
                 if this.cfg.print_mem {
-                    println!("[Mem] {}", this.mem.len());
+                    println!("[MEM] len={}", this.mem.len());
                 }
             }
             // Step 2: Valid stack
@@ -290,12 +290,12 @@ impl Interpreter {
                 opcodes::OpCode::SSTORE => {
                     let address = H256::from(&this.stack.back(0));
                     let current_value =
-                        U256::from(&*this.data_provider.get_storage(&this.code_address, &address));
+                        U256::from(&*this.data_provider.get_storage(&this.address, &address));
                     let new_value = this.stack.back(1);
                     let original_value = U256::from(
                         &*this
                             .data_provider
-                            .get_storage_origin(&this.code_address, &address),
+                            .get_storage_origin(&this.address, &address),
                     );
                     let gas: u64 = {
                         if this.cfg.eip1283 {
@@ -308,28 +308,38 @@ impl Interpreter {
                                         this.cfg.gas_sstore_init
                                     } else {
                                         if new_value.is_zero() {
-                                            this.data_provider
-                                                .add_refund(this.cfg.gas_sstore_clear_refund);
+                                            this.data_provider.add_refund(
+                                                &this.address,
+                                                this.cfg.gas_sstore_clear_refund,
+                                            );
                                         }
                                         this.cfg.gas_sstore_clean
                                     }
                                 } else {
                                     if !original_value.is_zero() {
                                         if current_value.is_zero() {
-                                            this.data_provider
-                                                .sub_refund(this.cfg.gas_sstore_clear_refund);
+                                            this.data_provider.sub_refund(
+                                                &this.address,
+                                                this.cfg.gas_sstore_clear_refund,
+                                            );
                                         } else if new_value.is_zero() {
-                                            this.data_provider
-                                                .add_refund(this.cfg.gas_sstore_clear_refund);
+                                            this.data_provider.add_refund(
+                                                &this.address,
+                                                this.cfg.gas_sstore_clear_refund,
+                                            );
                                         }
                                     }
                                     if original_value == new_value {
                                         if original_value.is_zero() {
-                                            this.data_provider
-                                                .add_refund(this.cfg.gas_sstore_reset_clear_refund);
+                                            this.data_provider.add_refund(
+                                                &this.address,
+                                                this.cfg.gas_sstore_reset_clear_refund,
+                                            );
                                         } else {
-                                            this.data_provider
-                                                .add_refund(this.cfg.gas_sstore_reset_refund);
+                                            this.data_provider.add_refund(
+                                                &this.address,
+                                                this.cfg.gas_sstore_reset_refund,
+                                            );
                                         }
                                     }
                                     this.cfg.gas_sstore_dirty
@@ -339,7 +349,8 @@ impl Interpreter {
                             if current_value.is_zero() && !new_value.is_zero() {
                                 this.cfg.gas_sstore_set
                             } else if !current_value.is_zero() && new_value.is_zero() {
-                                this.data_provider.add_refund(this.cfg.gas_sstore_refund);
+                                this.data_provider
+                                    .add_refund(&this.address, this.cfg.gas_sstore_refund);
                                 this.cfg.gas_sstore_clear
                             } else {
                                 this.cfg.gas_sstore_reset
@@ -794,15 +805,14 @@ impl Interpreter {
                 }
                 opcodes::OpCode::SLOAD => {
                     let key = H256::from(this.stack.pop());
-                    let word =
-                        U256::from(&*this.data_provider.get_storage(&this.code_address, &key));
+                    let word = U256::from(&*this.data_provider.get_storage(&this.address, &key));
                     this.stack.push(word);
                 }
                 opcodes::OpCode::SSTORE => {
                     let address = H256::from(&this.stack.pop());
                     let value = this.stack.pop();
                     this.data_provider
-                        .set_storage(&this.code_address, address, H256::from(&value));
+                        .set_storage(&this.address, address, H256::from(&value));
                 }
                 opcodes::OpCode::JUMP => {
                     let jump = this.stack.pop().low_u64();
@@ -1040,7 +1050,7 @@ impl Interpreter {
                 opcodes::OpCode::SELFDESTRUCT => {
                     let address = this.stack.pop();
                     this.data_provider
-                        .selfdestruct(&common::u256_to_address(&address));
+                        .selfdestruct(&this.address, &common::u256_to_address(&address));
                     break;
                 }
             }
@@ -1626,7 +1636,7 @@ mod tests {
             it.code_data = common::hex_decode(code).unwrap();
             it.run().unwrap();
             assert_eq!(it.gas, it.context.gas_limit - use_gas);
-            assert_eq!(it.data_provider.get_refund(), refund);
+            assert_eq!(it.data_provider.get_refund(&Address::zero()), refund);
         }
     }
 

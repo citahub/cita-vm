@@ -6,9 +6,9 @@ use ethereum_types::*;
 pub trait DataProvider {
     fn get_balance(&self, address: &Address) -> U256;
 
-    fn add_refund(&mut self, n: u64);
-    fn sub_refund(&mut self, n: u64);
-    fn get_refund(&self) -> u64;
+    fn add_refund(&mut self, address: &Address, n: u64);
+    fn sub_refund(&mut self, address: &Address, n: u64);
+    fn get_refund(&self, address: &Address) -> u64;
 
     fn get_code_size(&self, address: &Address) -> u64;
     fn get_code(&self, address: &Address) -> &[u8];
@@ -21,7 +21,7 @@ pub trait DataProvider {
     fn get_storage_origin(&self, address: &Address, key: &H256) -> H256;
     fn set_storage_origin(&mut self, address: &Address, key: H256, value: H256);
 
-    fn selfdestruct(&mut self, refund_address: &Address);
+    fn selfdestruct(&mut self, address: &Address, refund_address: &Address);
     fn sha3(&self, input: &[u8]) -> H256;
     // is_empty returns whether the given account is empty. Empty
     // is defined according to EIP161 (balance = nonce = code = 0).

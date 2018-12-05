@@ -466,8 +466,8 @@ impl OpCode {
         match self {
             OpCode::STOP => GasPriceTier::Zero,
             OpCode::ADD => GasPriceTier::VeryLow,
-            OpCode::SUB => GasPriceTier::VeryLow,
             OpCode::MUL => GasPriceTier::Low,
+            OpCode::SUB => GasPriceTier::VeryLow,
             OpCode::DIV => GasPriceTier::Low,
             OpCode::SDIV => GasPriceTier::Low,
             OpCode::MOD => GasPriceTier::Low,
@@ -610,8 +610,8 @@ impl OpCode {
         match self {
             OpCode::STOP => 0,
             OpCode::ADD => 2,
-            OpCode::SUB => 2,
             OpCode::MUL => 2,
+            OpCode::SUB => 2,
             OpCode::DIV => 2,
             OpCode::SDIV => 2,
             OpCode::MOD => 2,
@@ -754,8 +754,8 @@ impl OpCode {
         match self {
             OpCode::STOP => 0,
             OpCode::ADD => 1,
-            OpCode::SUB => 1,
             OpCode::MUL => 1,
+            OpCode::SUB => 1,
             OpCode::DIV => 1,
             OpCode::SDIV => 1,
             OpCode::MOD => 1,
