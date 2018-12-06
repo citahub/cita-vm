@@ -151,8 +151,10 @@ impl ext::DataProvider for DataProviderMock {
                     Box::new(DataProviderMock::new()),
                     params,
                 );
-                it.params.contract.code_data =
-                    Vec::from(self.get_code(&it.params.contract.code_address));
+                // Hard code for test_op_call().
+                it.cfg.print_op = true;
+                it.cfg.print_gas_used = true;
+                it.context.gas_price = U256::one();
                 let mut data_provider = DataProviderMock::new();
                 data_provider.storage = self.storage.clone();
                 it.data_provider = Box::new(data_provider);

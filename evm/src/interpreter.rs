@@ -409,7 +409,7 @@ impl Interpreter {
                     }
                     this.mem_gas_work(mem_offset, mem_len)?;
                     this.mem_gas_work(out_offset, out_len)?;
-                    this.gas_tmp = this.gas - this.gas / 64;
+                    this.gas_tmp = cmp::min(this.gas - this.gas / 64, gas_req.low_u64());
                     this.use_gas(this.gas_tmp)?;
                 }
                 opcodes::OpCode::RETURN => {
@@ -429,7 +429,7 @@ impl Interpreter {
                     this.use_gas(this.cfg.gas_call)?;
                     this.mem_gas_work(mem_offset, mem_len)?;
                     this.mem_gas_work(out_offset, out_len)?;
-                    this.gas_tmp = this.gas - this.gas / 64;
+                    this.gas_tmp = cmp::min(this.gas - this.gas / 64, gas_req.low_u64());
                     this.use_gas(this.gas_tmp)?;
                 }
                 opcodes::OpCode::CREATE2 => {
@@ -1702,11 +1702,62 @@ mod tests {
 
     #[test]
     fn test_op_call() {
-        let mut it = default_interpreter();;
+        // Test from https://github.com/ethereum/tests/blob/develop/GeneralStateTests/stCallCodes/callcall_00.json
+        // Step from go-ethereum:
+        //
+        // PUSH1           pc=00000000 gas=1000000 cost=3
+        // PUSH1           pc=00000002 gas=999997 cost=3
+        // PUSH1           pc=00000004 gas=999994 cost=3
+        // PUSH1           pc=00000006 gas=999991 cost=3
+        // PUSH1           pc=00000008 gas=999988 cost=3
+        // PUSH20          pc=00000010 gas=999985 cost=3
+        // PUSH3           pc=00000031 gas=999982 cost=3
+        // CALL            pc=00000035 gas=999979 cost=359706     // 1st CALL
+        // PUSH1           pc=00000000 gas=352300 cost=3
+        // PUSH1           pc=00000002 gas=352297 cost=3
+        // PUSH1           pc=00000004 gas=352294 cost=3
+        // PUSH1           pc=00000006 gas=352291 cost=3
+        // PUSH1           pc=00000008 gas=352288 cost=3
+        // PUSH20          pc=00000010 gas=352285 cost=3
+        // PUSH3           pc=00000031 gas=352282 cost=3
+        // CALL            pc=00000035 gas=352279 cost=259706     // 2nd CALL
+        // PUSH1           pc=00000000 gas=252300 cost=3
+        // PUSH1           pc=00000002 gas=252297 cost=3
+        // SSTORE          pc=00000004 gas=252294 cost=20000
+        // CALLER          pc=00000005 gas=232294 cost=2
+        // PUSH1           pc=00000006 gas=232292 cost=3
+        // SSTORE          pc=00000008 gas=232289 cost=20000
+        // CALLVALUE       pc=00000009 gas=212289 cost=2
+        // PUSH1           pc=00000010 gas=212287 cost=3
+        // SSTORE          pc=00000012 gas=212284 cost=20000
+        // ADDRESS         pc=00000013 gas=192284 cost=2
+        // PUSH1           pc=00000014 gas=192282 cost=3
+        // SSTORE          pc=00000016 gas=192279 cost=20000
+        // ORIGIN          pc=00000017 gas=172279 cost=2
+        // PUSH1           pc=00000018 gas=172277 cost=3
+        // SSTORE          pc=00000020 gas=172274 cost=5000
+        // CALLDATASIZE    pc=00000021 gas=167274 cost=2
+        // PUSH1           pc=00000022 gas=167272 cost=3
+        // SSTORE          pc=00000024 gas=167269 cost=20000
+        // CODESIZE        pc=00000025 gas=147269 cost=2
+        // PUSH1           pc=00000026 gas=147267 cost=3
+        // SSTORE          pc=00000028 gas=147264 cost=20000
+        // GASPRICE        pc=00000029 gas=127264 cost=2
+        // PUSH1           pc=00000030 gas=127262 cost=3
+        // SSTORE          pc=00000032 gas=127259 cost=20000
+        // STOP            pc=00000033 gas=107259 cost=0          // 2nd CALL end
+        // PUSH1           pc=00000036 gas=199832 cost=3
+        // SSTORE          pc=00000038 gas=199829 cost=20000
+        // STOP            pc=00000039 gas=179829 cost=0          // 1nd CALL end
+        // PUSH1           pc=00000036 gas=820102 cost=3
+        // SSTORE          pc=00000038 gas=820099 cost=20000
+        // STOP            pc=00000039 gas=800099 cost=0
+        //
+        // Cost = 199901
+        let mut it = default_interpreter();
+        it.context.gas_price = U256::one();
         it.cfg.print_op = true;
         it.cfg.print_gas_used = true;
-        it.cfg.print_stack = true;
-        it.cfg.print_mem = true;
         let mut data_provider = extmock::DataProviderMock::new();
 
         let mut account0 = extmock::Account::default();
@@ -1750,8 +1801,10 @@ mod tests {
             "0x6040600060406000600173100000000000000000000000000000000000000162055730f1600055",
         )
         .unwrap();
-        if let InterpreterResult::Normal(_, _, _) = it.run().unwrap() {
-            // TODO: Check the results.
+        let r = it.run().unwrap();
+        match r {
+            InterpreterResult::Normal(_, gas, _) => assert_eq!(gas, it.params.gas - 199901),
+            _ => assert!(false),
         }
     }
 }
