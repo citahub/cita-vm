@@ -1,14 +1,13 @@
 use super::common;
 use super::err;
 use super::ext;
-use super::extmock;
 use super::memory;
 use super::opcodes;
 use super::stack;
 use ethereum_types::*;
 use std::cmp;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Context {
     pub origin: Address,
     pub gas_price: U256,
@@ -17,20 +16,6 @@ pub struct Context {
     pub number: U256,
     pub timestamp: u64,
     pub difficulty: U256,
-}
-
-impl Context {
-    pub fn default() -> Self {
-        Context {
-            origin: Address::zero(),
-            gas_price: U256::one(),
-            gas_limit: 1000000,
-            coinbase: Address::zero(),
-            number: U256::zero(),
-            timestamp: 0,
-            difficulty: U256::zero(),
-        }
-    }
 }
 
 // Log is the data struct for LOG0...LOG4.
@@ -139,24 +124,31 @@ impl InterpreterConf {
     }
 }
 
-pub struct Interpreter {
-    // These parameters need to be provided at initialization time.
-    // Example:
-    //   let it = Interpreter::default();
-    //   it.content = ...;
-    //   it.cfg = ...;
-    pub context: Context,
-    pub cfg: InterpreterConf,
-    pub data_provider: Box<ext::DataProvider>,
+#[derive(Clone, Default)]
+pub struct Contract {
     pub code_address: Address,
     pub code_data: Vec<u8>,
+}
+
+#[derive(Clone, Default)]
+pub struct InterpreterParams {
     pub address: Address,
     pub sender: Address,
     pub value: U256,
     pub input: Vec<u8>,
-    pub gas: u64,
     pub read_only: bool,
+    pub contract: Contract,
+    pub gas: u64,
+    pub extra: U256,
+}
 
+pub struct Interpreter {
+    pub context: Context,
+    pub cfg: InterpreterConf,
+    pub data_provider: Box<ext::DataProvider>,
+    pub params: InterpreterParams,
+
+    gas: u64,
     stack: stack::Stack<U256>,
     mem: memory::Memory,
     logs: Vec<Log>,
@@ -166,25 +158,26 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn default() -> Self {
+    pub fn new(
+        context: Context,
+        cfg: InterpreterConf,
+        data_provider: Box<ext::DataProvider>,
+        params: InterpreterParams,
+    ) -> Self {
+        let gas = params.gas.clone();
         Interpreter {
-            context: Context::default(),
-            cfg: InterpreterConf::default(),
+            context: context,
+            cfg: cfg,
+            data_provider: data_provider,
+            params: params,
+
+            gas: gas,
             stack: stack::Stack::with_capacity(1024),
             mem: memory::Memory::new(),
-            data_provider: Box::new(extmock::DataProviderMock::new()),
-            mem_gas: 0,
-            return_data: Vec::new(),
-            code_address: Address::zero(),
-            code_data: Vec::new(),
-            address: Address::zero(),
-            sender: Address::zero(),
-            value: U256::zero(),
-            input: Vec::new(),
-            gas: 1000000,
-            gas_tmp: 0,
-            read_only: false,
             logs: Vec::new(),
+            return_data: Vec::new(),
+            mem_gas: 0,
+            gas_tmp: 0,
         }
     }
 
@@ -200,10 +193,13 @@ impl Interpreter {
                 if op >= opcodes::OpCode::PUSH1 && op <= opcodes::OpCode::PUSH32 {
                     let n = op.clone() as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
                     let r = {
-                        if pc + n as u64 > this.code_data.len() as u64 {
+                        if pc + n as u64 > this.params.contract.code_data.len() as u64 {
                             U256::zero()
                         } else {
-                            U256::from(&this.code_data[pc as usize..(pc + n as u64) as usize])
+                            U256::from(
+                                &this.params.contract.code_data
+                                    [pc as usize..(pc + n as u64) as usize],
+                            )
                         }
                     };
                     println!("[OP] {} {:#x}", op, r);
@@ -232,7 +228,7 @@ impl Interpreter {
                 return Err(err::Error::OutOfStack);
             }
             // Step 3: Valid state mod
-            if this.read_only && op.state_changes() {
+            if this.params.read_only && op.state_changes() {
                 return Err(err::Error::MutableCallInStaticContext);
             }
             // Step 4: Gas cost and mem expand.
@@ -289,13 +285,16 @@ impl Interpreter {
                 }
                 opcodes::OpCode::SSTORE => {
                     let address = H256::from(&this.stack.back(0));
-                    let current_value =
-                        U256::from(&*this.data_provider.get_storage(&this.address, &address));
+                    let current_value = U256::from(
+                        &*this
+                            .data_provider
+                            .get_storage(&this.params.address, &address),
+                    );
                     let new_value = this.stack.back(1);
                     let original_value = U256::from(
                         &*this
                             .data_provider
-                            .get_storage_origin(&this.address, &address),
+                            .get_storage_origin(&this.params.address, &address),
                     );
                     let gas: u64 = {
                         if this.cfg.eip1283 {
@@ -309,7 +308,7 @@ impl Interpreter {
                                     } else {
                                         if new_value.is_zero() {
                                             this.data_provider.add_refund(
-                                                &this.address,
+                                                &this.params.address,
                                                 this.cfg.gas_sstore_clear_refund,
                                             );
                                         }
@@ -319,12 +318,12 @@ impl Interpreter {
                                     if !original_value.is_zero() {
                                         if current_value.is_zero() {
                                             this.data_provider.sub_refund(
-                                                &this.address,
+                                                &this.params.address,
                                                 this.cfg.gas_sstore_clear_refund,
                                             );
                                         } else if new_value.is_zero() {
                                             this.data_provider.add_refund(
-                                                &this.address,
+                                                &this.params.address,
                                                 this.cfg.gas_sstore_clear_refund,
                                             );
                                         }
@@ -332,12 +331,12 @@ impl Interpreter {
                                     if original_value == new_value {
                                         if original_value.is_zero() {
                                             this.data_provider.add_refund(
-                                                &this.address,
+                                                &this.params.address,
                                                 this.cfg.gas_sstore_reset_clear_refund,
                                             );
                                         } else {
                                             this.data_provider.add_refund(
-                                                &this.address,
+                                                &this.params.address,
                                                 this.cfg.gas_sstore_reset_refund,
                                             );
                                         }
@@ -350,7 +349,7 @@ impl Interpreter {
                                 this.cfg.gas_sstore_set
                             } else if !current_value.is_zero() && new_value.is_zero() {
                                 this.data_provider
-                                    .add_refund(&this.address, this.cfg.gas_sstore_refund);
+                                    .add_refund(&this.params.address, this.cfg.gas_sstore_refund);
                                 this.cfg.gas_sstore_clear
                             } else {
                                 this.cfg.gas_sstore_reset
@@ -671,7 +670,7 @@ impl Interpreter {
                 }
                 opcodes::OpCode::ADDRESS => {
                     this.stack
-                        .push(common::address_to_u256(this.address.clone()));
+                        .push(common::address_to_u256(this.params.address.clone()));
                 }
                 opcodes::OpCode::BALANCE => {
                     let address = common::u256_to_address(&this.stack.pop());
@@ -684,20 +683,20 @@ impl Interpreter {
                 }
                 opcodes::OpCode::CALLER => {
                     this.stack
-                        .push(common::address_to_u256(this.sender.clone()));
+                        .push(common::address_to_u256(this.params.sender.clone()));
                 }
                 opcodes::OpCode::CALLVALUE => {
-                    this.stack.push(this.value);
+                    this.stack.push(this.params.value);
                 }
                 opcodes::OpCode::CALLDATALOAD => {
                     let big_id = this.stack.pop();
                     let id = big_id.low_u64() as usize;
                     let max = id.wrapping_add(32);
-                    if this.input.len() > 0 {
-                        let bound = cmp::min(this.input.len(), max);
-                        if id < bound && big_id < U256::from(this.input.len()) {
+                    if this.params.input.len() > 0 {
+                        let bound = cmp::min(this.params.input.len(), max);
+                        if id < bound && big_id < U256::from(this.params.input.len()) {
                             let mut v = [0u8; 32];
-                            v[0..bound - id].clone_from_slice(&this.input[id..bound]);
+                            v[0..bound - id].clone_from_slice(&this.params.input[id..bound]);
                             this.stack.push(U256::from(&v[..]))
                         } else {
                             this.stack.push(U256::zero())
@@ -707,24 +706,29 @@ impl Interpreter {
                     }
                 }
                 opcodes::OpCode::CALLDATASIZE => {
-                    this.stack.push(U256::from(this.input.len()));
+                    this.stack.push(U256::from(this.params.input.len()));
                 }
                 opcodes::OpCode::CALLDATACOPY => {
                     let mem_offset = this.stack.pop();
                     let raw_offset = this.stack.pop();
                     let size = this.stack.pop();
 
-                    let data = common::copy_data(this.input.as_slice(), raw_offset, size);
+                    let data = common::copy_data(this.params.input.as_slice(), raw_offset, size);
                     this.mem.set(mem_offset.as_usize(), data.as_slice());
                 }
                 opcodes::OpCode::CODESIZE => {
-                    this.stack.push(U256::from(this.code_data.len()));
+                    this.stack
+                        .push(U256::from(this.params.contract.code_data.len()));
                 }
                 opcodes::OpCode::CODECOPY => {
                     let mem_offset = this.stack.pop();
                     let raw_offset = this.stack.pop();
                     let size = this.stack.pop();
-                    let data = common::copy_data(this.code_data.as_slice(), raw_offset, size);
+                    let data = common::copy_data(
+                        this.params.contract.code_data.as_slice(),
+                        raw_offset,
+                        size,
+                    );
                     this.mem.set(mem_offset.as_usize(), data.as_slice());
                 }
                 opcodes::OpCode::GASPRICE => {
@@ -805,18 +809,22 @@ impl Interpreter {
                 }
                 opcodes::OpCode::SLOAD => {
                     let key = H256::from(this.stack.pop());
-                    let word = U256::from(&*this.data_provider.get_storage(&this.address, &key));
+                    let word =
+                        U256::from(&*this.data_provider.get_storage(&this.params.address, &key));
                     this.stack.push(word);
                 }
                 opcodes::OpCode::SSTORE => {
                     let address = H256::from(&this.stack.pop());
                     let value = this.stack.pop();
-                    this.data_provider
-                        .set_storage(&this.address, address, H256::from(&value));
+                    this.data_provider.set_storage(
+                        &this.params.address,
+                        address,
+                        H256::from(&value),
+                    );
                 }
                 opcodes::OpCode::JUMP => {
                     let jump = this.stack.pop().low_u64();
-                    if jump >= this.code_data.len() as u64 {
+                    if jump >= this.params.contract.code_data.len() as u64 {
                         return Err(err::Error::OutOfCode);
                     }
                     pc = jump;
@@ -825,7 +833,7 @@ impl Interpreter {
                     let jump = this.stack.pop().low_u64();
                     let condition = this.stack.pop();
                     if !condition.is_zero() {
-                        if jump >= this.code_data.len() as u64 {
+                        if jump >= this.params.contract.code_data.len() as u64 {
                             return Err(err::Error::OutOfCode);
                         }
                         pc = jump;
@@ -875,8 +883,8 @@ impl Interpreter {
                 | opcodes::OpCode::PUSH32 => {
                     let n = op as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
                     let e = pc + n as u64;
-                    let e = cmp::min(e, this.code_data.len() as u64);
-                    let r = U256::from(&this.code_data[pc as usize..e as usize]);
+                    let e = cmp::min(e, this.params.contract.code_data.len() as u64);
+                    let r = U256::from(&this.params.contract.code_data[pc as usize..e as usize]);
                     pc = e;
                     this.stack.push(r);
                 }
@@ -950,14 +958,14 @@ impl Interpreter {
                     let data = this
                         .mem
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    let r = this.data_provider.call(
-                        &Address::zero(),
-                        data,
-                        this.gas_tmp,
-                        value,
-                        salt,
-                        op,
-                    );
+
+                    let mut params = InterpreterParams::default();
+                    params.sender = this.params.address;
+                    params.gas = this.gas_tmp;
+                    params.input = Vec::from(data);
+                    params.value = value;
+                    params.extra = salt;
+                    let r = this.data_provider.call(op, params);
                     match r {
                         Ok(data) => match data {
                             InterpreterResult::Create(_, add, gas) => {
@@ -1003,9 +1011,32 @@ impl Interpreter {
                     let data = this
                         .mem
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    let r = this
-                        .data_provider
-                        .call(&address, data, gas, value, U256::zero(), op);
+
+                    let mut params = InterpreterParams::default();
+                    params.sender = this.params.address;
+                    params.gas = gas;
+                    params.contract.code_address = address;
+                    params.contract.code_data =
+                        Vec::from(this.data_provider.get_code(&params.contract.code_address));
+                    params.input = Vec::from(data);
+                    match op {
+                        opcodes::OpCode::CALL => {
+                            params.address = address;
+                            params.value = value;
+                        }
+                        opcodes::OpCode::CALLCODE => {
+                            params.address = this.params.address;
+                            params.value = value;
+                        }
+                        opcodes::OpCode::DELEGATECALL => {
+                            params.address = this.params.address;
+                        }
+                        opcodes::OpCode::STATICCALL => {
+                            params.address = address;
+                        }
+                        _ => {}
+                    }
+                    let r = this.data_provider.call(op, params);
                     match r {
                         Ok(data) => match data {
                             InterpreterResult::Normal(ret, gas, _) => {
@@ -1050,7 +1081,7 @@ impl Interpreter {
                 opcodes::OpCode::SELFDESTRUCT => {
                     let address = this.stack.pop();
                     this.data_provider
-                        .selfdestruct(&this.address, &common::u256_to_address(&address));
+                        .selfdestruct(&this.params.address, &common::u256_to_address(&address));
                     break;
                 }
             }
@@ -1103,8 +1134,8 @@ impl Interpreter {
     }
 
     fn get_byte(&self, n: u64) -> u8 {
-        if n < self.code_data.len() as u64 {
-            return *self.code_data.get(n as usize).unwrap();
+        if n < self.params.contract.code_data.len() as u64 {
+            return *self.params.contract.code_data.get(n as usize).unwrap();
         }
         0
     }
@@ -1120,13 +1151,27 @@ impl Interpreter {
 #[cfg(test)]
 mod tests {
     // The unit tests just carried from go-ethereum.
+    use super::super::extmock;
     use super::*;
     use rustc_hex::FromHex;
 
+    fn default_interpreter() -> Interpreter {
+        let mut it = Interpreter::new(
+            Context::default(),
+            InterpreterConf::default(),
+            Box::new(extmock::DataProviderMock::new()),
+            InterpreterParams::default(),
+        );
+        it.context.gas_limit = 1000000;
+        it.params.gas = 1000000;
+        it.gas = 1000000;
+        it
+    }
+
     #[test]
     fn test_interpreter_execute() {
-        let mut it = Interpreter::default();
-        it.code_data = vec![
+        let mut it = default_interpreter();;
+        it.params.contract.code_data = vec![
             opcodes::OpCode::PUSH1 as u8,
             10,
             opcodes::OpCode::PUSH1 as u8,
@@ -1198,12 +1243,12 @@ mod tests {
             ),
         ];
         for (val, th, except) in data {
-            let mut it = Interpreter::default();
+            let mut it = default_interpreter();;
             it.stack.push_n(&vec![
                 U256::from(val),
                 U256::from(th.parse::<u64>().unwrap()),
             ]);
-            it.code_data = vec![opcodes::OpCode::BYTE as u8];
+            it.params.contract.code_data = vec![opcodes::OpCode::BYTE as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
         }
@@ -1269,9 +1314,9 @@ mod tests {
             ),
         ];
         for (x, y, except) in data {
-            let mut it = Interpreter::default();
+            let mut it = default_interpreter();;
             it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
-            it.code_data = vec![opcodes::OpCode::SHL as u8];
+            it.params.contract.code_data = vec![opcodes::OpCode::SHL as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
         }
@@ -1337,9 +1382,9 @@ mod tests {
             ),
         ];
         for (x, y, except) in data {
-            let mut it = Interpreter::default();
+            let mut it = default_interpreter();;
             it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
-            it.code_data = vec![opcodes::OpCode::SHR as u8];
+            it.params.contract.code_data = vec![opcodes::OpCode::SHR as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
         }
@@ -1430,9 +1475,9 @@ mod tests {
             ),
         ];
         for (x, y, except) in data {
-            let mut it = Interpreter::default();
+            let mut it = default_interpreter();;
             it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
-            it.code_data = vec![opcodes::OpCode::SAR as u8];
+            it.params.contract.code_data = vec![opcodes::OpCode::SAR as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
         }
@@ -1503,9 +1548,9 @@ mod tests {
             ),
         ];
         for (x, y, except) in data {
-            let mut it = Interpreter::default();
+            let mut it = default_interpreter();;
             it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
-            it.code_data = vec![opcodes::OpCode::SGT as u8];
+            it.params.contract.code_data = vec![opcodes::OpCode::SGT as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
         }
@@ -1576,9 +1621,9 @@ mod tests {
             ),
         ];
         for (x, y, except) in data {
-            let mut it = Interpreter::default();
+            let mut it = default_interpreter();;
             it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
-            it.code_data = vec![opcodes::OpCode::SLT as u8];
+            it.params.contract.code_data = vec![opcodes::OpCode::SLT as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
         }
@@ -1586,14 +1631,14 @@ mod tests {
 
     #[test]
     fn test_op_mstore() {
-        let mut it = Interpreter::default();
+        let mut it = default_interpreter();;
         let v = "abcdef00000000000000abba000000000deaf000000c0de00100000000133700";
         it.stack.push_n(&vec![U256::from(v), U256::zero()]);
-        it.code_data = vec![opcodes::OpCode::MSTORE as u8];
+        it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
         assert_eq!(it.mem.get(0, 32), &v.from_hex().unwrap()[..]);
         it.stack.push_n(&vec![U256::one(), U256::zero()]);
-        it.code_data = vec![opcodes::OpCode::MSTORE as u8];
+        it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
         assert_eq!(
             it.mem.get(0, 32),
@@ -1626,14 +1671,20 @@ mod tests {
             ("0x600060005560016000556000600055", 10218, 19800, 1),
         ];
         for (code, use_gas, refund, origin) in data {
-            let mut it = Interpreter::default();
+            let mut it = default_interpreter();;
             it.cfg.eip1283 = true;
             assert_eq!(it.gas, it.context.gas_limit);
-            it.data_provider
-                .set_storage_origin(&it.code_address, H256::zero(), H256::from(origin));
-            it.data_provider
-                .set_storage(&it.code_address, H256::zero(), H256::from(origin));
-            it.code_data = common::hex_decode(code).unwrap();
+            it.data_provider.set_storage_origin(
+                &it.params.contract.code_address,
+                H256::zero(),
+                H256::from(origin),
+            );
+            it.data_provider.set_storage(
+                &it.params.contract.code_address,
+                H256::zero(),
+                H256::from(origin),
+            );
+            it.params.contract.code_data = common::hex_decode(code).unwrap();
             it.run().unwrap();
             assert_eq!(it.gas, it.context.gas_limit - use_gas);
             assert_eq!(it.data_provider.get_refund(&Address::zero()), refund);
@@ -1642,8 +1693,8 @@ mod tests {
 
     #[test]
     fn test_op_invalid() {
-        let mut it = Interpreter::default();
-        it.code_data = common::hex_decode("0xfb").unwrap();
+        let mut it = default_interpreter();;
+        it.params.contract.code_data = common::hex_decode("0xfb").unwrap();
         let r = it.run();
         assert!(r.is_err());
         assert_eq!(r.err(), Some(err::Error::InvalidOpcode))
@@ -1651,7 +1702,7 @@ mod tests {
 
     #[test]
     fn test_op_call() {
-        let mut it = Interpreter::default();
+        let mut it = default_interpreter();;
         it.cfg.print_op = true;
         it.cfg.print_gas_used = true;
         it.cfg.print_stack = true;
@@ -1695,7 +1746,7 @@ mod tests {
         );
 
         it.data_provider = Box::new(data_provider);
-        it.code_data = common::hex_decode(
+        it.params.contract.code_data = common::hex_decode(
             "0x6040600060406000600173100000000000000000000000000000000000000162055730f1600055",
         )
         .unwrap();

@@ -125,59 +125,38 @@ impl ext::DataProvider for DataProviderMock {
 
     fn call(
         &self,
-        address: &Address,
-        input: &[u8],
-        gas: u64,
-        value: U256,
-        extra: U256,
-        op: opcodes::OpCode,
+        opcode: opcodes::OpCode,
+        params: interpreter::InterpreterParams,
     ) -> (Result<interpreter::InterpreterResult, err::Error>) {
-        let _ = extra;
-        match op {
+        match opcode {
             opcodes::OpCode::CREATE => {
                 let mut stream = rlp::RlpStream::new_list(2);
                 stream.append(&Address::zero()); // Origin address
                 stream.append(&U256::zero()); // Nonce of origin address
                 let contract_address = Address::from(self.sha3(stream.as_raw()));
-                let mut it = interpreter::Interpreter::default();
-                it.code_address = contract_address;
-                it.code_data = Vec::from(input);
-                it.gas = gas;
-                it.value = value;
-                it.cfg.print_op = true;
-                it.cfg.print_stack = true;
-                it.cfg.print_gas_used = true;
-                it.cfg.print_mem = true;
-                println!("[LOG] RUN....");
-                let r = it.run()?;
-                if let interpreter::InterpreterResult::Normal(ret, gas, _) = r {
-                    println!("[LOG] COM....");
-                    return Ok(interpreter::InterpreterResult::Create(
-                        ret,
-                        contract_address,
-                        gas,
-                    ));
-                } else {
-                    println!("[LOG] COM....");
-                    return Ok(r);
-                };
+                let _ = contract_address;
+                let mut it = interpreter::Interpreter::new(
+                    interpreter::Context::default(),
+                    interpreter::InterpreterConf::default(),
+                    Box::new(DataProviderMock::new()),
+                    params,
+                );
+                let r = it.run();
+                return r;
             }
             opcodes::OpCode::CALL => {
-                let mut it = interpreter::Interpreter::default();
-                it.code_address = *address;
-                it.code_data = Vec::from(self.get_code(address));
-                it.gas = gas;
-                it.value = value;
+                let mut it = interpreter::Interpreter::new(
+                    interpreter::Context::default(),
+                    interpreter::InterpreterConf::default(),
+                    Box::new(DataProviderMock::new()),
+                    params,
+                );
+                it.params.contract.code_data =
+                    Vec::from(self.get_code(&it.params.contract.code_address));
                 let mut data_provider = DataProviderMock::new();
                 data_provider.storage = self.storage.clone();
                 it.data_provider = Box::new(data_provider);
-                it.cfg.print_op = true;
-                it.cfg.print_stack = true;
-                it.cfg.print_gas_used = true;
-                it.cfg.print_mem = true;
-                println!("[LOG] RUN....");
                 let r = it.run();
-                println!("[LOG] COM....");
                 return r;
             }
             _ => {}

@@ -36,11 +36,7 @@ pub trait DataProvider {
     //   OpCode::CREATE2
     fn call(
         &self,
-        contract_address: &Address, // For CALL, CALLCODE, DELEGATECALL and STATICCALL
-        input: &[u8],
-        gas: u64,
-        value: U256,
-        extra: U256, // Only used for CREATE2, as salt
-        from: opcodes::OpCode,
+        opcode: opcodes::OpCode,
+        params: interpreter::InterpreterParams,
     ) -> (Result<interpreter::InterpreterResult, err::Error>);
 }

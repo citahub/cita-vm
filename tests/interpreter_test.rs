@@ -2,6 +2,8 @@ extern crate cita_vm;
 extern crate evm;
 
 use cita_vm::json_tests::common::*;
+use evm::extmock;
+use evm::interpreter;
 use std::fs;
 use std::io;
 use std::io::prelude::*;
@@ -14,37 +16,45 @@ fn test_json_file(p: &str) {
             .write(format!("{}::{}\n", p, name).as_bytes())
             .unwrap();
         let vm: cita_vm::json_tests::vm_test::Vm = data;
-        let mut it = evm::interpreter::Interpreter::default();
-        // Init Config
-        it.cfg.print_op = true;
-        it.cfg.print_gas_used = true;
-        it.cfg.gas_exp_byte = 10;
-        it.cfg.gas_sload = 50;
-        it.cfg.gas_self_destruct = 0;
-
         // Init context
-        it.context.coinbase = vm.env.current_coinbase;
-        it.context.difficulty = string_2_u256(vm.env.current_difficulty);
-        it.context.gas_limit = string_2_u256(vm.env.current_gas_limit).low_u64();
-        it.context.number = string_2_u256(vm.env.current_number);
-        it.context.timestamp = string_2_u256(vm.env.current_timestamp).low_u64() as u64;
-        it.context.origin = vm.exec.origin;
-        it.context.gas_price = string_2_u256(vm.exec.gas_price);
+        let mut ctx = interpreter::Context::default();
+        ctx.coinbase = vm.env.current_coinbase;
+        ctx.difficulty = string_2_u256(vm.env.current_difficulty);
+        ctx.gas_limit = string_2_u256(vm.env.current_gas_limit).low_u64();
+        ctx.number = string_2_u256(vm.env.current_number);
+        ctx.timestamp = string_2_u256(vm.env.current_timestamp).low_u64() as u64;
+        ctx.origin = vm.exec.origin;
+        ctx.gas_price = string_2_u256(vm.exec.gas_price);
 
-        // Init txinfo
-        it.code_address = vm.exec.address;
-        it.address = vm.exec.address;
-        it.sender = vm.exec.caller;
+        // Init Config
+        let mut cfg = interpreter::InterpreterConf::default();
+        cfg.print_op = true;
+        cfg.print_gas_used = true;
+        cfg.gas_exp_byte = 10;
+        cfg.gas_sload = 50;
+        cfg.gas_self_destruct = 0;
+
+        // Init params
+        let mut params = interpreter::InterpreterParams::default();
+        params.gas = 1000000;
+        params.contract.code_address = vm.exec.address;
+        params.address = vm.exec.address;
+        params.sender = vm.exec.caller;
         if vm.exec.data.len() > 2 {
-            it.input = string_2_bytes(vm.exec.data.clone());
+            params.input = string_2_bytes(vm.exec.data.clone());
         } else {
-            it.input = Vec::new();
+            params.input = Vec::new();
         }
-        it.gas = string_2_u256(vm.exec.gas.clone()).low_u64();
-        it.value = string_2_u256(vm.exec.value);
+        params.gas = string_2_u256(vm.exec.gas.clone()).low_u64();
+        params.value = string_2_u256(vm.exec.value);
+        params.contract.code_data = string_2_bytes(vm.exec.code);
 
-        // Init contract code
-        it.code_data = string_2_bytes(vm.exec.code);
+        let mut it = interpreter::Interpreter::new(
+            ctx,
+            cfg,
+            Box::new(extmock::DataProviderMock::new()),
+            params,
+        );
 
         // Init state db
         if let Some(data) = vm.pre {
