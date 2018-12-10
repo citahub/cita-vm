@@ -1,3 +1,5 @@
+use super::common;
+
 pub struct Memory {
     store: Vec<u8>,
 }
@@ -8,7 +10,7 @@ impl Memory {
     }
 
     pub fn set(&mut self, offset: usize, val: &[u8]) {
-        if offset + 32 > self.store.len() {
+        if offset + val.len() > self.store.len() {
             panic!("invalid memory: store empty")
         }
 
@@ -23,9 +25,9 @@ impl Memory {
         self.store.resize_default(size)
     }
 
-    pub fn expand(&mut self, size:usize) {
+    pub fn expand(&mut self, size: usize) {
         if size > self.len() {
-            self.resize(size)
+            self.resize(common::to_word_size(size as u64) as usize * 32)
         }
     }
 
@@ -37,8 +39,6 @@ impl Memory {
         &self.store
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -71,5 +71,16 @@ mod tests {
         mem.resize(64);
         assert_eq!(mem.len(), 64);
         assert_eq!(mem.get(32, 1)[0], 0xFF);
+    }
+
+    #[test]
+    fn test_memory_set8() {
+        let mut mem = Memory::new();
+        mem.resize(8);
+        let r: Vec<u8> = (0..8).map(|_| 0xFF).collect();
+        mem.set(0, &r);
+        let r = mem.get(0, 8);
+        assert_eq!(0xFF, r[0]);
+        assert_eq!(0xFF, r[7]);
     }
 }

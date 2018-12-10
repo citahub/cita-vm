@@ -35,11 +35,11 @@ impl<T: Clone + Copy> Stack<T> {
 
     pub fn swap(&mut self, n: usize) {
         let len = self.data.len();
-        self.data.swap(len - n, len - 1)
+        self.data.swap(len - 1 - n, len - 1)
     }
 
     pub fn dup(&mut self, n: usize) {
-        let d = self.back(n - 1);
+        let d = self.back(n);
         self.data.push(d)
     }
 
@@ -55,7 +55,6 @@ impl<T: Clone + Copy> Stack<T> {
         self.data.len() >= n
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -136,18 +135,18 @@ mod tests {
         let ls = vec![0x01, 0x02, 0x03, 0x04];
         st.push_n(&ls);
         st.swap(2);
-        assert_eq!(st.back(0), 0x03);
-        assert_eq!(st.back(1), 0x04);
+        assert_eq!(st.back(0), 0x02);
+        assert_eq!(st.back(2), 0x04);
     }
 
     #[test]
     fn test_stack_dup() {
         let mut st: Stack<u32> = Stack::new();
-        let ls = vec![0x01, 0x02];
+        let ls = vec![0x01, 0x02, 0x03, 0x04];
         st.push_n(&ls);
         st.dup(1);
-        assert_eq!(st.back(0), 0x02);
+        assert_eq!(st.back(0), 0x03);
         st.dup(3);
-        assert_eq!(st.back(0), 0x01);
+        assert_eq!(st.back(0), 0x02);
     }
 }

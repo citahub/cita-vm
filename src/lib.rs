@@ -1,8 +1,4 @@
-#![feature(vec_resize_default)]
+#[macro_use]
+extern crate serde_derive;
 
-pub mod common;
-pub mod evm;
-pub mod instructions;
-pub mod interpreter;
-pub mod opcode;
-pub mod statedb;
+pub mod json_tests;
