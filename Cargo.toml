@@ -15,6 +15,7 @@ evm = { path="./evm" }
 [workspace]
 members = [
     "evm",
+    "evmbin",
     "ewasm",
     "state"
 ]
