@@ -1,6 +1,6 @@
 language: rust
 rust:
-  - nightly
+  - stable
 script:
   - RUSTFLAGS='-F warnings' cargo build --verbose --all
   - RUSTFLAGS='-F warnings' cargo test --verbose --all

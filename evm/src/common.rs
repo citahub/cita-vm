@@ -6,9 +6,9 @@ use std::u64;
 #[inline]
 pub fn to_word_size(size: u64) -> u64 {
     if size > u64::MAX - 31 {
-        return u64::MAX >> 5 + 1;
+        return (u64::MAX >> 5) + 1;
     }
-    return (size + 31) >> 5;
+    (size + 31) >> 5
 }
 
 #[inline]
@@ -69,7 +69,7 @@ pub fn rpad(slice: Vec<u8>, n: usize) -> Vec<u8> {
         slice
     } else {
         let mut padded: Vec<u8> = Vec::with_capacity(n);
-        let mut part1 = Vec::from(slice);
+        let mut part1 = slice;
         padded.append(&mut part1);
         let mut part2 = vec![0; n as usize - slice_len];
         padded.append(&mut part2);

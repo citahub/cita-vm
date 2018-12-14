@@ -115,7 +115,7 @@ mod tests {
         let f = fs::File::open("./tests/jsondata/VMTests/vmArithmeticTest/add0.json").unwrap();
         let t = Test::load(f).unwrap();
         assert!(t.0.contains_key("add0"));
-        let v = t.0.get("add0").unwrap();
+        let v = &t.0["add0"];
         assert_eq!(
             v.env.current_coinbase,
             Address::from("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
@@ -127,10 +127,7 @@ mod tests {
         assert_eq!(v.gas, Some(String::from("0x013874")));
         if let Some(data) = &v.post {
             assert_eq!(
-                data.0
-                    .get(&Address::from("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"))
-                    .unwrap()
-                    .balance,
+                data.0[&Address::from("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")].balance,
                 String::from("0x0de0b6b3a7640000")
             )
         }

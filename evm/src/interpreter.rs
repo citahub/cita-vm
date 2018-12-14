@@ -164,16 +164,15 @@ impl Interpreter {
         data_provider: Box<ext::DataProvider>,
         params: InterpreterParams,
     ) -> Self {
-        let gas = params.gas.clone();
+        let gas = params.gas;
         Interpreter {
-            context: context,
-            cfg: cfg,
-            data_provider: data_provider,
-            params: params,
-
-            gas: gas,
+            context,
+            cfg,
+            data_provider,
+            params,
+            gas,
             stack: stack::Stack::with_capacity(1024),
-            mem: memory::Memory::new(),
+            mem: memory::Memory::default(),
             logs: Vec::new(),
             return_data: Vec::new(),
             mem_gas: 0,
@@ -181,6 +180,7 @@ impl Interpreter {
         }
     }
 
+    #[allow(clippy::cyclomatic_complexity)]
     pub fn run(&mut self) -> Result<InterpreterResult, err::Error> {
         let this = &mut *self;
         let mut pc = 0;
@@ -193,12 +193,12 @@ impl Interpreter {
                 if op >= opcodes::OpCode::PUSH1 && op <= opcodes::OpCode::PUSH32 {
                     let n = op.clone() as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
                     let r = {
-                        if pc + n as u64 > this.params.contract.code_data.len() as u64 {
+                        if pc + u64::from(n) > this.params.contract.code_data.len() as u64 {
                             U256::zero()
                         } else {
                             U256::from(
                                 &this.params.contract.code_data
-                                    [pc as usize..(pc + n as u64) as usize],
+                                    [pc as usize..(pc + u64::from(n)) as usize],
                             )
                         }
                     };
@@ -301,59 +301,55 @@ impl Interpreter {
                             // See https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1283.md
                             if current_value == new_value {
                                 this.cfg.gas_sstore_noop
-                            } else {
-                                if original_value == current_value {
-                                    if original_value.is_zero() {
-                                        this.cfg.gas_sstore_init
-                                    } else {
-                                        if new_value.is_zero() {
-                                            this.data_provider.add_refund(
-                                                &this.params.address,
-                                                this.cfg.gas_sstore_clear_refund,
-                                            );
-                                        }
-                                        this.cfg.gas_sstore_clean
-                                    }
+                            } else if original_value == current_value {
+                                if original_value.is_zero() {
+                                    this.cfg.gas_sstore_init
                                 } else {
-                                    if !original_value.is_zero() {
-                                        if current_value.is_zero() {
-                                            this.data_provider.sub_refund(
-                                                &this.params.address,
-                                                this.cfg.gas_sstore_clear_refund,
-                                            );
-                                        } else if new_value.is_zero() {
-                                            this.data_provider.add_refund(
-                                                &this.params.address,
-                                                this.cfg.gas_sstore_clear_refund,
-                                            );
-                                        }
+                                    if new_value.is_zero() {
+                                        this.data_provider.add_refund(
+                                            &this.params.address,
+                                            this.cfg.gas_sstore_clear_refund,
+                                        );
                                     }
-                                    if original_value == new_value {
-                                        if original_value.is_zero() {
-                                            this.data_provider.add_refund(
-                                                &this.params.address,
-                                                this.cfg.gas_sstore_reset_clear_refund,
-                                            );
-                                        } else {
-                                            this.data_provider.add_refund(
-                                                &this.params.address,
-                                                this.cfg.gas_sstore_reset_refund,
-                                            );
-                                        }
-                                    }
-                                    this.cfg.gas_sstore_dirty
+                                    this.cfg.gas_sstore_clean
                                 }
-                            }
-                        } else {
-                            if current_value.is_zero() && !new_value.is_zero() {
-                                this.cfg.gas_sstore_set
-                            } else if !current_value.is_zero() && new_value.is_zero() {
-                                this.data_provider
-                                    .add_refund(&this.params.address, this.cfg.gas_sstore_refund);
-                                this.cfg.gas_sstore_clear
                             } else {
-                                this.cfg.gas_sstore_reset
+                                if !original_value.is_zero() {
+                                    if current_value.is_zero() {
+                                        this.data_provider.sub_refund(
+                                            &this.params.address,
+                                            this.cfg.gas_sstore_clear_refund,
+                                        );
+                                    } else if new_value.is_zero() {
+                                        this.data_provider.add_refund(
+                                            &this.params.address,
+                                            this.cfg.gas_sstore_clear_refund,
+                                        );
+                                    }
+                                }
+                                if original_value == new_value {
+                                    if original_value.is_zero() {
+                                        this.data_provider.add_refund(
+                                            &this.params.address,
+                                            this.cfg.gas_sstore_reset_clear_refund,
+                                        );
+                                    } else {
+                                        this.data_provider.add_refund(
+                                            &this.params.address,
+                                            this.cfg.gas_sstore_reset_refund,
+                                        );
+                                    }
+                                }
+                                this.cfg.gas_sstore_dirty
                             }
+                        } else if current_value.is_zero() && !new_value.is_zero() {
+                            this.cfg.gas_sstore_set
+                        } else if !current_value.is_zero() && new_value.is_zero() {
+                            this.data_provider
+                                .add_refund(&this.params.address, this.cfg.gas_sstore_refund);
+                            this.cfg.gas_sstore_clear
+                        } else {
+                            this.cfg.gas_sstore_reset
                         }
                     };
                     this.use_gas(gas)?;
@@ -371,7 +367,7 @@ impl Interpreter {
                     let mem_len = this.stack.back(1);
                     this.mem_gas_work(mem_offset, mem_len)?;
                     let gas = this.cfg.gas_log
-                        + this.cfg.gas_log_topic * n as u64
+                        + this.cfg.gas_log_topic * u64::from(n)
                         + this.cfg.gas_log_data * mem_len.low_u64();
                     this.use_gas(gas)?;
                 }
@@ -609,9 +605,10 @@ impl Interpreter {
                 opcodes::OpCode::BYTE => {
                     let word = this.stack.pop();
                     let val = this.stack.pop();
-                    let byte = match word < U256::from(32) {
-                        true => (val >> (8 * (31 - word.low_u64() as usize))) & U256::from(0xff),
-                        false => U256::zero(),
+                    let byte = if word < U256::from(32) {
+                        (val >> (8 * (31 - word.low_u64() as usize))) & U256::from(0xff)
+                    } else {
+                        U256::zero()
                     };
                     this.stack.push(byte);
                 }
@@ -639,7 +636,7 @@ impl Interpreter {
                 }
                 opcodes::OpCode::SAR => {
                     const CONST_256: U256 = U256([256, 0, 0, 0]);
-                    const CONST_HIBIT: U256 = U256([0, 0, 0, 0x8000000000000000]);
+                    const CONST_HIBIT: U256 = U256([0, 0, 0, 0x8000_0000_0000_0000]);
                     let shift = this.stack.pop();
                     let value = this.stack.pop();
                     let sign = value & CONST_HIBIT != U256::zero();
@@ -670,7 +667,7 @@ impl Interpreter {
                 }
                 opcodes::OpCode::ADDRESS => {
                     this.stack
-                        .push(common::address_to_u256(this.params.address.clone()));
+                        .push(common::address_to_u256(this.params.address));
                 }
                 opcodes::OpCode::BALANCE => {
                     let address = common::u256_to_address(&this.stack.pop());
@@ -679,11 +676,10 @@ impl Interpreter {
                 }
                 opcodes::OpCode::ORIGIN => {
                     this.stack
-                        .push(common::address_to_u256(this.context.origin.clone()));
+                        .push(common::address_to_u256(this.context.origin));
                 }
                 opcodes::OpCode::CALLER => {
-                    this.stack
-                        .push(common::address_to_u256(this.params.sender.clone()));
+                    this.stack.push(common::address_to_u256(this.params.sender));
                 }
                 opcodes::OpCode::CALLVALUE => {
                     this.stack.push(this.params.value);
@@ -692,7 +688,7 @@ impl Interpreter {
                     let big_id = this.stack.pop();
                     let id = big_id.low_u64() as usize;
                     let max = id.wrapping_add(32);
-                    if this.params.input.len() > 0 {
+                    if !this.params.input.is_empty() {
                         let bound = cmp::min(this.params.input.len(), max);
                         if id < bound && big_id < U256::from(this.params.input.len()) {
                             let mut v = [0u8; 32];
@@ -732,7 +728,7 @@ impl Interpreter {
                     this.mem.set(mem_offset.as_usize(), data.as_slice());
                 }
                 opcodes::OpCode::GASPRICE => {
-                    this.stack.push(this.context.gas_price.clone());
+                    this.stack.push(this.context.gas_price);
                 }
                 opcodes::OpCode::EXTCODESIZE => {
                     let address = common::u256_to_address(&this.stack.pop());
@@ -773,16 +769,16 @@ impl Interpreter {
                 }
                 opcodes::OpCode::COINBASE => {
                     this.stack
-                        .push(common::address_to_u256(this.context.coinbase.clone()));
+                        .push(common::address_to_u256(this.context.coinbase));
                 }
                 opcodes::OpCode::TIMESTAMP => {
                     this.stack.push(U256::from(this.context.timestamp));
                 }
                 opcodes::OpCode::NUMBER => {
-                    this.stack.push(U256::from(this.context.number));
+                    this.stack.push(this.context.number);
                 }
                 opcodes::OpCode::DIFFICULTY => {
-                    this.stack.push(this.context.difficulty.clone());
+                    this.stack.push(this.context.difficulty);
                 }
                 opcodes::OpCode::GASLIMIT => {
                     this.stack.push(U256::from(this.context.gas_limit));
@@ -882,7 +878,7 @@ impl Interpreter {
                 | opcodes::OpCode::PUSH31
                 | opcodes::OpCode::PUSH32 => {
                     let n = op as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
-                    let e = pc + n as u64;
+                    let e = pc + u64::from(n);
                     let e = cmp::min(e, this.params.contract.code_data.len() as u64);
                     let r = U256::from(&this.params.contract.code_data[pc as usize..e as usize]);
                     pc = e;
@@ -1086,27 +1082,25 @@ impl Interpreter {
                 }
             }
             if this.cfg.print_op {
-                println!("");
+                println!();
             }
         }
-        return Ok(InterpreterResult::Normal(
+        Ok(InterpreterResult::Normal(
             this.return_data.clone(),
             this.gas,
             this.logs.clone(),
-        ));
+        ))
     }
 
     fn use_gas(&mut self, gas: u64) -> Result<(), err::Error> {
-        if self.cfg.print_gas_used {
-            if gas != 0 {
-                println!("[Gas] - {}", gas);
-            }
+        if self.cfg.print_gas_used && gas != 0 {
+            println!("[Gas] - {}", gas);
         }
         if self.gas < gas {
             return Err(err::Error::OutOfGas);
         }
         self.gas -= gas;
-        return Ok(());
+        Ok(())
     }
 
     fn mem_gas_cost(&mut self, size: u64) -> u64 {
@@ -1135,7 +1129,7 @@ impl Interpreter {
 
     fn get_byte(&self, n: u64) -> u8 {
         if n < self.params.contract.code_data.len() as u64 {
-            return *self.params.contract.code_data.get(n as usize).unwrap();
+            return self.params.contract.code_data[n as usize];
         }
         0
     }
@@ -1144,7 +1138,7 @@ impl Interpreter {
         if let Some(data) = opcodes::OpCode::from_u8(self.get_byte(n)) {
             return Ok(data);
         }
-        return Err(err::Error::InvalidOpcode);
+        Err(err::Error::InvalidOpcode)
     }
 }
 
@@ -1159,12 +1153,12 @@ mod tests {
         let mut it = Interpreter::new(
             Context::default(),
             InterpreterConf::default(),
-            Box::new(extmock::DataProviderMock::new()),
+            Box::new(extmock::DataProviderMock::default()),
             InterpreterParams::default(),
         );
-        it.context.gas_limit = 1000000;
-        it.params.gas = 1000000;
-        it.gas = 1000000;
+        it.context.gas_limit = 1_000_000;
+        it.params.gas = 1_000_000;
+        it.gas = 1_000_000;
         it
     }
 
@@ -1244,10 +1238,8 @@ mod tests {
         ];
         for (val, th, except) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&vec![
-                U256::from(val),
-                U256::from(th.parse::<u64>().unwrap()),
-            ]);
+            it.stack
+                .push_n(&[U256::from(val), U256::from(th.parse::<u64>().unwrap())]);
             it.params.contract.code_data = vec![opcodes::OpCode::BYTE as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
@@ -1315,7 +1307,7 @@ mod tests {
         ];
         for (x, y, except) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
+            it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![opcodes::OpCode::SHL as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
@@ -1383,7 +1375,7 @@ mod tests {
         ];
         for (x, y, except) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
+            it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![opcodes::OpCode::SHR as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
@@ -1476,7 +1468,7 @@ mod tests {
         ];
         for (x, y, except) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
+            it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![opcodes::OpCode::SAR as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
@@ -1549,7 +1541,7 @@ mod tests {
         ];
         for (x, y, except) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
+            it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![opcodes::OpCode::SGT as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
@@ -1622,7 +1614,7 @@ mod tests {
         ];
         for (x, y, except) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&vec![U256::from(x), U256::from(y)]);
+            it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![opcodes::OpCode::SLT as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(except));
@@ -1633,11 +1625,11 @@ mod tests {
     fn test_op_mstore() {
         let mut it = default_interpreter();;
         let v = "abcdef00000000000000abba000000000deaf000000c0de00100000000133700";
-        it.stack.push_n(&vec![U256::from(v), U256::zero()]);
+        it.stack.push_n(&[U256::from(v), U256::zero()]);
         it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
         assert_eq!(it.mem.get(0, 32), &v.from_hex().unwrap()[..]);
-        it.stack.push_n(&vec![U256::one(), U256::zero()]);
+        it.stack.push_n(&[U256::one(), U256::zero()]);
         it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
         assert_eq!(
@@ -1758,7 +1750,7 @@ mod tests {
         it.context.gas_price = U256::one();
         it.cfg.print_op = true;
         it.cfg.print_gas_used = true;
-        let mut data_provider = extmock::DataProviderMock::new();
+        let mut data_provider = extmock::DataProviderMock::default();
 
         let mut account0 = extmock::Account::default();
         account0.balance = U256::from("0de0b6b3a7640000");
@@ -1803,7 +1795,7 @@ mod tests {
         .unwrap();
         let r = it.run().unwrap();
         match r {
-            InterpreterResult::Normal(_, gas, _) => assert_eq!(gas, it.params.gas - 199901),
+            InterpreterResult::Normal(_, gas, _) => assert_eq!(gas, it.params.gas - 199_901),
             _ => assert!(false),
         }
     }

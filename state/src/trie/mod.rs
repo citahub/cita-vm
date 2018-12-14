@@ -1,13 +1,13 @@
-extern crate trie_root;
-extern crate trie_db;
 extern crate hash_db;
-extern crate memory_db;
 extern crate hex;
+extern crate memory_db;
+extern crate trie_db;
+extern crate trie_root;
 
-use trie_db::{DBValue};
+use trie_db::DBValue;
 
-pub mod hasher;
 pub mod codec;
+pub mod hasher;
 
 use self::codec::RLPNodeCodec;
 
@@ -18,9 +18,9 @@ pub type RLPSecTrieDBMut<'a, H> = trie_db::SecTrieDBMut<'a, H, RLPNodeCodec<H>>;
 
 #[cfg(test)]
 mod tests {
+    use super::hasher::Sha3Hasher;
     use super::*;
     use trie_db::TrieMut;
-    use super::hasher::{Sha3Hasher};
 
     #[test]
     fn test_empty_trie_shoule_be_true() {
@@ -36,9 +36,9 @@ mod tests {
         let mut root = Default::default();
         let mut trie = RLPSecTrieDBMut::new(&mut m, &mut root);
 
-        trie.insert("test-key".as_bytes(), "test-value".as_bytes()).unwrap();
-        let value = trie.get("test-key".as_bytes()).unwrap().unwrap();
-        assert_eq!(value, "test-value".as_bytes())
+        trie.insert(b"test-key", b"test-value").unwrap();
+        let value = trie.get(b"test-key").unwrap().unwrap();
+        assert_eq!(value.into_vec(), b"test-value")
     }
 
     #[test]
@@ -47,10 +47,10 @@ mod tests {
         let mut root = Default::default();
         let mut trie = RLPSecTrieDBMut::new(&mut m, &mut root);
 
-        trie.insert("test-key1".as_bytes(), "test-vlue".as_bytes()).unwrap();
-        trie.insert("test-key2".as_bytes(), "test-value".as_bytes()).unwrap();
-        trie.insert("test-key3".as_bytes(), "test-value".as_bytes()).unwrap();
-        trie.insert("test-key4".as_bytes(), "test-value".as_bytes()).unwrap();
+        trie.insert(b"test-key1", b"test-vlue").unwrap();
+        trie.insert(b"test-key2", b"test-value").unwrap();
+        trie.insert(b"test-key3", b"test-value").unwrap();
+        trie.insert(b"test-key4", b"test-value").unwrap();
 
         trie.root();
     }
@@ -61,11 +61,11 @@ mod tests {
         let mut root = Default::default();
         let mut trie = RLPSecTrieDBMut::new(&mut m, &mut root);
 
-        trie.insert("test-key1".as_bytes(), "test-vlue".as_bytes()).unwrap();
-        trie.insert("test-key2".as_bytes(), "test-value".as_bytes()).unwrap();
-        trie.insert("test-key11".as_bytes(), "test-value".as_bytes()).unwrap();
-        trie.insert("test-key12".as_bytes(), "test-value".as_bytes()).unwrap();
-        trie.insert("test-key13".as_bytes(), "test-value".as_bytes()).unwrap();
+        trie.insert(b"test-key1", b"test-vlue").unwrap();
+        trie.insert(b"test-key2", b"test-value").unwrap();
+        trie.insert(b"test-key11", b"test-value").unwrap();
+        trie.insert(b"test-key12", b"test-value").unwrap();
+        trie.insert(b"test-key13", b"test-value").unwrap();
 
         trie.root();
     }
@@ -76,11 +76,11 @@ mod tests {
         let mut root = Default::default();
         let mut trie = RLPSecTrieDBMut::new(&mut m, &mut root);
 
-        trie.insert("test-key1".as_bytes(), "test-value".as_bytes()).unwrap();
-        let old_value = trie.remove("test-key1".as_bytes()).unwrap().unwrap();
-        assert_eq!(old_value, "test-value".as_bytes());
-        
-        let value = trie.get("test-key1".as_bytes()).unwrap().take();
+        trie.insert(b"test-key1", b"test-value").unwrap();
+        let old_value = trie.remove(b"test-key1").unwrap().unwrap();
+        assert_eq!(old_value.into_vec(), b"test-value");
+
+        let value = trie.get(b"test-key1").unwrap().take();
         assert_eq!(value, None)
     }
 
@@ -90,7 +90,7 @@ mod tests {
         let mut root = Default::default();
         let trie = RLPSecTrieDBMut::new(&mut m, &mut root);
 
-        let contains = trie.contains("test-key1".as_bytes()).unwrap();
+        let contains = trie.contains(b"test-key1").unwrap();
         assert_eq!(contains, false)
     }
 
@@ -100,23 +100,23 @@ mod tests {
         let mut root = Default::default();
         let mut trie = RLPSecTrieDBMut::new(&mut m, &mut root);
 
-        trie.insert("test-key1".as_bytes(), "test-value".as_bytes()).unwrap();
-        let contains = trie.contains("test-key1".as_bytes()).unwrap();
+        trie.insert(b"test-key1", b"test-value").unwrap();
+        let contains = trie.contains(b"test-key1").unwrap();
         assert_eq!(contains, true)
     }
 
-       #[test]
+    #[test]
     fn test_trie_from_existing() {
         let mut m = MemoryDB::<Sha3Hasher>::default();
         let mut new_root = {
             let mut root = Default::default();
             let mut trie = RLPSecTrieDBMut::new(&mut m, &mut root);
-            trie.insert("test-key1".as_bytes(), "test-value".as_bytes()).unwrap();
-            trie.insert("test-key2".as_bytes(), "test-value".as_bytes()).unwrap();
-            trie.insert("test-key11".as_bytes(), "test-value".as_bytes()).unwrap();
-            trie.insert("test-key11".as_bytes(), "test-value".as_bytes()).unwrap();
-            trie.get("test-key1".as_bytes()).unwrap().unwrap();
-            trie.root().clone()
+            trie.insert(b"test-key1", b"test-value").unwrap();
+            trie.insert(b"test-key2", b"test-value").unwrap();
+            trie.insert(b"test-key11", b"test-value").unwrap();
+            trie.insert(b"test-key11", b"test-value").unwrap();
+            trie.get(b"test-key1").unwrap().unwrap();
+            *trie.root()
         };
 
         let _ = RLPSecTrieDBMut::from_existing(&mut m, &mut new_root).unwrap();

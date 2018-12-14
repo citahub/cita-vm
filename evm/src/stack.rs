@@ -1,12 +1,9 @@
+#[derive(Default)]
 pub struct Stack<T> {
     data: Vec<T>,
 }
 
 impl<T: Clone + Copy> Stack<T> {
-    pub fn new() -> Stack<T> {
-        Stack { data: Vec::new() }
-    }
-
     pub fn with_capacity(capacity: usize) -> Self {
         Stack {
             data: Vec::with_capacity(capacity),
@@ -33,6 +30,10 @@ impl<T: Clone + Copy> Stack<T> {
         self.data.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
     pub fn swap(&mut self, n: usize) {
         let len = self.data.len();
         self.data.swap(len - 1 - n, len - 1)
@@ -44,7 +45,7 @@ impl<T: Clone + Copy> Stack<T> {
     }
 
     pub fn back(&self, n: usize) -> T {
-        self.data[self.data.len() - n - 1].clone()
+        self.data[self.data.len() - n - 1]
     }
 
     pub fn peek(&self) -> T {
@@ -72,7 +73,7 @@ mod tests {
 
     #[test]
     fn test_stack_new() {
-        let mut st: Stack<u32> = Stack::new();
+        let mut st: Stack<u32> = Stack::default();
         assert_eq!(st.len(), 0);
         st.push(0x01);
         st.push(0x02);
@@ -83,7 +84,7 @@ mod tests {
 
     #[test]
     fn test_stack_back() {
-        let mut st: Stack<u32> = Stack::new();
+        let mut st: Stack<u32> = Stack::default();
         st.push(0x01);
         st.push(0x02);
         assert_eq!(st.back(0), 0x02);
@@ -93,7 +94,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stack_back_neg() {
-        let mut st: Stack<u32> = Stack::new();
+        let mut st: Stack<u32> = Stack::default();
         st.push(0x01);
         st.push(0x02);
         st.back(2);
@@ -101,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_stack_push_n() {
-        let mut st: Stack<u32> = Stack::new();
+        let mut st: Stack<u32> = Stack::default();
         let ls = vec![0x01, 0x02];
         st.push_n(&ls);
         assert_eq!(st.back(0), 0x02);
@@ -110,7 +111,7 @@ mod tests {
 
     #[test]
     fn test_stack_pop() {
-        let mut st: Stack<u32> = Stack::new();
+        let mut st: Stack<u32> = Stack::default();
         let ls = vec![0x01, 0x02];
         st.push_n(&ls);
         assert_eq!(st.pop(), 0x02);
@@ -120,7 +121,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stack_pop_neg() {
-        let mut st: Stack<u32> = Stack::new();
+        let mut st: Stack<u32> = Stack::default();
         let ls = vec![0x01, 0x02];
         st.push_n(&ls);
         for i in 0..3 {
@@ -131,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_stack_swap() {
-        let mut st: Stack<u32> = Stack::new();
+        let mut st: Stack<u32> = Stack::default();
         let ls = vec![0x01, 0x02, 0x03, 0x04];
         st.push_n(&ls);
         st.swap(2);
@@ -141,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_stack_dup() {
-        let mut st: Stack<u32> = Stack::new();
+        let mut st: Stack<u32> = Stack::default();
         let ls = vec![0x01, 0x02, 0x03, 0x04];
         st.push_n(&ls);
         st.dup(1);

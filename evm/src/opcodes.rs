@@ -302,16 +302,16 @@ pub enum GasPriceTier {
 }
 
 impl GasPriceTier {
-    pub fn idx(&self) -> usize {
+    pub fn idx(self) -> usize {
         match self {
-            &GasPriceTier::Zero => 0,
-            &GasPriceTier::Base => 1,
-            &GasPriceTier::VeryLow => 2,
-            &GasPriceTier::Low => 3,
-            &GasPriceTier::Mid => 4,
-            &GasPriceTier::High => 5,
-            &GasPriceTier::Ext => 6,
-            &GasPriceTier::Special => 7,
+            GasPriceTier::Zero => 0,
+            GasPriceTier::Base => 1,
+            GasPriceTier::VeryLow => 2,
+            GasPriceTier::Low => 3,
+            GasPriceTier::Mid => 4,
+            GasPriceTier::High => 5,
+            GasPriceTier::Ext => 6,
+            GasPriceTier::Special => 7,
         }
     }
 }

@@ -13,7 +13,7 @@ fn test_json_file(p: &str) {
     let t = cita_vm::json_tests::vm_test::Test::load(f).unwrap();
     for (name, data) in t.into_iter() {
         io::stderr()
-            .write(format!("{}::{}\n", p, name).as_bytes())
+            .write_all(format!("{}::{}\n", p, name).as_bytes())
             .unwrap();
         let vm: cita_vm::json_tests::vm_test::Vm = data;
         // Init context
@@ -36,7 +36,7 @@ fn test_json_file(p: &str) {
 
         // Init params
         let mut params = interpreter::InterpreterParams::default();
-        params.gas = 1000000;
+        params.gas = 1_000_000;
         params.contract.code_address = vm.exec.address;
         params.address = vm.exec.address;
         params.sender = vm.exec.caller;
@@ -52,7 +52,7 @@ fn test_json_file(p: &str) {
         let mut it = interpreter::Interpreter::new(
             ctx,
             cfg,
-            Box::new(extmock::DataProviderMock::new()),
+            Box::new(extmock::DataProviderMock::default()),
             params,
         );
 

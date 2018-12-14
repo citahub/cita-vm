@@ -1,14 +1,11 @@
 use super::common;
 
+#[derive(Default)]
 pub struct Memory {
     store: Vec<u8>,
 }
 
 impl Memory {
-    pub fn new() -> Memory {
-        Memory { store: vec![] }
-    }
-
     pub fn set(&mut self, offset: usize, val: &[u8]) {
         if offset + val.len() > self.store.len() {
             panic!("invalid memory: store empty")
@@ -22,7 +19,7 @@ impl Memory {
     }
 
     pub fn resize(&mut self, size: usize) {
-        self.store.resize_default(size)
+        self.store.resize(size, u8::default())
     }
 
     pub fn expand(&mut self, size: usize) {
@@ -38,6 +35,10 @@ impl Memory {
     pub fn data(&self) -> &[u8] {
         &self.store
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.store.is_empty()
+    }
 }
 
 #[cfg(test)]
@@ -45,13 +46,13 @@ mod tests {
     use super::*;
     #[test]
     fn test_memory_set_get() {
-        let mut mem = Memory::new();
+        let mut mem = Memory::default();
         mem.resize(128);
         assert_eq!(mem.len(), 128);
         let r = mem.get(8, 2);
         assert_eq!(r[0], 0x00);
         assert_eq!(r[1], 0x00);
-        mem.set(8, &vec![0x01, 0x02]);
+        mem.set(8, &[0x01, 0x02]);
         let r = mem.get(8, 2);
         assert_eq!(r[0], 0x01);
         assert_eq!(r[1], 0x02);
@@ -59,7 +60,7 @@ mod tests {
 
     #[test]
     fn test_memory_resize() {
-        let mut mem = Memory::new();
+        let mut mem = Memory::default();
         mem.resize(128);
         let r: Vec<u8> = (0..128).map(|_| 0xFF).collect();
         mem.set(0, &r);
@@ -75,7 +76,7 @@ mod tests {
 
     #[test]
     fn test_memory_set8() {
-        let mut mem = Memory::new();
+        let mut mem = Memory::default();
         mem.resize(8);
         let r: Vec<u8> = (0..8).map(|_| 0xFF).collect();
         mem.set(0, &r);
