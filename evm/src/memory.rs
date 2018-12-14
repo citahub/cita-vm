@@ -19,7 +19,7 @@ impl Memory {
     }
 
     pub fn resize(&mut self, size: usize) {
-        self.store.resize_default(size)
+        self.store.resize(size, u8::default())
     }
 
     pub fn expand(&mut self, size: usize) {

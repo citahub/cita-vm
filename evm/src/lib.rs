@@ -1,5 +1,3 @@
-#![feature(vec_resize_default)]
-
 pub mod common;
 pub mod err;
 pub mod ext;
