@@ -99,8 +99,8 @@ fn test_json_file(p: &str) {
                             assert_eq!(ret, string_2_bytes(data))
                         }
                         // Check gas
-                        if let Some(except_gas) = vm.gas {
-                            assert_eq!(gas, string_2_u256(except_gas).low_u64())
+                        if let Some(expected_gas) = vm.gas {
+                            assert_eq!(gas, string_2_u256(expected_gas).low_u64())
                         }
                     }
                     _ => {}
