@@ -123,7 +123,7 @@ mod tests {
         .unwrap();
         let t = Test::load(f).unwrap();
         assert!(t.0.contains_key("addmodNonConst"));
-        let v = t.0.get("addmodNonConst").unwrap();
+        let v = &t.0["addmodNonConst"];
         assert_eq!(
             v.env.current_coinbase,
             Address::from("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")

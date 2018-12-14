@@ -26,6 +26,7 @@ impl Account {
     }
 }
 
+#[derive(Default)]
 pub struct DataProviderMock {
     pub storage: BTreeMap<Address, Account>,
     pub storage_origin: BTreeMap<String, H256>,
@@ -37,7 +38,7 @@ impl ext::DataProvider for DataProviderMock {
         if let Some(data) = self.storage.get(address) {
             return data.balance;
         }
-        return U256::zero();
+        U256::zero()
     }
 
     fn add_refund(&mut self, _: &Address, n: u64) {
@@ -54,14 +55,14 @@ impl ext::DataProvider for DataProviderMock {
         if let Some(data) = self.storage.get(address) {
             return data.code.len() as u64;
         }
-        return 0;
+        0
     }
 
     fn get_code(&self, address: &Address) -> &[u8] {
         if let Some(data) = self.storage.get(address) {
             return data.code.as_slice();
         }
-        return &[0u8][..];
+        &[0u8][..]
     }
 
     fn get_code_hash(&self, address: &Address) -> H256 {
@@ -82,7 +83,7 @@ impl ext::DataProvider for DataProviderMock {
             }
             return H256::zero();
         }
-        return H256::zero();
+        H256::zero()
     }
 
     fn set_storage(&mut self, address: &Address, key: H256, value: H256) {
@@ -104,7 +105,7 @@ impl ext::DataProvider for DataProviderMock {
     fn get_storage_origin(&self, address: &Address, key: &H256) -> H256 {
         let fullkey = format!("{}{}", address, key);
         if self.storage_origin.contains_key(&fullkey) {
-            return *self.storage_origin.get(&fullkey).unwrap();
+            return self.storage_origin[&fullkey];
         }
         H256::zero()
     }
@@ -138,7 +139,7 @@ impl ext::DataProvider for DataProviderMock {
                 let mut it = interpreter::Interpreter::new(
                     interpreter::Context::default(),
                     interpreter::InterpreterConf::default(),
-                    Box::new(DataProviderMock::new()),
+                    Box::new(DataProviderMock::default()),
                     params,
                 );
                 let r = it.run();
@@ -148,14 +149,14 @@ impl ext::DataProvider for DataProviderMock {
                 let mut it = interpreter::Interpreter::new(
                     interpreter::Context::default(),
                     interpreter::InterpreterConf::default(),
-                    Box::new(DataProviderMock::new()),
+                    Box::new(DataProviderMock::default()),
                     params,
                 );
                 // Hard code for test_op_call().
                 it.cfg.print_op = true;
                 it.cfg.print_gas_used = true;
                 it.context.gas_price = U256::one();
-                let mut data_provider = DataProviderMock::new();
+                let mut data_provider = DataProviderMock::default();
                 data_provider.storage = self.storage.clone();
                 it.data_provider = Box::new(data_provider);
                 let r = it.run();
@@ -168,15 +169,5 @@ impl ext::DataProvider for DataProviderMock {
             0,
             Vec::new(),
         ))
-    }
-}
-
-impl DataProviderMock {
-    pub fn new() -> Self {
-        DataProviderMock {
-            storage: BTreeMap::new(),
-            storage_origin: BTreeMap::new(),
-            refund: 0,
-        }
     }
 }

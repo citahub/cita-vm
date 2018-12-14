@@ -1,21 +1,15 @@
-extern crate trie_db;
 extern crate hash_db;
 extern crate hex;
 extern crate rlp;
+extern crate trie_db;
 
-use std::marker::PhantomData;
 use std::error::Error;
 use std::fmt;
+use std::marker::PhantomData;
 
-use trie_db::{
-    ChildReference,
-    DBValue,
-    NodeCodec,
-    NibbleSlice,
-    node::Node,
-};
 use hash_db::Hasher;
-use rlp::{Rlp, DecoderError, Prototype, RlpStream, NULL_RLP};
+use rlp::{DecoderError, Prototype, Rlp, RlpStream, NULL_RLP};
+use trie_db::{node::Node, ChildReference, DBValue, NibbleSlice, NodeCodec};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CodecError {
@@ -24,19 +18,19 @@ pub enum CodecError {
 }
 
 impl Error for CodecError {
-	fn description(&self) -> &str {
+    fn description(&self) -> &str {
         "codec error"
     }
 }
 
 impl fmt::Display for CodecError {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let printable = match *self {
             CodecError::DecodeErr(ref err) => format!("rlp decode {}", err),
             CodecError::InvalidData => "invalid data".to_string(),
         };
         write!(f, "{}", printable)
-	}
+    }
 }
 
 impl From<rlp::DecoderError> for CodecError {
@@ -50,11 +44,11 @@ pub struct RLPNodeCodec<H: Hasher>(PhantomData<H>);
 
 impl<H: Hasher> NodeCodec<H> for RLPNodeCodec<H> {
     type Error = CodecError;
-  
+
     fn hashed_null_node() -> H::Out {
         H::hash(&[0u8][..])
     }
-  
+
     fn decode(data: &[u8]) -> Result<Node, Self::Error> {
         if data == [0] {
             return Ok(Node::Empty);
@@ -71,31 +65,31 @@ impl<H: Hasher> NodeCodec<H> for RLPNodeCodec<H> {
                 } else {
                     Ok(Node::Extension(key, &value))
                 }
-            },
+            }
             Prototype::List(17) => {
                 let mut nodes = [None; 16];
-                for i in 0..nodes.len() {
+                for (i, item) in nodes.iter_mut().enumerate() {
                     let data = r.at(i)?;
                     if !data.is_empty() {
-                        nodes[i] = Some(data.as_raw());
+                        *item = Some(data.as_raw());
                     }
-                };
+                }
 
                 let value = r.at(16)?;
-                let value_node = if value.is_empty() { 
-                    None 
-                } else { 
-                    Some(value.data()?) 
+                let value_node = if value.is_empty() {
+                    None
+                } else {
+                    Some(value.data()?)
                 };
 
                 Ok(Node::Branch(nodes, value_node))
-            },
+            }
             Prototype::Data(0) => Ok(Node::Empty),
             _ => Err(CodecError::InvalidData),
         }
     }
 
-    fn try_decode_hash(data: &[u8]) -> Option<H::Out>{
+    fn try_decode_hash(data: &[u8]) -> Option<H::Out> {
         if data.len() == H::LENGTH {
             Some(H::hash(&data[..]))
         } else {
@@ -122,27 +116,33 @@ impl<H: Hasher> NodeCodec<H> for RLPNodeCodec<H> {
         let mut stream = RlpStream::new_list(2);
         stream.append(&partial);
         match child_ref {
-			ChildReference::Hash(h) => stream.append(&h.as_ref()),
-			ChildReference::Inline(inline_data, len) => stream.append(&&inline_data.as_ref()[..len]),
-		};
+            ChildReference::Hash(h) => stream.append(&h.as_ref()),
+            ChildReference::Inline(inline_data, len) => {
+                stream.append(&&inline_data.as_ref()[..len])
+            }
+        };
         stream.out()
     }
 
     fn branch_node<I>(children: I, value: Option<DBValue>) -> Vec<u8>
- 	where I: IntoIterator<Item=Option<ChildReference<H::Out>>> + Iterator<Item=Option<ChildReference<H::Out>>> {
-         let mut stream = RlpStream::new();
-         for child in children {
-             match child {
+    where
+        I: IntoIterator<Item = Option<ChildReference<H::Out>>>
+            + Iterator<Item = Option<ChildReference<H::Out>>>,
+    {
+        let mut stream = RlpStream::new();
+        for child in children {
+            match child {
                 Some(ChildReference::Hash(h)) => stream.append_raw(h.as_ref(), 1),
-                 Some(ChildReference::Inline(inline_data, len)) => stream.
-                    append_raw(&inline_data.as_ref()[..len], 1),
+                Some(ChildReference::Inline(inline_data, len)) => {
+                    stream.append_raw(&inline_data.as_ref()[..len], 1)
+                }
                 None => stream.append_empty_data(),
-             };
-         }
-         match value {
-             Some(value) => stream.append(&&*value),
-             None => stream.append_empty_data(),
-         };
-         stream.out()
-     }
+            };
+        }
+        match value {
+            Some(value) => stream.append(&&*value),
+            None => stream.append_empty_data(),
+        };
+        stream.out()
+    }
 }
