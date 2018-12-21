@@ -19,3 +19,11 @@ jobs:
       script:
         - rustup component add clippy-preview
         - RUSTFLAGS='-F warnings' cargo clippy --all --tests
+    - stage: Test
+      name: UnitTest
+      script:
+        - cd evm && cargo test
+    - stage: Test
+      name: IntegrationTest
+      script:
+        - cargo test
