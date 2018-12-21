@@ -4,10 +4,9 @@ use super::interpreter;
 use super::opcodes;
 use ethereum_types::*;
 use keccak_hash;
-use rlp;
 use std::collections::BTreeMap;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Account {
     pub balance: U256,
     pub code: Vec<u8>,
@@ -15,61 +14,48 @@ pub struct Account {
     pub storage: BTreeMap<H256, H256>,
 }
 
-impl Account {
-    pub fn default() -> Self {
-        Account {
-            balance: U256::zero(),
-            code: Vec::new(),
-            nonce: U256::zero(),
-            storage: BTreeMap::new(),
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct DataProviderMock {
-    pub storage: BTreeMap<Address, Account>,
-    pub storage_origin: BTreeMap<String, H256>,
-    pub refund: u64,
+    pub db: BTreeMap<Address, Account>,
+    pub db_origin: BTreeMap<Address, Account>,
+    pub refund: BTreeMap<Address, u64>,
 }
 
 impl ext::DataProvider for DataProviderMock {
     fn get_balance(&self, address: &Address) -> U256 {
-        if let Some(data) = self.storage.get(address) {
-            return data.balance;
-        }
-        U256::zero()
+        self.db.get(address).map_or(U256::zero(), |v| v.balance)
     }
 
-    fn add_refund(&mut self, _: &Address, n: u64) {
-        self.refund += n
-    }
-    fn sub_refund(&mut self, _: &Address, n: u64) {
-        self.refund -= n
-    }
-    fn get_refund(&self, _: &Address) -> u64 {
+    fn add_refund(&mut self, address: &Address, n: u64) {
         self.refund
+            .entry(*address)
+            .and_modify(|v| *v += n)
+            .or_insert(n);
+    }
+
+    fn sub_refund(&mut self, address: &Address, n: u64) {
+        self.refund
+            .entry(*address)
+            .and_modify(|v| *v -= n)
+            .or_insert(n);
+    }
+
+    fn get_refund(&self, address: &Address) -> u64 {
+        self.refund.get(address).map_or(0, |v| *v)
     }
 
     fn get_code_size(&self, address: &Address) -> u64 {
-        if let Some(data) = self.storage.get(address) {
-            return data.code.len() as u64;
-        }
-        0
+        self.db.get(address).map_or(0, |v| v.code.len() as u64)
     }
 
     fn get_code(&self, address: &Address) -> &[u8] {
-        if let Some(data) = self.storage.get(address) {
-            return data.code.as_slice();
-        }
-        &[0u8][..]
+        self.db.get(address).map_or(&[], |v| v.code.as_slice())
     }
 
     fn get_code_hash(&self, address: &Address) -> H256 {
-        if let Some(data) = self.storage.get(address) {
-            return self.sha3(data.code.as_slice());
-        }
-        H256::zero()
+        self.db
+            .get(address)
+            .map_or(H256::zero(), |v| self.sha3(v.code.as_slice()))
     }
 
     fn get_block_hash(&self, _: &U256) -> H256 {
@@ -77,51 +63,43 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn get_storage(&self, address: &Address, key: &H256) -> H256 {
-        if let Some(data) = self.storage.get(address) {
-            if let Some(r) = data.storage.get(key) {
-                return *r;
-            }
-            return H256::zero();
-        }
-        H256::zero()
+        self.db.get(address).map_or(H256::zero(), |v| {
+            v.storage.get(key).map_or(H256::zero(), |&v| v)
+        })
     }
 
     fn set_storage(&mut self, address: &Address, key: H256, value: H256) {
-        if !self.storage.contains_key(address) {
-            self.storage.insert(
-                *address,
-                Account {
-                    balance: U256::zero(),
-                    code: Vec::new(),
-                    nonce: U256::zero(),
-                    storage: BTreeMap::new(),
-                },
-            );
-        }
-        let account = self.storage.get_mut(address).unwrap();
-        account.storage.insert(key, value);
+        self.db
+            .entry(*address)
+            .or_insert_with(Account::default)
+            .storage
+            .insert(key, value);
     }
 
     fn get_storage_origin(&self, address: &Address, key: &H256) -> H256 {
-        let fullkey = format!("{}{}", address, key);
-        if self.storage_origin.contains_key(&fullkey) {
-            return self.storage_origin[&fullkey];
-        }
-        H256::zero()
+        self.db_origin.get(address).map_or(H256::zero(), |v| {
+            v.storage.get(key).map_or(H256::zero(), |&v| v)
+        })
     }
 
     fn set_storage_origin(&mut self, address: &Address, key: H256, value: H256) {
-        let fullkey = format!("{}{}", address, key);
-        self.storage_origin.insert(fullkey, value);
+        self.db_origin
+            .entry(*address)
+            .or_insert_with(Account::default)
+            .storage
+            .insert(key, value);
     }
 
-    fn selfdestruct(&mut self, _: &Address, _: &Address) {}
+    fn selfdestruct(&mut self, address: &Address, _: &Address) {
+        self.db.remove(address);
+    }
 
     fn sha3(&self, data: &[u8]) -> H256 {
         keccak_hash::keccak(data)
     }
-    fn is_empty(&self, _: &Address) -> bool {
-        false
+
+    fn is_empty(&self, address: &Address) -> bool {
+        self.db.get(address).is_none()
     }
 
     fn call(
@@ -130,21 +108,6 @@ impl ext::DataProvider for DataProviderMock {
         params: interpreter::InterpreterParams,
     ) -> (Result<interpreter::InterpreterResult, err::Error>) {
         match opcode {
-            opcodes::OpCode::CREATE => {
-                let mut stream = rlp::RlpStream::new_list(2);
-                stream.append(&Address::zero()); // Origin address
-                stream.append(&U256::zero()); // Nonce of origin address
-                let contract_address = Address::from(self.sha3(stream.as_raw()));
-                let _ = contract_address;
-                let mut it = interpreter::Interpreter::new(
-                    interpreter::Context::default(),
-                    interpreter::InterpreterConf::default(),
-                    Box::new(DataProviderMock::default()),
-                    params,
-                );
-                let r = it.run();
-                return r;
-            }
             opcodes::OpCode::CALL => {
                 let mut it = interpreter::Interpreter::new(
                     interpreter::Context::default(),
@@ -152,22 +115,13 @@ impl ext::DataProvider for DataProviderMock {
                     Box::new(DataProviderMock::default()),
                     params,
                 );
-                // Hard code for test_op_call().
-                it.cfg.print_op = true;
-                it.cfg.print_gas_used = true;
                 it.context.gas_price = U256::one();
                 let mut data_provider = DataProviderMock::default();
-                data_provider.storage = self.storage.clone();
+                data_provider.db = self.db.clone();
                 it.data_provider = Box::new(data_provider);
-                let r = it.run();
-                return r;
+                it.run()
             }
-            _ => {}
+            _ => unimplemented!(),
         }
-        Ok(interpreter::InterpreterResult::Normal(
-            Vec::new(),
-            0,
-            Vec::new(),
-        ))
     }
 }
