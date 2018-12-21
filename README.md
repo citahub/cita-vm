@@ -1,5 +1,7 @@
 # cita-vm
 
+[![Build Status](https://travis-ci.org/cryptape/cita-vm.svg?branch=master)](https://travis-ci.org/cryptape/cita-vm)
+
 Fast EVM implementation for CITA. Tuned for high performance. Up to 5x faster than parity.
 
 # Performance comparison with parity and geth
