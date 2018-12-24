@@ -124,8 +124,7 @@ mod tests {
         let mut st: Stack<u32> = Stack::default();
         let ls = vec![0x01, 0x02];
         st.push_n(&ls);
-        for i in 0..3 {
-            println!("{}", i);
+        for _ in 0..3 {
             st.pop();
         }
     }

@@ -1147,7 +1147,6 @@ mod tests {
     // The unit tests just carried from go-ethereum.
     use super::super::extmock;
     use super::*;
-    use rustc_hex::FromHex;
 
     fn default_interpreter() -> Interpreter {
         let mut it = Interpreter::new(
@@ -1628,15 +1627,15 @@ mod tests {
         it.stack.push_n(&[U256::from(v), U256::zero()]);
         it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
-        assert_eq!(it.mem.get(0, 32), &v.from_hex().unwrap()[..]);
+        assert_eq!(it.mem.get(0, 32), common::hex_decode(v).unwrap().as_slice());
         it.stack.push_n(&[U256::one(), U256::zero()]);
         it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
         assert_eq!(
             it.mem.get(0, 32),
-            &"0000000000000000000000000000000000000000000000000000000000000001"
-                .from_hex()
-                .unwrap()[..]
+            common::hex_decode("0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap()
+                .as_slice()
         );
     }
 
@@ -1748,8 +1747,6 @@ mod tests {
         // Cost = 199901
         let mut it = default_interpreter();
         it.context.gas_price = U256::one();
-        it.cfg.print_op = true;
-        it.cfg.print_gas_used = true;
         let mut data_provider = extmock::DataProviderMock::default();
 
         let mut account0 = extmock::Account::default();
@@ -1758,8 +1755,7 @@ mod tests {
             "0x6040600060406000600173100000000000000000000000000000000000000162055730f1600055",
         )
         .unwrap();
-        account0.nonce = U256::from(0);
-        data_provider.storage.insert(
+        data_provider.db.insert(
             Address::from("0x1000000000000000000000000000000000000000"),
             account0,
         );
@@ -1770,8 +1766,7 @@ mod tests {
             "0x604060006040600060027310000000000000000000000000000000000000026203d090f1600155",
         )
         .unwrap();
-        account1.nonce = U256::from(0);
-        data_provider.storage.insert(
+        data_provider.db.insert(
             Address::from("0x1000000000000000000000000000000000000001"),
             account1,
         );
@@ -1782,8 +1777,7 @@ mod tests {
             "0x600160025533600455346007553060e6553260e8553660ec553860ee553a60f055",
         )
         .unwrap();
-        account2.nonce = U256::from(0);
-        data_provider.storage.insert(
+        data_provider.db.insert(
             Address::from("0x1000000000000000000000000000000000000002"),
             account2,
         );
