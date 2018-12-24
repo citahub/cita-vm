@@ -8,3 +8,6 @@ edition = "2018"
 ethereum-types = "0.4"
 hex = "0.3"
 keccak-hash = "0.1"
+
+[features]
+test = []

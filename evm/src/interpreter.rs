@@ -1145,7 +1145,7 @@ impl Interpreter {
 #[cfg(test)]
 mod tests {
     // The unit tests just carried from go-ethereum.
-    use super::super::extmock;
+    use super::super::tests::extmock;
     use super::*;
 
     fn default_interpreter() -> Interpreter {

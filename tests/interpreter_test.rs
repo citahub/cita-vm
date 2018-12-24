@@ -2,7 +2,7 @@ extern crate cita_vm;
 extern crate evm;
 
 use cita_vm::json_tests::common::*;
-use evm::extmock;
+use evm::tests::extmock;
 use evm::interpreter;
 use std::fs;
 use std::io;
