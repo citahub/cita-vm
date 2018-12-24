@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/cryptape/cita-vm.svg?branch=master)](https://travis-ci.org/cryptape/cita-vm)
 
-Fast EVM implementation for CITA. Tuned for high performance, up to 5x faster than parity. Based entirely on the [Ethereum Yellow Paper(Version: 2d0661f 2018-11-08)](https://github.com/ethereum/yellowpaper/tree/c9e2f0ea18a7a69f3bfccbc32a2ab292f9201ed0).
+Fast EVM implementation for CITA. Tuned for high performance, up to 5x faster than parity. Based entirely on the [Ethereum Yellow Paper(Version: 2d0661f 2018-11-08)](https://github.com/ethereum/yellowpaper/tree/2d0661fc4924b6095042cba1681cb18e27f9e378).
 
 # Performance comparison with parity and geth
 
