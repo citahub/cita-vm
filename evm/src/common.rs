@@ -87,19 +87,13 @@ pub fn copy_data(source: &[u8], start: U256, size: U256) -> Vec<u8> {
     rpad(Vec::from(data), size.as_usize())
 }
 
-pub fn clean_0x(s: &str) -> &str {
-    if s.starts_with("0x") {
-        &s[2..]
-    } else {
-        s
-    }
-}
-
+#[inline]
 pub fn hex_decode(s: &str) -> Result<Vec<u8>, hex::FromHexError> {
-    let s = clean_0x(s);
+    let s = if s.starts_with("0x") { &s[2..] } else { s };
     hex::decode(s)
 }
 
+#[inline]
 pub fn hex_encode(s: Vec<u8>) -> String {
     hex::encode(s)
 }

@@ -1147,7 +1147,6 @@ mod tests {
     // The unit tests just carried from go-ethereum.
     use super::super::extmock;
     use super::*;
-    use hex::FromHex;
 
     fn default_interpreter() -> Interpreter {
         let mut it = Interpreter::new(
@@ -1628,13 +1627,13 @@ mod tests {
         it.stack.push_n(&[U256::from(v), U256::zero()]);
         it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
-        assert_eq!(it.mem.get(0, 32), Vec::from_hex(v).unwrap().as_slice());
+        assert_eq!(it.mem.get(0, 32), common::hex_decode(v).unwrap().as_slice());
         it.stack.push_n(&[U256::one(), U256::zero()]);
         it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
         assert_eq!(
             it.mem.get(0, 32),
-            Vec::from_hex("0000000000000000000000000000000000000000000000000000000000000001")
+            common::hex_decode("0000000000000000000000000000000000000000000000000000000000000001")
                 .unwrap()
                 .as_slice()
         );
