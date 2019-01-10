@@ -1,9 +1,7 @@
-pub mod trie;
+extern crate cita_types;
+extern crate cita_trie;
+extern crate util;
+extern crate hashable;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub mod account;
+pub mod state;
