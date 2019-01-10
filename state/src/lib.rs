@@ -1,7 +1,8 @@
-extern crate cita_types;
+extern crate bytes;
 extern crate cita_trie;
-extern crate util;
-extern crate hashable;
+extern crate ethereum_types;
+extern crate keccak_hash;
 
 pub mod account;
+pub mod account_entry;
 pub mod state;

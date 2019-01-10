@@ -22,7 +22,7 @@ pub struct DataProviderMock {
 }
 
 impl ext::DataProvider for DataProviderMock {
-    fn get_balance(&self, address: &Address) -> U256 {
+    fn get_balance(&mut self, address: &Address) -> U256 {
         self.db.get(address).map_or(U256::zero(), |v| v.balance)
     }
 
@@ -44,15 +44,15 @@ impl ext::DataProvider for DataProviderMock {
         self.refund.get(address).map_or(0, |v| *v)
     }
 
-    fn get_code_size(&self, address: &Address) -> u64 {
+    fn get_code_size(&mut self, address: &Address) -> u64 {
         self.db.get(address).map_or(0, |v| v.code.len() as u64)
     }
 
-    fn get_code(&self, address: &Address) -> &[u8] {
-        self.db.get(address).map_or(&[], |v| v.code.as_slice())
+    fn get_code(&mut self, address: &Address) -> Vec<u8> {
+        self.db.get(address).map_or(vec![], |v| v.code.clone())
     }
 
-    fn get_code_hash(&self, address: &Address) -> H256 {
+    fn get_code_hash(&mut self, address: &Address) -> H256 {
         self.db
             .get(address)
             .map_or(H256::zero(), |v| self.sha3(v.code.as_slice()))
@@ -62,7 +62,7 @@ impl ext::DataProvider for DataProviderMock {
         H256::zero()
     }
 
-    fn get_storage(&self, address: &Address, key: &H256) -> H256 {
+    fn get_storage(&mut self, address: &Address, key: &H256) -> H256 {
         self.db.get(address).map_or(H256::zero(), |v| {
             v.storage.get(key).map_or(H256::zero(), |&v| v)
         })
@@ -98,7 +98,7 @@ impl ext::DataProvider for DataProviderMock {
         keccak_hash::keccak(data)
     }
 
-    fn is_empty(&self, address: &Address) -> bool {
+    fn is_empty(&mut self, address: &Address) -> bool {
         self.db.get(address).is_none()
     }
 

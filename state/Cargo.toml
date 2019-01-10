@@ -8,13 +8,12 @@ edition = "2018"
 sha3 = "0.8.0"
 hex = "0.3.2"
 rlp = "0.3.0"
-cita_trie = "0.1.3"
 lru-cache = "0.1.1"
-
-cita-types = { git = "https://github.com/cryptape/cita-common.git", branch = "develop" }
-util = { git = "https://github.com/cryptape/cita-common.git", branch = "develop" }
-hashable = { git = "https://github.com/cryptape/cita-common.git", branch = "develop" }
-
+ethereum-types = "0.4"
+evm = { path="../evm" }
+bytes = "0.4.11"
+keccak-hash = "0.1"
+cita_trie = { git = "https://github.com/cryptape/cita-trie.git", branch = "master" }
 
 [build-dependencies]
 

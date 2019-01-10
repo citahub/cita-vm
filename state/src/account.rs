@@ -1,174 +1,220 @@
-// CITA
-// Copyright 2016-2018 Cryptape Technologies LLC.
-
-// This program is free software: you can redistribute it
-// and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation,
-// either version 3 of the License, or (at your option) any
-// later version.
-
-// This program is distributed in the hope that it will be
-// useful, but WITHOUT ANY WARRANTY; without even the implied
-// warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
-// PURPOSE. See the GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-use cita_types::{H256, U256};
-use std::collections::HashMap;
-use std::sync::Arc;
-use util::Bytes;
-use cita_trie::trie::{PatriciaTrie, Trie};
-use cita_trie::db::MemoryDB;
 use cita_trie::codec::RLPNodeCodec;
-use cita_trie::trie::TrieResult;
+use cita_trie::db::MemoryDB;
+use cita_trie::trie::{PatriciaTrie, Trie};
+use ethereum_types::{H256, U256};
 use lru_cache::LruCache;
+use rlp::*;
 use std::cell::RefCell;
-use hashable::{Hashable, HASH_EMPTY, HASH_NULL_RLP};
+use std::collections::HashMap;
 
 const STORAGE_CACHE_ITEMS: usize = 8192;
 
+type Bytes = Vec<u8>;
+
+#[derive(Debug)]
 pub struct Account {
     balance: U256,
     nonce: U256,
-
+    code: Bytes,
     storage_root: H256,
     storage_cache: RefCell<LruCache<H256, H256>>,
-    storage: HashMap<H256, H256>,
+    storage_changes: HashMap<H256, H256>,
+}
 
-    code: Arc<Bytes>, 
-    code_size: Option<usize>,     
-    code_hash: H256,
-    
-    abi: Arc<Bytes>, 
-    abi_size: Option<usize>,    
-    abi_hash: H256,
-    
-    address_hash: Option<H256>,
+#[derive(Debug)]
+pub struct BasicAccount {
+    balance: U256,
+    nonce: U256,
+    // code: Arc<Bytes>,
+    storage_root: H256,
+}
+
+impl rlp::Encodable for BasicAccount {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_list(4)
+            .append(&self.balance)
+            .append(&self.nonce)
+            // .append(&self.code)
+            .append(&self.storage_root);
+    }
+}
+
+impl rlp::Decodable for BasicAccount {
+    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
+        Ok(BasicAccount {
+            balance: rlp.val_at(0)?,
+            nonce: rlp.val_at(1)?,
+            // code: rlp.val_at(2)?,
+            storage_root: rlp.val_at(3)?,
+        })
+    }
+}
+
+impl From<BasicAccount> for Account {
+    fn from(basic: BasicAccount) -> Self {
+        Account {
+            balance: basic.balance,
+            nonce: basic.nonce,
+            code: vec![],
+            storage_root: basic.storage_root,
+            storage_cache: RefCell::new(LruCache::new(STORAGE_CACHE_ITEMS)),
+            storage_changes: HashMap::new(),
+        }
+    }
 }
 
 impl Account {
-
-    pub fn new(
-        balance: U256,
-        nonce: U256,
-        storage: HashMap<H256, H256>,
-        code: Bytes,
-        abi: Bytes,
-    ) -> Account {
+    pub fn new(balance: U256, nonce: U256, storage: HashMap<H256, H256>, code: Bytes) -> Account {
         Account {
             balance,
             nonce,
-            storage_root: HASH_NULL_RLP,
-            storage_cache: Self::empty_storage_cache(),
-            storage: storage,
-            code: Arc::new(code),
-            code_size: Some(code.len()),
-            code_hash: code.cryp_hash(),
-            abi: Arc::new(abi),
-            abi_size: Some(abi.len()),
-            abi_hash: abi.crypt_hash(),
-            address_hash: None,
+            code: code,
+            storage_root: H256::default(),
+            storage_cache: RefCell::new(LruCache::new(STORAGE_CACHE_ITEMS)),
+            storage_changes: storage,
         }
     }
 
-    fn empty_storage_cache() -> RefCell<LruCache<H256, H256>> {
-        RefCell::new(LruCache::new(STORAGE_CACHE_ITEMS))
+    pub fn new_contract(balance: U256, nonce: U256) -> Account {
+        Account {
+            balance,
+            nonce,
+            code: vec![],
+            storage_root: H256::default(),
+            storage_cache: RefCell::new(LruCache::new(STORAGE_CACHE_ITEMS)),
+            storage_changes: HashMap::new(),
+        }
     }
-    
-    /// Get balance of the account
+
+    pub fn init_code(&mut self, code: Bytes) {
+        self.code = code;
+    }
+
     pub fn balance(&self) -> &U256 {
         &self.balance
     }
 
-    /// Get nonce of the account
     pub fn nonce(&self) -> &U256 {
-       &self.nonce
-    }
-    
-    /// Get code of the account
-    pub fn code(&self) -> Option<Arc<Bytes>> {
-       if self.code_hash != HASH_EMPTY && self.code.is_empty() {
-           return None;
-       }
-       Some(Arc::clone(&self.code))
+        &self.nonce
     }
 
-    /// Get code hash of the account
-    pub fn code_hash(&self) -> &H256{
-        &self.code_hash
+    pub fn code(&self) -> Option<Bytes> {
+        if self.code.is_empty() {
+            return None;
+        }
+        Some(self.code.clone())
     }
 
-    /// Get code size of the account
-    pub fn code_size(&self) -> Option<usize>{
-        self.code_size
+    pub fn storage_changes_is_null(&self) -> bool {
+        self.storage_changes.is_empty()
     }
 
-    /// Get abi of the account
-    pub fn abi(&self) -> Option<Arc<Bytes>> {
-       if self.abi_hash != HASH_EMPTY && self.abi.is_empty() {
-           return None;
-       }
-       Some(Arc::clone(&self.abi))
+    pub fn increase_nonce(&mut self) {
+        self.nonce = self.nonce + U256::from(1u8);
     }
 
-    /// Get abi hash of the account
-    pub fn abi_hash(&self) -> &H256{
-       &self.abi_hash
+    pub fn add_balance(&mut self, x: &U256) {
+        self.balance = self.balance.saturating_add(*x);
     }
 
-    /// Get abi size of the account
-    pub fn abi_size(&self) -> Option<usize> {
-        self.abi_size
+    pub fn sub_balance(&mut self, x: &U256) {
+        self.balance = self.balance.saturating_sub(*x);
     }
 
-    /// Whether storage of the account is null
-    pub fn storage_is_null(&self) -> bool {
-        self.storage.is_empty()
-    }
-
-    /// Get the storage of the account
-    pub fn storage(&self) -> &HashMap<H256, H256> {
-        &self.storage
-    }
-
-    /// Get storage root of the account
-    pub fn storage_root(&self) -> Option<&H256>{
-        if self.storage_is_null() {
+    pub fn storage_root(&self) -> Option<&H256> {
+        if self.storage_changes_is_null() {
             Some(&self.storage_root)
         } else {
             None
         }
     }
 
-    /// Increase nonce of the account by one
-    pub fn increase_nonce(&mut self) {
-        self.nonce = self.nonce + U256::from(1u8);
+    pub fn get_storage_changes(&self) -> &HashMap<H256, H256> {
+        &self.storage_changes
     }
 
-    /// Increase account balance
-    pub fn add_balance(&mut self, x: &U256) {
-        self.balance = self.balance.saturating_add(*x);
+    pub fn set_storage(&mut self, key: H256, value: H256) {
+        self.storage_changes.insert(key, value);
     }
 
-    /// Decrease account balance
-    pub fn sub_balance(&mut self, x:&U256) {
-        self.balance = self.balance.saturating_sub(*x);
+    pub fn cached_storage_at(&self, key: &H256) -> Option<H256> {
+        if let Some(value) = self.storage_changes.get(key) {
+            return Some(*value);
+        }
+
+        if let Some(value) = self.storage_cache.borrow_mut().get_mut(key) {
+            return Some(*value);
+        }
+        None
     }
 
-    // Commit the storage and update storage_root
-    pub fn commit_storage(&self) {
-        // db先写里边吧
-        let mut memdb = MemoryDB::new();
+    pub fn trie_storage_at(&mut self, db: &mut MemoryDB, key: &H256) -> Option<H256> {
+        let trie = PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap();
+        let value = trie.get(key).unwrap().unwrap();
 
-        let mut trie = PatriciaTrie::from(&mut memdb, RLPNodeCodec::default(), self.storage_root.0).unwrap();
-        for (k, v) in self.storage.drain() {
+        self.storage_cache
+            .borrow_mut()
+            .insert(*key, H256::from_slice(&value));
+        Some(H256::from_slice(&value))
+    }
+
+    pub fn commit_storage(&mut self, db: &mut MemoryDB) {
+        let mut trie =
+            PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap();
+        for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
                 trie.remove(&k);
             } else {
-                trie.insert(&k,&v);
+                trie.insert(&k, &v);
             }
+            self.storage_cache.borrow_mut().insert(k, k);
+        }
+    }
+
+    pub fn rlp(&self) -> Vec<u8> {
+        let mut stream = RlpStream::new_list(4);
+        stream.append(&self.balance);
+        stream.append(&self.nonce);
+        // stream.append(&self.code);
+        stream.append(&self.storage_root);
+        stream.out()
+    }
+
+    pub fn from_rlp(rlp: &[u8]) -> Account {
+        let basic_account: BasicAccount = decode(rlp).unwrap();
+        basic_account.into()
+    }
+
+    pub fn clone_basic(&self) -> Account {
+        Account {
+            balance: self.balance.clone(),
+            nonce: self.nonce.clone(),
+            code: self.code.clone(),
+            storage_root: self.storage_root,
+            storage_cache: RefCell::new(LruCache::new(STORAGE_CACHE_ITEMS)),
+            storage_changes: HashMap::new(),
+        }
+    }
+
+    pub fn clone_dirty_account(&self) -> Account {
+        let mut account = self.clone_basic();
+        account.storage_changes = self.storage_changes.clone();
+        account
+    }
+
+    pub fn clone_all(&self) -> Account {
+        let mut account = self.clone_dirty_account();
+        account.storage_cache = self.storage_cache.clone();
+        account
+    }
+
+    pub fn overwrite_with_account(&mut self, other: Account) {
+        self.balance = other.balance;
+        self.nonce = other.nonce;
+        self.code = other.code;
+        self.storage_root = other.storage_root;
+        self.storage_changes = other.storage_changes;
+        for (k, v) in other.storage_cache.into_inner() {
             self.storage_cache.borrow_mut().insert(k, v);
         }
     }

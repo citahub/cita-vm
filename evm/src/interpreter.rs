@@ -739,7 +739,7 @@ impl Interpreter {
                     let code_offset = self.stack.pop();
                     let len = self.stack.pop();
                     let code = self.data_provider.get_code(&address);
-                    let val = common::copy_data(code, code_offset, len);
+                    let val = common::copy_data(&code, code_offset, len);
                     self.mem.set(code_offset.as_usize(), val.as_slice())
                 }
                 opcodes::OpCode::RETURNDATASIZE => {
