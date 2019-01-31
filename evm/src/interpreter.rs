@@ -182,22 +182,21 @@ impl Interpreter {
 
     #[allow(clippy::cyclomatic_complexity)]
     pub fn run(&mut self) -> Result<InterpreterResult, err::Error> {
-        let this = &mut *self;
         let mut pc = 0;
         loop {
             // Step 0: Get opcode
-            let op = this.get_op(pc)?;
+            let op = self.get_op(pc)?;
             pc += 1;
             // Step 1: Log opcode(if necessary)
-            if this.cfg.print_op {
+            if self.cfg.print_op {
                 if op >= opcodes::OpCode::PUSH1 && op <= opcodes::OpCode::PUSH32 {
                     let n = op.clone() as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
                     let r = {
-                        if pc + u64::from(n) > this.params.contract.code_data.len() as u64 {
+                        if pc + u64::from(n) > self.params.contract.code_data.len() as u64 {
                             U256::zero()
                         } else {
                             U256::from(
-                                &this.params.contract.code_data
+                                &self.params.contract.code_data
                                     [pc as usize..(pc + u64::from(n)) as usize],
                             )
                         }
@@ -206,156 +205,156 @@ impl Interpreter {
                 } else {
                     println!("[OP] {}", op);
                 }
-                if this.cfg.print_stack {
+                if self.cfg.print_stack {
                     println!("[STACK]");
-                    let l = this.stack.data().len();
+                    let l = self.stack.data().len();
                     for i in 0..l {
-                        println!("[{}] {:#x}", i, this.stack.back(i));
+                        println!("[{}] {:#x}", i, self.stack.back(i));
                     }
                 }
-                if this.cfg.print_mem {
-                    println!("[MEM] len={}", this.mem.len());
+                if self.cfg.print_mem {
+                    println!("[MEM] len={}", self.mem.len());
                 }
             }
             // Step 2: Valid stack
             let stack_require = op.stack_require();
-            if !this.stack.require(stack_require as usize) {
+            if !self.stack.require(stack_require as usize) {
                 return Err(err::Error::OutOfStack);
             }
-            if this.stack.len() as u64 - op.stack_require() + op.stack_returns()
-                > this.cfg.stack_limit
+            if self.stack.len() as u64 - op.stack_require() + op.stack_returns()
+                > self.cfg.stack_limit
             {
                 return Err(err::Error::OutOfStack);
             }
             // Step 3: Valid state mod
-            if this.params.read_only && op.state_changes() {
+            if self.params.read_only && op.state_changes() {
                 return Err(err::Error::MutableCallInStaticContext);
             }
             // Step 4: Gas cost and mem expand.
-            let op_gas = this.cfg.gas_tier_step[op.gas_price_tier().idx()];
-            this.use_gas(op_gas)?;
+            let op_gas = self.cfg.gas_tier_step[op.gas_price_tier().idx()];
+            self.use_gas(op_gas)?;
             match op {
                 opcodes::OpCode::EXP => {
-                    let expon = this.stack.back(1);
+                    let expon = self.stack.back(1);
                     let bytes = ((expon.bits() + 7) / 8) as u64;
-                    let gas = this.cfg.gas_exp + this.cfg.gas_exp_byte * bytes;
-                    this.use_gas(gas)?;
+                    let gas = self.cfg.gas_exp + self.cfg.gas_exp_byte * bytes;
+                    self.use_gas(gas)?;
                 }
                 opcodes::OpCode::SHA3 => {
-                    let mem_offset = this.stack.back(0);
-                    let mem_len = this.stack.back(1);
-                    this.mem_gas_work(mem_offset, mem_len)?;
-                    this.use_gas(this.cfg.gas_sha3)?;
-                    this.use_gas(common::to_word_size(mem_len.low_u64()) * this.cfg.gas_sha3_word)?;
+                    let mem_offset = self.stack.back(0);
+                    let mem_len = self.stack.back(1);
+                    self.mem_gas_work(mem_offset, mem_len)?;
+                    self.use_gas(self.cfg.gas_sha3)?;
+                    self.use_gas(common::to_word_size(mem_len.low_u64()) * self.cfg.gas_sha3_word)?;
                 }
                 opcodes::OpCode::CALLDATACOPY => {
-                    let mem_offset = this.stack.back(0);
-                    let mem_len = this.stack.back(2);
-                    this.mem_gas_work(mem_offset, mem_len)?;
-                    let gas = common::to_word_size(mem_len.low_u64()) * this.cfg.gas_copy;
-                    this.use_gas(gas)?;
+                    let mem_offset = self.stack.back(0);
+                    let mem_len = self.stack.back(2);
+                    self.mem_gas_work(mem_offset, mem_len)?;
+                    let gas = common::to_word_size(mem_len.low_u64()) * self.cfg.gas_copy;
+                    self.use_gas(gas)?;
                 }
                 opcodes::OpCode::CODECOPY => {
-                    let mem_offset = this.stack.back(0);
-                    let mem_len = this.stack.back(2);
-                    this.mem_gas_work(mem_offset, mem_len)?;
-                    let gas = common::to_word_size(mem_len.low_u64()) * this.cfg.gas_copy;
-                    this.use_gas(gas)?;
+                    let mem_offset = self.stack.back(0);
+                    let mem_len = self.stack.back(2);
+                    self.mem_gas_work(mem_offset, mem_len)?;
+                    let gas = common::to_word_size(mem_len.low_u64()) * self.cfg.gas_copy;
+                    self.use_gas(gas)?;
                 }
                 opcodes::OpCode::EXTCODESIZE => {
-                    this.use_gas(this.cfg.gas_extcode_size)?;
+                    self.use_gas(self.cfg.gas_extcode_size)?;
                 }
                 opcodes::OpCode::MLOAD => {
-                    let mem_offset = this.stack.back(0);
+                    let mem_offset = self.stack.back(0);
                     let mem_len = U256::from(32);
-                    this.mem_gas_work(mem_offset, mem_len)?;
+                    self.mem_gas_work(mem_offset, mem_len)?;
                 }
                 opcodes::OpCode::MSTORE => {
-                    let mem_offset = this.stack.back(0);
+                    let mem_offset = self.stack.back(0);
                     let mem_len = U256::from(32);
-                    this.mem_gas_work(mem_offset, mem_len)?;
+                    self.mem_gas_work(mem_offset, mem_len)?;
                 }
                 opcodes::OpCode::MSTORE8 => {
-                    let mem_offset = this.stack.back(0);
+                    let mem_offset = self.stack.back(0);
                     let mem_len = U256::from(8);
-                    this.mem_gas_work(mem_offset, mem_len)?;
+                    self.mem_gas_work(mem_offset, mem_len)?;
                 }
                 opcodes::OpCode::SLOAD => {
-                    this.use_gas(this.cfg.gas_sload)?;
+                    self.use_gas(self.cfg.gas_sload)?;
                 }
                 opcodes::OpCode::SSTORE => {
-                    let address = H256::from(&this.stack.back(0));
+                    let address = H256::from(&self.stack.back(0));
                     let current_value = U256::from(
-                        &*this
+                        &*self
                             .data_provider
-                            .get_storage(&this.params.address, &address),
+                            .get_storage(&self.params.address, &address),
                     );
-                    let new_value = this.stack.back(1);
+                    let new_value = self.stack.back(1);
                     let original_value = U256::from(
-                        &*this
+                        &*self
                             .data_provider
-                            .get_storage_origin(&this.params.address, &address),
+                            .get_storage_origin(&self.params.address, &address),
                     );
                     let gas: u64 = {
-                        if this.cfg.eip1283 {
+                        if self.cfg.eip1283 {
                             // See https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1283.md
                             if current_value == new_value {
-                                this.cfg.gas_sstore_noop
+                                self.cfg.gas_sstore_noop
                             } else if original_value == current_value {
                                 if original_value.is_zero() {
-                                    this.cfg.gas_sstore_init
+                                    self.cfg.gas_sstore_init
                                 } else {
                                     if new_value.is_zero() {
-                                        this.data_provider.add_refund(
-                                            &this.params.address,
-                                            this.cfg.gas_sstore_clear_refund,
+                                        self.data_provider.add_refund(
+                                            &self.params.address,
+                                            self.cfg.gas_sstore_clear_refund,
                                         );
                                     }
-                                    this.cfg.gas_sstore_clean
+                                    self.cfg.gas_sstore_clean
                                 }
                             } else {
                                 if !original_value.is_zero() {
                                     if current_value.is_zero() {
-                                        this.data_provider.sub_refund(
-                                            &this.params.address,
-                                            this.cfg.gas_sstore_clear_refund,
+                                        self.data_provider.sub_refund(
+                                            &self.params.address,
+                                            self.cfg.gas_sstore_clear_refund,
                                         );
                                     } else if new_value.is_zero() {
-                                        this.data_provider.add_refund(
-                                            &this.params.address,
-                                            this.cfg.gas_sstore_clear_refund,
+                                        self.data_provider.add_refund(
+                                            &self.params.address,
+                                            self.cfg.gas_sstore_clear_refund,
                                         );
                                     }
                                 }
                                 if original_value == new_value {
                                     if original_value.is_zero() {
-                                        this.data_provider.add_refund(
-                                            &this.params.address,
-                                            this.cfg.gas_sstore_reset_clear_refund,
+                                        self.data_provider.add_refund(
+                                            &self.params.address,
+                                            self.cfg.gas_sstore_reset_clear_refund,
                                         );
                                     } else {
-                                        this.data_provider.add_refund(
-                                            &this.params.address,
-                                            this.cfg.gas_sstore_reset_refund,
+                                        self.data_provider.add_refund(
+                                            &self.params.address,
+                                            self.cfg.gas_sstore_reset_refund,
                                         );
                                     }
                                 }
-                                this.cfg.gas_sstore_dirty
+                                self.cfg.gas_sstore_dirty
                             }
                         } else if current_value.is_zero() && !new_value.is_zero() {
-                            this.cfg.gas_sstore_set
+                            self.cfg.gas_sstore_set
                         } else if !current_value.is_zero() && new_value.is_zero() {
-                            this.data_provider
-                                .add_refund(&this.params.address, this.cfg.gas_sstore_refund);
-                            this.cfg.gas_sstore_clear
+                            self.data_provider
+                                .add_refund(&self.params.address, self.cfg.gas_sstore_refund);
+                            self.cfg.gas_sstore_clear
                         } else {
-                            this.cfg.gas_sstore_reset
+                            self.cfg.gas_sstore_reset
                         }
                     };
-                    this.use_gas(gas)?;
+                    self.use_gas(gas)?;
                 }
                 opcodes::OpCode::JUMPDEST => {
-                    this.use_gas(this.cfg.gas_jumpdest)?;
+                    self.use_gas(self.cfg.gas_jumpdest)?;
                 }
                 opcodes::OpCode::LOG0
                 | opcodes::OpCode::LOG1
@@ -363,87 +362,87 @@ impl Interpreter {
                 | opcodes::OpCode::LOG3
                 | opcodes::OpCode::LOG4 => {
                     let n = op.clone() as u8 - opcodes::OpCode::LOG0 as u8;
-                    let mem_offset = this.stack.back(0);
-                    let mem_len = this.stack.back(1);
-                    this.mem_gas_work(mem_offset, mem_len)?;
-                    let gas = this.cfg.gas_log
-                        + this.cfg.gas_log_topic * u64::from(n)
-                        + this.cfg.gas_log_data * mem_len.low_u64();
-                    this.use_gas(gas)?;
+                    let mem_offset = self.stack.back(0);
+                    let mem_len = self.stack.back(1);
+                    self.mem_gas_work(mem_offset, mem_len)?;
+                    let gas = self.cfg.gas_log
+                        + self.cfg.gas_log_topic * u64::from(n)
+                        + self.cfg.gas_log_data * mem_len.low_u64();
+                    self.use_gas(gas)?;
                 }
                 opcodes::OpCode::CREATE => {
-                    let mem_offset = this.stack.back(1);
-                    let mem_len = this.stack.back(2);
-                    this.mem_gas_work(mem_offset, mem_len)?;
-                    this.use_gas(this.cfg.gas_create)?;
-                    this.gas_tmp = this.gas - this.gas / 64;
-                    this.use_gas(this.gas_tmp)?;
+                    let mem_offset = self.stack.back(1);
+                    let mem_len = self.stack.back(2);
+                    self.mem_gas_work(mem_offset, mem_len)?;
+                    self.use_gas(self.cfg.gas_create)?;
+                    self.gas_tmp = self.gas - self.gas / 64;
+                    self.use_gas(self.gas_tmp)?;
                 }
                 opcodes::OpCode::CALL | opcodes::OpCode::CALLCODE => {
-                    let gas_req = this.stack.back(0);
-                    let address = common::u256_to_address(&this.stack.back(1));
-                    let value = this.stack.back(2);
-                    let mem_offset = this.stack.back(3);
-                    let mem_len = this.stack.back(4);
-                    let out_offset = this.stack.back(5);
-                    let out_len = this.stack.back(6);
+                    let gas_req = self.stack.back(0);
+                    let address = common::u256_to_address(&self.stack.back(1));
+                    let value = self.stack.back(2);
+                    let mem_offset = self.stack.back(3);
+                    let mem_len = self.stack.back(4);
+                    let out_offset = self.stack.back(5);
+                    let out_len = self.stack.back(6);
 
                     if gas_req.bits() > 64 {
                         return Err(err::Error::OutOfGas);
                     }
-                    this.use_gas(this.cfg.gas_call)?;
+                    self.use_gas(self.cfg.gas_call)?;
 
                     let is_value_transfer = !value.is_zero();
                     if op == opcodes::OpCode::CALL
                         && is_value_transfer
-                        && this.data_provider.is_empty(&address)
+                        && self.data_provider.is_empty(&address)
                     {
-                        this.use_gas(this.cfg.gas_call_new_account)?;
+                        self.use_gas(self.cfg.gas_call_new_account)?;
                     }
                     if is_value_transfer {
-                        this.use_gas(this.cfg.gas_call_value_transfer)?;
+                        self.use_gas(self.cfg.gas_call_value_transfer)?;
                     }
-                    this.mem_gas_work(mem_offset, mem_len)?;
-                    this.mem_gas_work(out_offset, out_len)?;
-                    this.gas_tmp = cmp::min(this.gas - this.gas / 64, gas_req.low_u64());
-                    this.use_gas(this.gas_tmp)?;
+                    self.mem_gas_work(mem_offset, mem_len)?;
+                    self.mem_gas_work(out_offset, out_len)?;
+                    self.gas_tmp = cmp::min(self.gas - self.gas / 64, gas_req.low_u64());
+                    self.use_gas(self.gas_tmp)?;
                 }
                 opcodes::OpCode::RETURN => {
-                    let mem_offset = this.stack.back(0);
-                    let mem_len = this.stack.back(1);
-                    this.mem_gas_work(mem_offset, mem_len)?;
+                    let mem_offset = self.stack.back(0);
+                    let mem_len = self.stack.back(1);
+                    self.mem_gas_work(mem_offset, mem_len)?;
                 }
                 opcodes::OpCode::DELEGATECALL | opcodes::OpCode::STATICCALL => {
-                    let gas_req = this.stack.back(0);
-                    let mem_offset = this.stack.back(2);
-                    let mem_len = this.stack.back(3);
-                    let out_offset = this.stack.back(4);
-                    let out_len = this.stack.back(5);
+                    let gas_req = self.stack.back(0);
+                    let mem_offset = self.stack.back(2);
+                    let mem_len = self.stack.back(3);
+                    let out_offset = self.stack.back(4);
+                    let out_len = self.stack.back(5);
                     if gas_req.bits() > 64 {
                         return Err(err::Error::OutOfGas);
                     }
-                    this.use_gas(this.cfg.gas_call)?;
-                    this.mem_gas_work(mem_offset, mem_len)?;
-                    this.mem_gas_work(out_offset, out_len)?;
-                    this.gas_tmp = cmp::min(this.gas - this.gas / 64, gas_req.low_u64());
-                    this.use_gas(this.gas_tmp)?;
+                    self.use_gas(self.cfg.gas_call)?;
+                    self.mem_gas_work(mem_offset, mem_len)?;
+                    self.mem_gas_work(out_offset, out_len)?;
+                    self.gas_tmp = cmp::min(self.gas - self.gas / 64, gas_req.low_u64());
+                    self.use_gas(self.gas_tmp)?;
                 }
                 opcodes::OpCode::CREATE2 => {
-                    let mem_offset = this.stack.back(1);
-                    let mem_len = this.stack.back(2);
-                    this.mem_gas_work(mem_offset, mem_len)?;
-                    this.use_gas(this.cfg.gas_create)?;
-                    this.use_gas(common::to_word_size(mem_len.low_u64()) * this.cfg.gas_sha3_word)?;
-                    this.gas_tmp = this.gas - this.gas / 64;
-                    this.use_gas(this.gas_tmp)?;
+                    let mem_offset = self.stack.back(1);
+                    let mem_len = self.stack.back(2);
+                    self.mem_gas_work(mem_offset, mem_len)?;
+                    self.use_gas(self.cfg.gas_create)?;
+                    self.use_gas(common::to_word_size(mem_len.low_u64()) * self.cfg.gas_sha3_word)?;
+                    self.gas_tmp = self.gas - self.gas / 64;
+                    self.use_gas(self.gas_tmp)?;
                 }
                 opcodes::OpCode::REVERT => {
-                    let mem_offset = this.stack.back(0);
-                    let mem_len = this.stack.back(1);
-                    this.mem_gas_work(mem_offset, mem_len)?;
+                    let mem_offset = self.stack.back(0);
+                    let mem_len = self.stack.back(1);
+                    self.mem_gas_work(mem_offset, mem_len)?;
                 }
                 opcodes::OpCode::SELFDESTRUCT => {
-                    this.use_gas(this.cfg.gas_self_destruct)?;
+                    self.use_gas(self.cfg.gas_self_destruct)?;
                 }
                 _ => {}
             }
@@ -451,31 +450,31 @@ impl Interpreter {
             match op {
                 opcodes::OpCode::STOP => break,
                 opcodes::OpCode::ADD => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack.push(a.overflowing_add(b).0);
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack.push(a.overflowing_add(b).0);
                 }
                 opcodes::OpCode::MUL => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack.push(a.overflowing_mul(b).0);
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack.push(a.overflowing_mul(b).0);
                 }
                 opcodes::OpCode::SUB => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack.push(a.overflowing_sub(b).0);
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack.push(a.overflowing_sub(b).0);
                 }
                 opcodes::OpCode::DIV => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack
                         .push(if b.is_zero() { U256::zero() } else { a / b })
                 }
                 opcodes::OpCode::SDIV => {
-                    let (a, neg_a) = common::get_sign(this.stack.pop());
-                    let (b, neg_b) = common::get_sign(this.stack.pop());
+                    let (a, neg_a) = common::get_sign(self.stack.pop());
+                    let (b, neg_b) = common::get_sign(self.stack.pop());
                     let min = (U256::one() << 255) - U256::one();
-                    this.stack.push(if b.is_zero() {
+                    self.stack.push(if b.is_zero() {
                         U256::zero()
                     } else if a == min && b == !U256::one() {
                         min
@@ -484,17 +483,17 @@ impl Interpreter {
                     })
                 }
                 opcodes::OpCode::MOD => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack
                         .push(if !b.is_zero() { a % b } else { U256::zero() });
                 }
                 opcodes::OpCode::SMOD => {
-                    let ua = this.stack.pop();
-                    let ub = this.stack.pop();
+                    let ua = self.stack.pop();
+                    let ub = self.stack.pop();
                     let (a, sign_a) = common::get_sign(ua);
                     let b = common::get_sign(ub).0;
-                    this.stack.push(if !b.is_zero() {
+                    self.stack.push(if !b.is_zero() {
                         let c = a % b;
                         common::set_sign(c, sign_a)
                     } else {
@@ -502,10 +501,10 @@ impl Interpreter {
                     });
                 }
                 opcodes::OpCode::ADDMOD => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    let c = this.stack.pop();
-                    this.stack.push(if !c.is_zero() {
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    let c = self.stack.pop();
+                    self.stack.push(if !c.is_zero() {
                         let a5 = U512::from(a);
                         let res = a5.overflowing_add(U512::from(b)).0;
                         let x = res % U512::from(c);
@@ -515,10 +514,10 @@ impl Interpreter {
                     });
                 }
                 opcodes::OpCode::MULMOD => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    let c = this.stack.pop();
-                    this.stack.push(if !c.is_zero() {
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    let c = self.stack.pop();
+                    self.stack.push(if !c.is_zero() {
                         let a5 = U512::from(a);
                         let res = a5.overflowing_mul(U512::from(b)).0;
                         let x = res % U512::from(c);
@@ -528,117 +527,117 @@ impl Interpreter {
                     });
                 }
                 opcodes::OpCode::EXP => {
-                    let base = this.stack.pop();
-                    let expon = this.stack.pop();
+                    let base = self.stack.pop();
+                    let expon = self.stack.pop();
                     let res = base.overflowing_pow(expon).0;
-                    this.stack.push(res);
+                    self.stack.push(res);
                 }
                 opcodes::OpCode::SIGNEXTEND => {
-                    let bit = this.stack.pop();
+                    let bit = self.stack.pop();
                     if bit < U256::from(32) {
-                        let number = this.stack.pop();
+                        let number = self.stack.pop();
                         let bit_position = (bit.low_u64() * 8 + 7) as usize;
                         let bit = number.bit(bit_position);
                         let mask = (U256::one() << bit_position) - U256::one();
-                        this.stack
+                        self.stack
                             .push(if bit { number | !mask } else { number & mask });
                     }
                 }
                 opcodes::OpCode::LT => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack.push(common::bool_to_u256(a < b));
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack.push(common::bool_to_u256(a < b));
                 }
                 opcodes::OpCode::GT => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack.push(common::bool_to_u256(a > b));
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack.push(common::bool_to_u256(a > b));
                 }
                 opcodes::OpCode::SLT => {
-                    let (a, neg_a) = common::get_sign(this.stack.pop());
-                    let (b, neg_b) = common::get_sign(this.stack.pop());
+                    let (a, neg_a) = common::get_sign(self.stack.pop());
+                    let (b, neg_b) = common::get_sign(self.stack.pop());
                     let is_positive_lt = a < b && !(neg_a | neg_b);
                     let is_negative_lt = a > b && (neg_a & neg_b);
                     let has_different_signs = neg_a && !neg_b;
-                    this.stack.push(common::bool_to_u256(
+                    self.stack.push(common::bool_to_u256(
                         is_positive_lt | is_negative_lt | has_different_signs,
                     ));
                 }
                 opcodes::OpCode::SGT => {
-                    let (a, neg_a) = common::get_sign(this.stack.pop());
-                    let (b, neg_b) = common::get_sign(this.stack.pop());
+                    let (a, neg_a) = common::get_sign(self.stack.pop());
+                    let (b, neg_b) = common::get_sign(self.stack.pop());
                     let is_positive_gt = a > b && !(neg_a | neg_b);
                     let is_negative_gt = a < b && (neg_a & neg_b);
                     let has_different_signs = !neg_a && neg_b;
-                    this.stack.push(common::bool_to_u256(
+                    self.stack.push(common::bool_to_u256(
                         is_positive_gt | is_negative_gt | has_different_signs,
                     ));
                 }
                 opcodes::OpCode::EQ => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack.push(common::bool_to_u256(a == b));
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack.push(common::bool_to_u256(a == b));
                 }
                 opcodes::OpCode::ISZERO => {
-                    let a = this.stack.pop();
-                    this.stack.push(common::bool_to_u256(a.is_zero()));
+                    let a = self.stack.pop();
+                    self.stack.push(common::bool_to_u256(a.is_zero()));
                 }
                 opcodes::OpCode::AND => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack.push(a & b);
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack.push(a & b);
                 }
                 opcodes::OpCode::OR => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack.push(a | b);
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack.push(a | b);
                 }
                 opcodes::OpCode::XOR => {
-                    let a = this.stack.pop();
-                    let b = this.stack.pop();
-                    this.stack.push(a ^ b);
+                    let a = self.stack.pop();
+                    let b = self.stack.pop();
+                    self.stack.push(a ^ b);
                 }
                 opcodes::OpCode::NOT => {
-                    let a = this.stack.pop();
-                    this.stack.push(!a);
+                    let a = self.stack.pop();
+                    self.stack.push(!a);
                 }
                 opcodes::OpCode::BYTE => {
-                    let word = this.stack.pop();
-                    let val = this.stack.pop();
+                    let word = self.stack.pop();
+                    let val = self.stack.pop();
                     let byte = if word < U256::from(32) {
                         (val >> (8 * (31 - word.low_u64() as usize))) & U256::from(0xff)
                     } else {
                         U256::zero()
                     };
-                    this.stack.push(byte);
+                    self.stack.push(byte);
                 }
                 opcodes::OpCode::SHL => {
                     const CONST_256: U256 = U256([256, 0, 0, 0]);
-                    let shift = this.stack.pop();
-                    let value = this.stack.pop();
+                    let shift = self.stack.pop();
+                    let value = self.stack.pop();
                     let result = if shift >= CONST_256 {
                         U256::zero()
                     } else {
                         value << (shift.as_u32() as usize)
                     };
-                    this.stack.push(result);
+                    self.stack.push(result);
                 }
                 opcodes::OpCode::SHR => {
                     const CONST_256: U256 = U256([256, 0, 0, 0]);
-                    let shift = this.stack.pop();
-                    let value = this.stack.pop();
+                    let shift = self.stack.pop();
+                    let value = self.stack.pop();
                     let result = if shift >= CONST_256 {
                         U256::zero()
                     } else {
                         value >> (shift.as_u32() as usize)
                     };
-                    this.stack.push(result);
+                    self.stack.push(result);
                 }
                 opcodes::OpCode::SAR => {
                     const CONST_256: U256 = U256([256, 0, 0, 0]);
                     const CONST_HIBIT: U256 = U256([0, 0, 0, 0x8000_0000_0000_0000]);
-                    let shift = this.stack.pop();
-                    let value = this.stack.pop();
+                    let shift = self.stack.pop();
+                    let value = self.stack.pop();
                     let sign = value & CONST_HIBIT != U256::zero();
                     let result = if shift >= CONST_256 {
                         if sign {
@@ -654,195 +653,195 @@ impl Interpreter {
                         }
                         shifted
                     };
-                    this.stack.push(result);
+                    self.stack.push(result);
                 }
                 opcodes::OpCode::SHA3 => {
-                    let mem_offset = this.stack.pop();
-                    let mem_len = this.stack.pop();
-                    let k = this.data_provider.sha3(
-                        this.mem
+                    let mem_offset = self.stack.pop();
+                    let mem_len = self.stack.pop();
+                    let k = self.data_provider.sha3(
+                        self.mem
                             .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize),
                     );
-                    this.stack.push(U256::from(k));
+                    self.stack.push(U256::from(k));
                 }
                 opcodes::OpCode::ADDRESS => {
-                    this.stack
-                        .push(common::address_to_u256(this.params.address));
+                    self.stack
+                        .push(common::address_to_u256(self.params.address));
                 }
                 opcodes::OpCode::BALANCE => {
-                    let address = common::u256_to_address(&this.stack.pop());
-                    let balance = this.data_provider.get_balance(&address);
-                    this.stack.push(balance);
+                    let address = common::u256_to_address(&self.stack.pop());
+                    let balance = self.data_provider.get_balance(&address);
+                    self.stack.push(balance);
                 }
                 opcodes::OpCode::ORIGIN => {
-                    this.stack
-                        .push(common::address_to_u256(this.context.origin));
+                    self.stack
+                        .push(common::address_to_u256(self.context.origin));
                 }
                 opcodes::OpCode::CALLER => {
-                    this.stack.push(common::address_to_u256(this.params.sender));
+                    self.stack.push(common::address_to_u256(self.params.sender));
                 }
                 opcodes::OpCode::CALLVALUE => {
-                    this.stack.push(this.params.value);
+                    self.stack.push(self.params.value);
                 }
                 opcodes::OpCode::CALLDATALOAD => {
-                    let big_id = this.stack.pop();
+                    let big_id = self.stack.pop();
                     let id = big_id.low_u64() as usize;
                     let max = id.wrapping_add(32);
-                    if !this.params.input.is_empty() {
-                        let bound = cmp::min(this.params.input.len(), max);
-                        if id < bound && big_id < U256::from(this.params.input.len()) {
+                    if !self.params.input.is_empty() {
+                        let bound = cmp::min(self.params.input.len(), max);
+                        if id < bound && big_id < U256::from(self.params.input.len()) {
                             let mut v = [0u8; 32];
-                            v[0..bound - id].clone_from_slice(&this.params.input[id..bound]);
-                            this.stack.push(U256::from(&v[..]))
+                            v[0..bound - id].clone_from_slice(&self.params.input[id..bound]);
+                            self.stack.push(U256::from(&v[..]))
                         } else {
-                            this.stack.push(U256::zero())
+                            self.stack.push(U256::zero())
                         }
                     } else {
-                        this.stack.push(U256::zero())
+                        self.stack.push(U256::zero())
                     }
                 }
                 opcodes::OpCode::CALLDATASIZE => {
-                    this.stack.push(U256::from(this.params.input.len()));
+                    self.stack.push(U256::from(self.params.input.len()));
                 }
                 opcodes::OpCode::CALLDATACOPY => {
-                    let mem_offset = this.stack.pop();
-                    let raw_offset = this.stack.pop();
-                    let size = this.stack.pop();
+                    let mem_offset = self.stack.pop();
+                    let raw_offset = self.stack.pop();
+                    let size = self.stack.pop();
 
-                    let data = common::copy_data(this.params.input.as_slice(), raw_offset, size);
-                    this.mem.set(mem_offset.as_usize(), data.as_slice());
+                    let data = common::copy_data(self.params.input.as_slice(), raw_offset, size);
+                    self.mem.set(mem_offset.as_usize(), data.as_slice());
                 }
                 opcodes::OpCode::CODESIZE => {
-                    this.stack
-                        .push(U256::from(this.params.contract.code_data.len()));
+                    self.stack
+                        .push(U256::from(self.params.contract.code_data.len()));
                 }
                 opcodes::OpCode::CODECOPY => {
-                    let mem_offset = this.stack.pop();
-                    let raw_offset = this.stack.pop();
-                    let size = this.stack.pop();
+                    let mem_offset = self.stack.pop();
+                    let raw_offset = self.stack.pop();
+                    let size = self.stack.pop();
                     let data = common::copy_data(
-                        this.params.contract.code_data.as_slice(),
+                        self.params.contract.code_data.as_slice(),
                         raw_offset,
                         size,
                     );
-                    this.mem.set(mem_offset.as_usize(), data.as_slice());
+                    self.mem.set(mem_offset.as_usize(), data.as_slice());
                 }
                 opcodes::OpCode::GASPRICE => {
-                    this.stack.push(this.context.gas_price);
+                    self.stack.push(self.context.gas_price);
                 }
                 opcodes::OpCode::EXTCODESIZE => {
-                    let address = common::u256_to_address(&this.stack.pop());
-                    let len = this.data_provider.get_code_size(&address);
-                    this.stack.push(U256::from(len));
+                    let address = common::u256_to_address(&self.stack.pop());
+                    let len = self.data_provider.get_code_size(&address);
+                    self.stack.push(U256::from(len));
                 }
                 opcodes::OpCode::EXTCODECOPY => {
-                    let address = common::u256_to_address(&this.stack.pop());
-                    let code_offset = this.stack.pop();
-                    let len = this.stack.pop();
-                    let code = this.data_provider.get_code(&address);
+                    let address = common::u256_to_address(&self.stack.pop());
+                    let code_offset = self.stack.pop();
+                    let len = self.stack.pop();
+                    let code = self.data_provider.get_code(&address);
                     let val = common::copy_data(code, code_offset, len);
-                    this.mem.set(code_offset.as_usize(), val.as_slice())
+                    self.mem.set(code_offset.as_usize(), val.as_slice())
                 }
                 opcodes::OpCode::RETURNDATASIZE => {
-                    this.stack.push(U256::from(this.return_data.len()))
+                    self.stack.push(U256::from(self.return_data.len()))
                 }
                 opcodes::OpCode::RETURNDATACOPY => {
-                    let mem_offset = this.stack.pop();
-                    let raw_offset = this.stack.pop();
-                    let size = this.stack.pop();
-                    let return_data_len = U256::from(this.return_data.len());
+                    let mem_offset = self.stack.pop();
+                    let raw_offset = self.stack.pop();
+                    let size = self.stack.pop();
+                    let return_data_len = U256::from(self.return_data.len());
                     if raw_offset.saturating_add(size) > return_data_len {
                         return Err(err::Error::OutOfBounds);
                     }
-                    let data = common::copy_data(&this.return_data, raw_offset, size);
-                    this.mem.set(mem_offset.as_usize(), data.as_slice())
+                    let data = common::copy_data(&self.return_data, raw_offset, size);
+                    self.mem.set(mem_offset.as_usize(), data.as_slice())
                 }
                 opcodes::OpCode::EXTCODEHASH => {
-                    let address = common::u256_to_address(&this.stack.pop());
-                    let hash = this.data_provider.get_code_hash(&address);
-                    this.stack.push(U256::from(hash));
+                    let address = common::u256_to_address(&self.stack.pop());
+                    let hash = self.data_provider.get_code_hash(&address);
+                    self.stack.push(U256::from(hash));
                 }
                 opcodes::OpCode::BLOCKHASH => {
-                    let block_number = this.stack.pop();
-                    let block_hash = this.data_provider.get_block_hash(&block_number);
-                    this.stack.push(U256::from(&*block_hash));
+                    let block_number = self.stack.pop();
+                    let block_hash = self.data_provider.get_block_hash(&block_number);
+                    self.stack.push(U256::from(&*block_hash));
                 }
                 opcodes::OpCode::COINBASE => {
-                    this.stack
-                        .push(common::address_to_u256(this.context.coinbase));
+                    self.stack
+                        .push(common::address_to_u256(self.context.coinbase));
                 }
                 opcodes::OpCode::TIMESTAMP => {
-                    this.stack.push(U256::from(this.context.timestamp));
+                    self.stack.push(U256::from(self.context.timestamp));
                 }
                 opcodes::OpCode::NUMBER => {
-                    this.stack.push(this.context.number);
+                    self.stack.push(self.context.number);
                 }
                 opcodes::OpCode::DIFFICULTY => {
-                    this.stack.push(this.context.difficulty);
+                    self.stack.push(self.context.difficulty);
                 }
                 opcodes::OpCode::GASLIMIT => {
-                    this.stack.push(U256::from(this.context.gas_limit));
+                    self.stack.push(U256::from(self.context.gas_limit));
                 }
                 opcodes::OpCode::POP => {
-                    this.stack.pop();
+                    self.stack.pop();
                 }
                 opcodes::OpCode::MLOAD => {
-                    let offset = this.stack.pop().as_u64();
-                    let word = this.mem.get(offset as usize, 32);
-                    this.stack.push(U256::from(word));
+                    let offset = self.stack.pop().as_u64();
+                    let word = self.mem.get(offset as usize, 32);
+                    self.stack.push(U256::from(word));
                 }
                 opcodes::OpCode::MSTORE => {
-                    let offset = this.stack.pop();
-                    let word = this.stack.pop();
+                    let offset = self.stack.pop();
+                    let word = self.stack.pop();
                     let word = &<[u8; 32]>::from(word)[..];
-                    this.mem.set(offset.low_u64() as usize, word);
+                    self.mem.set(offset.low_u64() as usize, word);
                 }
                 opcodes::OpCode::MSTORE8 => {
-                    let offset = this.stack.pop();
-                    let word = this.stack.pop();
-                    this.mem
+                    let offset = self.stack.pop();
+                    let word = self.stack.pop();
+                    self.mem
                         .set(offset.low_u64() as usize, &[word.low_u64() as u8]);
                 }
                 opcodes::OpCode::SLOAD => {
-                    let key = H256::from(this.stack.pop());
+                    let key = H256::from(self.stack.pop());
                     let word =
-                        U256::from(&*this.data_provider.get_storage(&this.params.address, &key));
-                    this.stack.push(word);
+                        U256::from(&*self.data_provider.get_storage(&self.params.address, &key));
+                    self.stack.push(word);
                 }
                 opcodes::OpCode::SSTORE => {
-                    let address = H256::from(&this.stack.pop());
-                    let value = this.stack.pop();
-                    this.data_provider.set_storage(
-                        &this.params.address,
+                    let address = H256::from(&self.stack.pop());
+                    let value = self.stack.pop();
+                    self.data_provider.set_storage(
+                        &self.params.address,
                         address,
                         H256::from(&value),
                     );
                 }
                 opcodes::OpCode::JUMP => {
-                    let jump = this.stack.pop().low_u64();
-                    if jump >= this.params.contract.code_data.len() as u64 {
+                    let jump = self.stack.pop().low_u64();
+                    if jump >= self.params.contract.code_data.len() as u64 {
                         return Err(err::Error::OutOfCode);
                     }
                     pc = jump;
                 }
                 opcodes::OpCode::JUMPI => {
-                    let jump = this.stack.pop().low_u64();
-                    let condition = this.stack.pop();
+                    let jump = self.stack.pop().low_u64();
+                    let condition = self.stack.pop();
                     if !condition.is_zero() {
-                        if jump >= this.params.contract.code_data.len() as u64 {
+                        if jump >= self.params.contract.code_data.len() as u64 {
                             return Err(err::Error::OutOfCode);
                         }
                         pc = jump;
                     }
                 }
                 opcodes::OpCode::PC => {
-                    this.stack.push(U256::from(pc - 1));
+                    self.stack.push(U256::from(pc - 1));
                 }
                 opcodes::OpCode::MSIZE => {
-                    this.stack.push(U256::from(this.mem.len()));
+                    self.stack.push(U256::from(self.mem.len()));
                 }
                 opcodes::OpCode::GAS => {
-                    this.stack.push(U256::from(this.gas));
+                    self.stack.push(U256::from(self.gas));
                 }
                 opcodes::OpCode::JUMPDEST => {}
                 opcodes::OpCode::PUSH1
@@ -879,10 +878,10 @@ impl Interpreter {
                 | opcodes::OpCode::PUSH32 => {
                     let n = op as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
                     let e = pc + u64::from(n);
-                    let e = cmp::min(e, this.params.contract.code_data.len() as u64);
-                    let r = U256::from(&this.params.contract.code_data[pc as usize..e as usize]);
+                    let e = cmp::min(e, self.params.contract.code_data.len() as u64);
+                    let r = U256::from(&self.params.contract.code_data[pc as usize..e as usize]);
                     pc = e;
-                    this.stack.push(r);
+                    self.stack.push(r);
                 }
                 opcodes::OpCode::DUP1
                 | opcodes::OpCode::DUP2
@@ -901,7 +900,7 @@ impl Interpreter {
                 | opcodes::OpCode::DUP15
                 | opcodes::OpCode::DUP16 => {
                     let p = op as u8 - opcodes::OpCode::DUP1 as u8;
-                    this.stack.dup(p as usize);
+                    self.stack.dup(p as usize);
                 }
                 opcodes::OpCode::SWAP1
                 | opcodes::OpCode::SWAP2
@@ -920,7 +919,7 @@ impl Interpreter {
                 | opcodes::OpCode::SWAP15
                 | opcodes::OpCode::SWAP16 => {
                     let p = op as u8 - opcodes::OpCode::SWAP1 as u8 + 1;
-                    this.stack.swap(p as usize);
+                    self.stack.swap(p as usize);
                 }
                 opcodes::OpCode::LOG0
                 | opcodes::OpCode::LOG1
@@ -928,56 +927,56 @@ impl Interpreter {
                 | opcodes::OpCode::LOG3
                 | opcodes::OpCode::LOG4 => {
                     let n = op as u8 - opcodes::OpCode::LOG0 as u8;
-                    let mem_offset = this.stack.pop();
-                    let mem_len = this.stack.pop();
+                    let mem_offset = self.stack.pop();
+                    let mem_len = self.stack.pop();
                     let mut topics: Vec<H256> = Vec::new();
                     for _ in 0..n {
-                        let r = H256::from(this.stack.pop());
+                        let r = H256::from(self.stack.pop());
                         topics.push(r);
                     }
-                    let data = this
+                    let data = self
                         .mem
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    this.logs.push(Log(topics, Vec::from(data)));
+                    self.logs.push(Log(topics, Vec::from(data)));
                 }
                 opcodes::OpCode::CREATE | opcodes::OpCode::CREATE2 => {
-                    let value = this.stack.pop();
-                    let mem_offset = this.stack.pop();
-                    let mem_len = this.stack.pop();
+                    let value = self.stack.pop();
+                    let mem_offset = self.stack.pop();
+                    let mem_len = self.stack.pop();
                     let salt = {
                         match op {
                             opcodes::OpCode::CREATE => U256::zero(),
-                            opcodes::OpCode::CREATE2 => this.stack.pop(),
+                            opcodes::OpCode::CREATE2 => self.stack.pop(),
                             _ => panic!("instruction can only be CREATE/CREATE2 checked above"),
                         }
                     };
-                    let data = this
+                    let data = self
                         .mem
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
 
                     let mut params = InterpreterParams::default();
-                    params.sender = this.params.address;
-                    params.gas = this.gas_tmp;
+                    params.sender = self.params.address;
+                    params.gas = self.gas_tmp;
                     params.input = Vec::from(data);
                     params.value = value;
                     params.extra = salt;
-                    let r = this.data_provider.call(op, params);
+                    let r = self.data_provider.call(op, params);
                     match r {
                         Ok(data) => match data {
                             InterpreterResult::Create(_, add, gas) => {
-                                this.stack.push(common::address_to_u256(add));
-                                this.gas += gas;
+                                self.stack.push(common::address_to_u256(add));
+                                self.gas += gas;
                             }
                             InterpreterResult::Revert(ret, gas, _) => {
-                                this.stack.push(U256::zero());
-                                this.gas += gas;
-                                this.return_data = ret;
+                                self.stack.push(U256::zero());
+                                self.gas += gas;
+                                self.return_data = ret;
                                 break;
                             }
                             _ => {}
                         },
                         Err(_) => {
-                            this.stack.push(U256::zero());
+                            self.stack.push(U256::zero());
                         }
                     }
                 }
@@ -985,35 +984,35 @@ impl Interpreter {
                 | opcodes::OpCode::CALLCODE
                 | opcodes::OpCode::DELEGATECALL
                 | opcodes::OpCode::STATICCALL => {
-                    let _ = this.stack.pop();
-                    let address = common::u256_to_address(&this.stack.pop());
+                    let _ = self.stack.pop();
+                    let address = common::u256_to_address(&self.stack.pop());
                     let value = {
                         if op == opcodes::OpCode::CALL || op == opcodes::OpCode::CALLCODE {
-                            this.stack.pop()
+                            self.stack.pop()
                         } else {
                             U256::zero()
                         }
                     };
-                    let mem_offset = this.stack.pop();
-                    let mem_len = this.stack.pop();
-                    let out_offset = this.stack.pop();
-                    let _ = this.stack.pop();
+                    let mem_offset = self.stack.pop();
+                    let mem_len = self.stack.pop();
+                    let out_offset = self.stack.pop();
+                    let _ = self.stack.pop();
 
-                    let mut gas = this.gas_tmp;
+                    let mut gas = self.gas_tmp;
                     if !value.is_zero() {
-                        gas += this.cfg.gas_call_stipend;
+                        gas += self.cfg.gas_call_stipend;
                     }
 
-                    let data = this
+                    let data = self
                         .mem
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
 
                     let mut params = InterpreterParams::default();
-                    params.sender = this.params.address;
+                    params.sender = self.params.address;
                     params.gas = gas;
                     params.contract.code_address = address;
                     params.contract.code_data =
-                        Vec::from(this.data_provider.get_code(&params.contract.code_address));
+                        Vec::from(self.data_provider.get_code(&params.contract.code_address));
                     params.input = Vec::from(data);
                     match op {
                         opcodes::OpCode::CALL => {
@@ -1021,74 +1020,74 @@ impl Interpreter {
                             params.value = value;
                         }
                         opcodes::OpCode::CALLCODE => {
-                            params.address = this.params.address;
+                            params.address = self.params.address;
                             params.value = value;
                         }
                         opcodes::OpCode::DELEGATECALL => {
-                            params.address = this.params.address;
+                            params.address = self.params.address;
                         }
                         opcodes::OpCode::STATICCALL => {
                             params.address = address;
                         }
                         _ => {}
                     }
-                    let r = this.data_provider.call(op, params);
+                    let r = self.data_provider.call(op, params);
                     match r {
                         Ok(data) => match data {
                             InterpreterResult::Normal(ret, gas, _) => {
-                                this.stack.push(U256::one());
-                                this.mem.set(out_offset.low_u64() as usize, ret.as_slice());
-                                this.gas += gas;
+                                self.stack.push(U256::one());
+                                self.mem.set(out_offset.low_u64() as usize, ret.as_slice());
+                                self.gas += gas;
                             }
                             InterpreterResult::Revert(ret, gas, _) => {
-                                this.stack.push(U256::zero());
-                                this.mem.set(out_offset.low_u64() as usize, ret.as_slice());
-                                this.gas += gas;
+                                self.stack.push(U256::zero());
+                                self.mem.set(out_offset.low_u64() as usize, ret.as_slice());
+                                self.gas += gas;
                             }
                             _ => {}
                         },
                         Err(_) => {
-                            this.stack.push(U256::zero());
+                            self.stack.push(U256::zero());
                         }
                     }
                 }
                 opcodes::OpCode::RETURN => {
-                    let mem_offset = this.stack.pop();
-                    let mem_len = this.stack.pop();
-                    let r = this
+                    let mem_offset = self.stack.pop();
+                    let mem_len = self.stack.pop();
+                    let r = self
                         .mem
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    this.return_data = Vec::from(r);
+                    self.return_data = Vec::from(r);
                     break;
                 }
                 opcodes::OpCode::REVERT => {
-                    let mem_offset = this.stack.pop();
-                    let mem_len = this.stack.pop();
-                    let r = this
+                    let mem_offset = self.stack.pop();
+                    let mem_len = self.stack.pop();
+                    let r = self
                         .mem
                         .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    this.return_data = Vec::from(r);
+                    self.return_data = Vec::from(r);
                     return Ok(InterpreterResult::Revert(
-                        this.return_data.clone(),
-                        this.gas,
-                        this.logs.clone(),
+                        self.return_data.clone(),
+                        self.gas,
+                        self.logs.clone(),
                     ));
                 }
                 opcodes::OpCode::SELFDESTRUCT => {
-                    let address = this.stack.pop();
-                    this.data_provider
-                        .selfdestruct(&this.params.address, &common::u256_to_address(&address));
+                    let address = self.stack.pop();
+                    self.data_provider
+                        .selfdestruct(&self.params.address, &common::u256_to_address(&address));
                     break;
                 }
             }
-            if this.cfg.print_op {
+            if self.cfg.print_op {
                 println!();
             }
         }
         Ok(InterpreterResult::Normal(
-            this.return_data.clone(),
-            this.gas,
-            this.logs.clone(),
+            self.return_data.clone(),
+            self.gas,
+            self.logs.clone(),
         ))
     }
 
