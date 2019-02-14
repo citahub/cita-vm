@@ -6,4 +6,4 @@ extern crate state;
 
 pub mod json_tests;
 // pub mod state_db;
-pub mod trie_db;
+pub mod database;
