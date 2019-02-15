@@ -5,4 +5,4 @@ extern crate keccak_hash;
 
 pub mod account;
 pub mod state;
-pub mod state_object_entry;
+pub mod object_entry;
