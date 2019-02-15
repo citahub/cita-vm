@@ -15,6 +15,7 @@ state = { path="./state" }
 keccak-hash = "0.1"
 cita_trie = { git = "https://github.com/cryptape/cita-trie.git", branch = "forstatus" }
 parity-rocksdb = "0.5.0"
+lru-cache = "0.1.1"
 
 [workspace]
 members = [
