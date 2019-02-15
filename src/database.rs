@@ -1,3 +1,5 @@
+use parity_rocksdb::rocksdb::Writable;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum DBError {
     Str(String),
@@ -31,7 +33,7 @@ impl RocksDB {
         return Ok(RocksDB {
             raw: db,
             lru: lru_cache::LruCache::new(65536),
-        })
+        });
     }
 }
 
@@ -46,18 +48,16 @@ impl cita_trie::db::DB for RocksDB {
 
     fn get(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>, DBError> {
         if let Some(data) = self.lru.get_mut(&key.to_vec()) {
-            return Ok(Some(data.to_vec()))
+            return Ok(Some(data.to_vec()));
         }
 
         let a = self.raw.get(key)?;
         match a {
             Some(data) => {
                 self.lru.insert(key.to_vec(), data.to_vec());
-                return Ok(Some(data.to_vec()))
-            },
-            None => {
-                return Ok(None)
-            },
+                return Ok(Some(data.to_vec()));
+            }
+            None => return Ok(None),
         };
     }
 
