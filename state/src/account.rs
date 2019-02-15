@@ -40,8 +40,8 @@ pub struct Account {
 impl rlp::Encodable for Account {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.begin_list(4)
-            .append(&self.balance)
             .append(&self.nonce)
+            .append(&self.balance)
             .append(&self.storage_root)
             .append(&self.code_hash);
     }
@@ -50,8 +50,8 @@ impl rlp::Encodable for Account {
 impl rlp::Decodable for Account {
     fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
         Ok(Account {
-            balance: rlp.val_at(0)?,
-            nonce: rlp.val_at(1)?,
+            nonce: rlp.val_at(0)?,
+            balance: rlp.val_at(1)?,
             storage_root: rlp.val_at(2)?,
             code_hash: rlp.val_at(3)?,
         })
