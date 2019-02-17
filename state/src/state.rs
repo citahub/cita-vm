@@ -9,6 +9,8 @@ use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 
+type Bytes = Vec<u8>;
+
 pub struct State<B> {
     pub db: B,
     pub root: H256,
@@ -57,21 +59,6 @@ impl<B: DB> State<B> {
         self.insert_cache(contract, StateObjectEntry::new_dirty_state_object(None));
     }
 
-    pub fn is_empty(&mut self, address: &Address) -> bool {
-        if let Some(state_object_entry) = self.cache.borrow().get(address) {
-            if let Some(ref _state_object) = state_object_entry.state_object {
-                return true;
-            }
-        }
-
-        // let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0).unwrap();
-
-        if let Some(ref _state_object) = self.db.get(&address).unwrap() {
-            return true;
-        }
-        false
-    }
-
     pub fn db(self) -> B {
         self.db
     }
@@ -80,55 +67,23 @@ impl<B: DB> State<B> {
         &self.root
     }
 
-    pub fn add_refund(&mut self, address: &Address, n: u64) {
-        match self.ensure_cached(address) {
-            Some(mut state_object) => {
-                state_object.add_balance(&U256::from(n));
-                self.insert_cache(
-                    address,
-                    StateObjectEntry::new_dirty_state_object(Some(state_object)),
-                )
-            }
-            None => {
-                self.new_contract(address, U256::from(n), U256::from(0));
-            }
+    pub fn exist(&mut self, a: &Address) -> bool {
+        if let Some(_state_object) = self.get_state_object(a) {
+            return true;
         }
-
-        self.refund
-            .entry(*address)
-            .and_modify(|v| *v += n)
-            .or_insert(n);
+        false
     }
 
-    pub fn sub_refund(&mut self, address: &Address, n: u64) {
-        match self.ensure_cached(address) {
-            Some(mut state_object) => {
-                state_object.sub_balance(&U256::from(n));
-                self.insert_cache(
-                    address,
-                    StateObjectEntry::new_dirty_state_object(Some(state_object)),
-                )
-            }
-            None => {
-                self.new_contract(address, U256::from(n), U256::from(0));
-            }
-        }
-
-        self.refund
-            .entry(*address)
-            .and_modify(|v| *v -= n)
-            .or_insert(n);
-    }
-
-    pub fn ensure_cached(&mut self, address: &Address) -> Option<StateObject> {
+    pub fn get_state_object(&mut self, address: &Address) -> Option<StateObject> {
         if let Some(state_object_entry) = self.cache.borrow().get(address) {
             if let Some(state_object) = &state_object_entry.state_object {
                 return Some((*state_object).clone_all());
             }
         }
 
-        // let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0).unwrap();
-        match self.db.get(&address) {
+        let mut trie =
+            PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0).unwrap();
+        match trie.get(&address) {
             Ok(Some(rlp)) => {
                 let state_object = StateObject::from_rlp(&rlp);
                 self.insert_cache(
@@ -149,25 +104,14 @@ impl<B: DB> State<B> {
         None
     }
 
-    pub fn storage_at(&mut self, address: &Address, key: &H256) -> H256 {
-        if let Some(mut state_object) = self.ensure_cached(address) {
-            if let Some(value) = state_object.cached_storage_at(key) {
-                return value;
-            }
-            if let Some(value) = state_object.trie_storage_at(&mut self.db, key) {
-                return value;
-            }
-        }
-        H256::from(0)
-    }
-
     pub fn set_storage(&mut self, address: &Address, key: H256, value: H256) {
-        if self.storage_at(address, &key) != value {
+        if self.storage_at(address, &key) != Some(value) {
             let contain_key = self.cache.borrow().contains_key(address);
             if !contain_key {
-                // let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)
-                //     .unwrap();
-                match self.db.get(&address) {
+                let mut trie =
+                    PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)
+                        .unwrap();
+                match trie.get(&address) {
                     Ok(rlp) => {
                         let mut state_object = StateObject::from_rlp(&rlp.unwrap());
                         state_object.set_storage(key, value);
@@ -211,17 +155,32 @@ impl<B: DB> State<B> {
 
     pub fn commit(&mut self) {
         assert!(self.checkpoints.borrow().is_empty());
-        let mut trie =
-            PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0).unwrap();
 
-        for (address, a) in self
+        // firstly, update account storage tree
+        for (_address, entry) in self
             .cache
             .borrow_mut()
             .iter_mut()
             .filter(|&(_, ref a)| a.is_dirty())
         {
-            a.status = ObjectStatus::Committed;
-            match a.state_object {
+            if let Some(ref mut state_object) = entry.state_object {
+                state_object.commit_storage(&mut self.db);
+                state_object.commit_code(&mut self.db);
+            }
+        }
+
+        // secondly, update the whold state tree
+        let mut trie =
+            PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0).unwrap();
+
+        for (address, entry) in self
+            .cache
+            .borrow_mut()
+            .iter_mut()
+            .filter(|&(_, ref a)| a.is_dirty())
+        {
+            entry.status = ObjectStatus::Committed;
+            match entry.state_object {
                 Some(ref mut state_object) => {
                     trie.insert(address, &state_object.rlp());
                 }
@@ -286,5 +245,176 @@ impl<B: DB> State<B> {
                 }
             }
         }
+    }
+}
+
+pub trait StateObjectInfo {
+    fn nonce(&mut self, a: &Address) -> Option<U256>;
+
+    fn balance(&mut self, a: &Address) -> Option<U256>;
+
+    fn storage_at(&mut self, a: &Address, key: &H256) -> Option<H256>;
+
+    fn code(&mut self, a: &Address) -> Option<Bytes>;
+
+    fn set_code(&mut self, a: &Address, code: Bytes);
+
+    fn code_hash(&mut self, a: &Address) -> Option<H256>;
+
+    fn code_size(&mut self, a: &Address) -> Option<usize>;
+
+    fn add_balance(&mut self, a: &Address, incr: U256);
+
+    fn sub_balance(&mut self, a: &Address, decr: U256);
+
+    fn transfer_balance(&mut self, from: &Address, to: &Address, by: U256);
+
+    fn inc_nonce(&mut self, a: &Address);
+
+    fn add_refund(&mut self, address: &Address, n: u64);
+
+    fn sub_refund(&mut self, address: &Address, n: u64);
+}
+
+impl<B: DB> StateObjectInfo for State<B> {
+    fn nonce(&mut self, a: &Address) -> Option<U256> {
+        if let Some(state_object) = self.get_state_object(a) {
+            return Some(state_object.nonce());
+        }
+        None
+    }
+
+    fn balance(&mut self, a: &Address) -> Option<U256> {
+        if let Some(state_object) = self.get_state_object(a) {
+            return Some(state_object.balance());
+        }
+        None
+    }
+
+    fn storage_at(&mut self, a: &Address, key: &H256) -> Option<H256> {
+        if let Some(mut state_object) = self.get_state_object(a) {
+            if let Some(value) = state_object.cached_storage_at(key) {
+                return Some(value);
+            }
+            if let Some(value) = state_object.trie_storage_at(&mut self.db, key) {
+                return Some(value);
+            }
+        }
+        None
+    }
+
+    fn code(&mut self, a: &Address) -> Option<Bytes> {
+        if let Some(state_object) = self.get_state_object(a) {
+            return state_object.code();
+        }
+        None
+    }
+
+    fn set_code(&mut self, a: &Address, code: Bytes) {
+        match self.get_state_object(a) {
+            Some(mut state_object) => {
+                state_object.set_code(code.clone());
+                self.insert_cache(
+                    a,
+                    StateObjectEntry::new_dirty_state_object(Some(state_object)),
+                )
+            }
+            None => {
+                self.new_contract(a, U256::from(0), U256::from(0));
+            }
+        }
+    }
+
+    fn code_hash(&mut self, a: &Address) -> Option<H256> {
+        if let Some(state_object) = self.get_state_object(a) {
+            return Some(state_object.code_hash());
+        }
+        None
+    }
+
+    fn code_size(&mut self, a: &Address) -> Option<usize> {
+        if let Some(state_object) = self.get_state_object(a) {
+            return state_object.code_size();
+        }
+        None
+    }
+
+    fn add_balance(&mut self, a: &Address, incr: U256) {
+        if self.exist(a) && !incr.is_zero() {
+            // incr < 0 ?
+            let mut state_object = self.get_state_object(a).unwrap();
+            state_object.add_balance(incr);
+            self.insert_cache(
+                a,
+                StateObjectEntry::new_dirty_state_object(Some(state_object)),
+            );
+        }
+    }
+
+    fn sub_balance(&mut self, a: &Address, decr: U256) {
+        if self.exist(a) && !decr.is_zero() {
+            // incr < 0 ?
+            let mut state_object = self.get_state_object(a).unwrap();
+            state_object.sub_balance(decr);
+            self.insert_cache(
+                a,
+                StateObjectEntry::new_dirty_state_object(Some(state_object)),
+            );
+        }
+    }
+
+    fn transfer_balance(&mut self, from: &Address, to: &Address, by: U256) {
+        self.sub_balance(from, by);
+        self.add_balance(to, by);
+    }
+
+    fn inc_nonce(&mut self, a: &Address) {
+        if let Some(mut state_object) = self.get_state_object(a) {
+            state_object.inc_nonce();
+            self.insert_cache(
+                a,
+                StateObjectEntry::new_dirty_state_object(Some(state_object)),
+            );
+        }
+    }
+
+    fn add_refund(&mut self, address: &Address, n: u64) {
+        match self.get_state_object(address) {
+            Some(mut state_object) => {
+                state_object.add_balance(U256::from(n));
+                self.insert_cache(
+                    address,
+                    StateObjectEntry::new_dirty_state_object(Some(state_object)),
+                )
+            }
+            None => {
+                self.new_contract(address, U256::from(n), U256::from(0));
+            }
+        }
+
+        self.refund
+            .entry(*address)
+            .and_modify(|v| *v += n)
+            .or_insert(n);
+    }
+
+    fn sub_refund(&mut self, address: &Address, n: u64) {
+        match self.get_state_object(address) {
+            Some(mut state_object) => {
+                state_object.sub_balance(U256::from(n));
+                self.insert_cache(
+                    address,
+                    StateObjectEntry::new_dirty_state_object(Some(state_object)),
+                )
+            }
+            None => {
+                self.new_contract(address, U256::from(n), U256::from(0));
+            }
+        }
+
+        self.refund
+            .entry(*address)
+            .and_modify(|v| *v -= n)
+            .or_insert(n);
     }
 }
