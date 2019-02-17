@@ -42,7 +42,7 @@ impl<B: DB> State<B> {
     }
 
     pub fn new_contract(&mut self, contract: &Address, balance: U256, nonce: U256) {
-        let original_storage_root = H256::default(); // fix me
+        let original_storage_root = Some(H256::default()); // fix me
         self.insert_cache(
             contract,
             StateObjectEntry::new_dirty_state_object(Some(StateObject::new_state_object(
