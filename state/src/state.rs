@@ -8,8 +8,7 @@ use ethereum_types::{Address, H256, U256};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
-
-type Bytes = Vec<u8>;
+use super::errors::Error;
 
 pub struct State<B> {
     pub db: B,
@@ -26,37 +25,39 @@ impl<B: DB> State<B> {
 
         State {
             db,
-            root: H256::from_slice(&root),
+            root: From::from(&root[..]),
             cache: RefCell::new(HashMap::new()),
             checkpoints: RefCell::new(Vec::new()),
             refund: BTreeMap::new(),
         }
     }
 
-    pub fn from_existing(db: B, root: H256) -> State<B> {
-        State {
+    /// Creates new state with existing state root
+    pub fn from_existing(db: B, root: H256) -> Result<State<B>, Error> {
+        if !db.contains(&root.0[..]).or(Err(Error::InvalidStateRoot))? {
+            return Err(Error::InvalidStateRoot)
+        }
+        Ok(State {
             db: db,
-            root: H256::from_slice(&root),
+            root: root,
             cache: RefCell::new(HashMap::new()),
             checkpoints: RefCell::new(Vec::new()),
             refund: BTreeMap::new(),
-        }
+        })
     }
 
     pub fn new_contract(&mut self, contract: &Address, balance: U256, nonce: U256) {
-        let original_storage_root = Some(H256::default()); // fix me
         self.insert_cache(
             contract,
-            StateObjectEntry::new_dirty_state_object(Some(StateObject::new_state_object(
+            StateObjectEntry::new_dirty(Some(StateObject::new(
                 balance,
                 nonce,
-                original_storage_root,
             ))),
         );
     }
 
     pub fn kill_contract(&mut self, contract: &Address) {
-        self.insert_cache(contract, StateObjectEntry::new_dirty_state_object(None));
+        self.insert_cache(contract, StateObjectEntry::new_dirty(None));
     }
 
     pub fn db(self) -> B {
@@ -77,19 +78,19 @@ impl<B: DB> State<B> {
     pub fn get_state_object(&mut self, address: &Address) -> Option<StateObject> {
         if let Some(state_object_entry) = self.cache.borrow().get(address) {
             if let Some(state_object) = &state_object_entry.state_object {
-                return Some((*state_object).clone_all());
+                return Some((*state_object).clone_dirty());
             }
         }
 
-        let mut trie =
+        let trie =
             PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0).unwrap();
         match trie.get(&address) {
             Ok(Some(rlp)) => {
                 let state_object = StateObject::from_rlp(&rlp);
                 self.insert_cache(
                     address,
-                    StateObjectEntry::new_clean_state_object(Some(
-                        state_object.clone_basic_state_object(),
+                    StateObjectEntry::new_clean(Some(
+                        state_object.clone_clean(),
                     )),
                 );
                 return Some(state_object);
@@ -108,7 +109,7 @@ impl<B: DB> State<B> {
         if self.storage_at(address, &key) != Some(value) {
             let contain_key = self.cache.borrow().contains_key(address);
             if !contain_key {
-                let mut trie =
+                let trie =
                     PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)
                         .unwrap();
                 match trie.get(&address) {
@@ -117,7 +118,7 @@ impl<B: DB> State<B> {
                         state_object.set_storage(key, value);
                         self.insert_cache(
                             address,
-                            StateObjectEntry::new_dirty_state_object(Some(state_object)),
+                            StateObjectEntry::new_dirty(Some(state_object)),
                         );
                     }
                     Err(_) => panic!("this state object  is not exist in patriciaTrie."),
@@ -141,7 +142,7 @@ impl<B: DB> State<B> {
         let is_dirty = state_object_entry.is_dirty();
         self.cache.borrow_mut().insert(
             *address,
-            state_object_entry.clone_dirty_state_object_entry(),
+            state_object_entry.clone_dirty(),
         );
 
         if is_dirty {
@@ -182,10 +183,10 @@ impl<B: DB> State<B> {
             entry.status = ObjectStatus::Committed;
             match entry.state_object {
                 Some(ref mut state_object) => {
-                    trie.insert(address, &state_object.rlp());
+                    trie.insert(address, &rlp::encode(&state_object.account())).unwrap();
                 }
                 None => {
-                    trie.remove(address);
+                    trie.remove(address).unwrap();
                 }
             }
         }
@@ -201,7 +202,7 @@ impl<B: DB> State<B> {
                 self.cache
                     .borrow()
                     .get(address)
-                    .map(StateObjectEntry::clone_dirty_state_object_entry)
+                    .map(StateObjectEntry::clone_dirty)
             });
         }
     }
@@ -229,7 +230,7 @@ impl<B: DB> State<B> {
                 match v {
                     Some(v) => match self.cache.get_mut().entry(k) {
                         Entry::Occupied(mut e) => {
-                            e.get_mut().overwrite_with_state_object_entry(v);
+                            e.get_mut().merge(v);
                         }
                         Entry::Vacant(e) => {
                             e.insert(v);
@@ -255,9 +256,9 @@ pub trait StateObjectInfo {
 
     fn storage_at(&mut self, a: &Address, key: &H256) -> Option<H256>;
 
-    fn code(&mut self, a: &Address) -> Option<Bytes>;
+    fn code(&mut self, a: &Address) -> Option<Vec<u8>>;
 
-    fn set_code(&mut self, a: &Address, code: Bytes);
+    fn set_code(&mut self, a: &Address, code: Vec<u8>);
 
     fn code_hash(&mut self, a: &Address) -> Option<H256>;
 
@@ -293,30 +294,30 @@ impl<B: DB> StateObjectInfo for State<B> {
 
     fn storage_at(&mut self, a: &Address, key: &H256) -> Option<H256> {
         if let Some(mut state_object) = self.get_state_object(a) {
-            if let Some(value) = state_object.cached_storage_at(key) {
+            if let Some(value) = state_object.get_storage_at_changes(key) {
                 return Some(value);
             }
-            if let Some(value) = state_object.trie_storage_at(&mut self.db, key) {
+            if let Some(value) = state_object.get_storage_at_backend(&mut self.db, key) {
                 return Some(value);
             }
         }
         None
     }
 
-    fn code(&mut self, a: &Address) -> Option<Bytes> {
+    fn code(&mut self, a: &Address) -> Option<Vec<u8>> {
         if let Some(state_object) = self.get_state_object(a) {
             return state_object.code();
         }
         None
     }
 
-    fn set_code(&mut self, a: &Address, code: Bytes) {
+    fn set_code(&mut self, a: &Address, code: Vec<u8>) {
         match self.get_state_object(a) {
             Some(mut state_object) => {
-                state_object.set_code(code.clone());
+                state_object.init_code(code.clone());
                 self.insert_cache(
                     a,
-                    StateObjectEntry::new_dirty_state_object(Some(state_object)),
+                    StateObjectEntry::new_dirty(Some(state_object)),
                 )
             }
             None => {
@@ -334,7 +335,7 @@ impl<B: DB> StateObjectInfo for State<B> {
 
     fn code_size(&mut self, a: &Address) -> Option<usize> {
         if let Some(state_object) = self.get_state_object(a) {
-            return state_object.code_size();
+            return Some(state_object.code_size());
         }
         None
     }
@@ -346,7 +347,7 @@ impl<B: DB> StateObjectInfo for State<B> {
             state_object.add_balance(incr);
             self.insert_cache(
                 a,
-                StateObjectEntry::new_dirty_state_object(Some(state_object)),
+                StateObjectEntry::new_dirty(Some(state_object)),
             );
         }
     }
@@ -358,7 +359,7 @@ impl<B: DB> StateObjectInfo for State<B> {
             state_object.sub_balance(decr);
             self.insert_cache(
                 a,
-                StateObjectEntry::new_dirty_state_object(Some(state_object)),
+                StateObjectEntry::new_dirty(Some(state_object)),
             );
         }
     }
@@ -373,7 +374,7 @@ impl<B: DB> StateObjectInfo for State<B> {
             state_object.inc_nonce();
             self.insert_cache(
                 a,
-                StateObjectEntry::new_dirty_state_object(Some(state_object)),
+                StateObjectEntry::new_dirty(Some(state_object)),
             );
         }
     }
@@ -384,7 +385,7 @@ impl<B: DB> StateObjectInfo for State<B> {
                 state_object.add_balance(U256::from(n));
                 self.insert_cache(
                     address,
-                    StateObjectEntry::new_dirty_state_object(Some(state_object)),
+                    StateObjectEntry::new_dirty(Some(state_object)),
                 )
             }
             None => {
@@ -404,7 +405,7 @@ impl<B: DB> StateObjectInfo for State<B> {
                 state_object.sub_balance(U256::from(n));
                 self.insert_cache(
                     address,
-                    StateObjectEntry::new_dirty_state_object(Some(state_object)),
+                    StateObjectEntry::new_dirty(Some(state_object)),
                 )
             }
             None => {

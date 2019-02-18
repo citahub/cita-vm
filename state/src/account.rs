@@ -3,13 +3,36 @@ use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
 use ethereum_types::{H256, U256};
 use keccak_hash::{keccak, KECCAK_EMPTY, KECCAK_NULL_RLP};
-use lru_cache::LruCache;
-use rlp::*;
-use std::cell::RefCell;
 use std::collections::HashMap;
 
-const STORAGE_CACHE_ITEMS: usize = 8192;
-type Bytes = Vec<u8>;
+#[derive(Debug)]
+pub struct Account {
+    balance: U256,
+    nonce: U256,
+    storage_root: H256,
+    code_hash: H256,
+}
+
+impl rlp::Encodable for Account {
+    fn rlp_append(&self, s: &mut rlp::RlpStream) {
+        s.begin_list(4)
+            .append(&self.nonce)
+            .append(&self.balance)
+            .append(&self.storage_root)
+            .append(&self.code_hash);
+    }
+}
+
+impl rlp::Decodable for Account {
+    fn decode(data: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
+        Ok(Account {
+            nonce: data.val_at(0)?,
+            balance: data.val_at(1)?,
+            storage_root: data.val_at(2)?,
+            code_hash: data.val_at(3)?,
+        })
+    }
+}
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum CodeState {
@@ -22,43 +45,13 @@ pub struct StateObject {
     balance: U256,
     nonce: U256,
     storage_root: H256,
-    code: Bytes,
     code_hash: H256,
-    code_size: Option<usize>,
+    code: Vec<u8>,
+    code_size: usize,
     code_state: CodeState,
     storage_changes: HashMap<H256, H256>,
-    storage_cache: RefCell<LruCache<H256, H256>>,
-    original_storage_cache: Option<(H256, RefCell<LruCache<H256, H256>>)>,
 }
 
-#[derive(Debug)]
-pub struct Account {
-    balance: U256,
-    nonce: U256,
-    storage_root: H256,
-    code_hash: H256,
-}
-
-impl rlp::Encodable for Account {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_list(4)
-            .append(&self.nonce)
-            .append(&self.balance)
-            .append(&self.storage_root)
-            .append(&self.code_hash);
-    }
-}
-
-impl rlp::Decodable for Account {
-    fn decode(rlp: &Rlp) -> Result<Self, DecoderError> {
-        Ok(Account {
-            nonce: rlp.val_at(0)?,
-            balance: rlp.val_at(1)?,
-            storage_root: rlp.val_at(2)?,
-            code_hash: rlp.val_at(3)?,
-        })
-    }
-}
 
 impl From<Account> for StateObject {
     fn from(account: Account) -> Self {
@@ -66,72 +59,66 @@ impl From<Account> for StateObject {
             balance: account.balance,
             nonce: account.nonce,
             storage_root: account.storage_root,
-            code: vec![],
             code_hash: account.code_hash,
-            code_size: None,
+            code: vec![],
+            code_size: 0,
             code_state: CodeState::Clean,
             storage_changes: HashMap::new(),
-            storage_cache: Self::empty_storage_cache(),
-            original_storage_cache: None,
         }
     }
 }
 
-impl StateObject {
-    pub fn new(
-        balance: U256,
-        nonce: U256,
-        storage: HashMap<H256, H256>,
-        code: Bytes,
-    ) -> StateObject {
-        StateObject {
-            balance,
-            nonce,
-            storage_root: KECCAK_NULL_RLP,
-            code: code.clone(),
-            code_hash: keccak(&code),
-            code_size: Some(code.len()),
-            code_state: CodeState::Dirty,
-            storage_changes: storage,
-            storage_cache: Self::empty_storage_cache(),
-            original_storage_cache: None,
-        }
-    }
 
-    pub fn new_state_object(
-        balance: U256,
-        nonce: U256,
-        original_storage_root: Option<H256>,
-    ) -> StateObject {
+impl StateObject {
+
+    /// Create a new account.
+    /// NOTE: If contract account generated, make sure you use `init_code` on
+    /// this before `commit`ing.
+    pub fn new(balance: U256, nonce: U256) -> StateObject {
         StateObject {
-            balance,
-            nonce,
-            storage_root: KECCAK_NULL_RLP, // why not original_storage_root ?
-            code: vec![],
+            balance: balance,
+            nonce: nonce,
+            storage_root: KECCAK_NULL_RLP,
             code_hash: KECCAK_EMPTY,
-            code_size: None,
+            code: vec![],
+            code_size: 0,
             code_state: CodeState::Clean,
             storage_changes: HashMap::new(),
-            storage_cache: RefCell::new(LruCache::new(STORAGE_CACHE_ITEMS)),
-            original_storage_cache: if original_storage_root.is_none()
-                || original_storage_root.unwrap() == KECCAK_NULL_RLP
-            {
-                None
-            } else {
-                Some((original_storage_root.unwrap(), Self::empty_storage_cache()))
-            },
         }
     }
 
-    fn empty_storage_cache() -> RefCell<LruCache<H256, H256>> {
-        RefCell::new(LruCache::new(STORAGE_CACHE_ITEMS))
+    /// Create a new account from rlp bytes.
+    /// Note: make sure you use `read_code` after this.
+    pub fn from_rlp(data: &[u8]) -> StateObject {
+        let account: Account = rlp::decode(data).unwrap();
+        account.into()
     }
 
-    pub fn set_code(&mut self, code: Bytes) {
+    pub fn account(&self) -> Account {
+        Account {
+            balance: self.balance,
+            nonce: self.nonce,
+            storage_root: self.storage_root,
+            code_hash: self.code_hash,
+        }
+    }
+
+    pub fn init_code(&mut self, code: Vec<u8>) {
         self.code = code.clone();
         self.code_hash = keccak(&code);
-        self.code_size = Some(code.len());
+        self.code_size = code.len();
         self.code_state = CodeState::Dirty;
+    }
+
+
+    pub fn read_code<B: DB>(&mut self, db: &mut B) -> Vec<u8> {
+        if self.code_hash == KECCAK_EMPTY {
+            return vec![]
+        }
+        if !self.code.is_empty() {
+            return self.code.clone()
+        }
+        return db.get(&self.code_hash).unwrap().unwrap()
     }
 
     pub fn balance(&self) -> U256 {
@@ -142,7 +129,7 @@ impl StateObject {
         self.nonce.clone()
     }
 
-    pub fn code(&self) -> Option<Bytes> {
+    pub fn code(&self) -> Option<Vec<u8>> {
         if self.code.is_empty() {
             return None;
         }
@@ -153,36 +140,8 @@ impl StateObject {
         self.code_hash.clone()
     }
 
-    pub fn code_size(&self) -> Option<usize> {
-        self.code_size.clone()
-    }
-
-    pub fn is_code_cached(&self) -> bool {
-        !self.code.is_empty() // Consider code hash or not ?
-    }
-
-    pub fn cache_code<B: DB>(&mut self, db: &mut B) -> Option<Bytes> {
-        if self.is_code_cached() {
-            return Some(self.code.clone());
-        }
-
-        match db.get(&self.code_hash) {
-            Ok(x) => {
-                self.code = x.clone().unwrap();
-                self.code_size = Some(x.unwrap().len());
-                Some(self.code.clone())
-            }
-            Err(_) => unimplemented!(),
-        }
-    }
-
-    pub fn cache_given_code(&mut self, code: Bytes) {
-        self.code = code.clone();
-        self.code_size = Some(code.len());
-    }
-
-    pub fn storage_changes_is_null(&self) -> bool {
-        self.storage_changes.is_empty()
+    pub fn code_size(&self) -> usize {
+        self.code_size
     }
 
     pub fn inc_nonce(&mut self) {
@@ -190,107 +149,75 @@ impl StateObject {
     }
 
     pub fn add_balance(&mut self, x: U256) {
-        self.balance = self.balance.saturating_add(x);
+        let (a, b) = self.balance.overflowing_add(x);
+        assert_eq!(b, false);
+        self.balance = a;
     }
 
     pub fn sub_balance(&mut self, x: U256) {
-        self.balance = self.balance.saturating_sub(x);
-    }
-
-    /// Return the account's storage root or None if no storage changes
-    pub fn storage_root(&self) -> Option<H256> {
-        if self.storage_changes_is_null() {
-            Some(self.storage_root)
-        } else {
-            None
-        }
+        let (a, b) = self.balance.overflowing_sub(x);
+        assert_eq!(b, false);
+        self.balance = a;
     }
 
     pub fn set_storage(&mut self, key: H256, value: H256) {
         self.storage_changes.insert(key, value);
     }
 
-    pub fn get_storage_changes(&self) -> &HashMap<H256, H256> {
-        &self.storage_changes
+    pub fn get_storage_at_backend<B: DB>(&mut self, db: &mut B, key: &H256) -> Option<H256> {
+        let trie = PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap();
+        if let Ok(a) =  trie.get(key) {
+            if let Some(b) = a {
+                return Some( From::from(&b[..]) )
+            }
+        }
+        return None
     }
 
-    pub fn storage_at<B: DB>(&mut self, key: &H256, db: &mut B) -> Option<H256> {
-        if let Some(value) = self.cached_storage_at(key) {
-            return Some(value);
-        }
-        if let Some(value) = self.trie_storage_at(db, key) {
-            return Some(value);
-        }
-        None
-    }
-
-    pub fn cached_storage_at(&self, key: &H256) -> Option<H256> {
+    pub fn get_storage_at_changes(&self, key: &H256) -> Option<H256> {
         if let Some(value) = self.storage_changes.get(key) {
             return Some(*value);
         }
+        None
+    }
 
-        if let Some(value) = self.storage_cache.borrow_mut().get_mut(key) {
-            return Some(*value);
+    pub fn get_storage<B: DB>(&mut self, key: &H256, db: &mut B) -> Option<H256> {
+        if let Some(value) = self.get_storage_at_changes(key) {
+            return Some(value);
+        }
+        if let Some(value) = self.get_storage_at_backend(db, key) {
+            return Some(value);
         }
         None
     }
 
-    pub fn trie_storage_at<B: DB>(&mut self, db: &mut B, key: &H256) -> Option<H256> {
-        // TODO: Fix all usage of unwrap(), avoid exceptional panic!!
-        let mut trie =
-            PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap();
-        let value = trie.get(key).unwrap().unwrap();
-
-        self.storage_cache
-            .borrow_mut()
-            .insert(*key, H256::from_slice(&value));
-        Some(H256::from_slice(&value))
-    }
-
     pub fn commit_storage<B: DB>(&mut self, db: &mut B) {
-        let mut trie =
-            PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap();
-
+        let mut trie = PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap();
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
-                trie.remove(&k);
+                trie.remove(&k).unwrap();
             } else {
-                trie.insert(&k, &v);
+                trie.insert(&k, &v).unwrap();
             }
-            self.storage_cache.borrow_mut().insert(k, k);
         }
     }
 
-    pub fn commit_code<B: DB>(&mut self, db: &mut B) {
+    pub fn commit_code<B: DB>(&mut self, db: &mut B){
         match (self.code_state == CodeState::Dirty, self.code.is_empty()) {
             (true, true) => {
-                self.code_size = Some(0);
+                self.code_size = 0;
                 self.code_state = CodeState::Clean;
             }
             (true, false) => {
-                db.insert(&self.code_hash.clone(), &self.code);
-                self.code_size = Some(self.code.len());
+                db.insert(&self.code_hash.clone(), &self.code).unwrap();
+                self.code_size = self.code.len();
                 self.code_state = CodeState::Clean;
             }
             (false, _) => {}
         }
     }
 
-    pub fn rlp(&self) -> Vec<u8> {
-        let mut stream = RlpStream::new_list(4);
-        stream.append(&self.nonce);
-        stream.append(&self.balance);
-        stream.append(&self.storage_root);
-        stream.append(&self.code_hash);
-        stream.out()
-    }
-
-    pub fn from_rlp(rlp: &[u8]) -> StateObject {
-        let account: Account = decode(rlp).unwrap();
-        account.into()
-    }
-
-    pub fn clone_basic_state_object(&self) -> StateObject {
+    pub fn clone_clean(&self) -> StateObject {
         StateObject {
             balance: self.balance.clone(),
             nonce: self.nonce.clone(),
@@ -300,31 +227,23 @@ impl StateObject {
             code_size: self.code_size.clone(),
             code_state: self.code_state.clone(),
             storage_changes: HashMap::new(),
-            storage_cache: Self::empty_storage_cache(),
-            original_storage_cache: None, // FIX ME!
         }
     }
 
-    pub fn clone_dirty_state_object(&self) -> StateObject {
-        let mut state_object = self.clone_basic_state_object();
+    pub fn clone_dirty(&self) -> StateObject {
+        let mut state_object = self.clone_clean();
         state_object.storage_changes = self.storage_changes.clone();
         state_object
     }
 
-    pub fn clone_all(&self) -> StateObject {
-        let mut state_object = self.clone_dirty_state_object();
-        state_object.storage_cache = self.storage_cache.clone();
-        state_object
-    }
-
-    pub fn overwrite_with_state_object(&mut self, other: StateObject) {
+    pub fn merge(&mut self, other: StateObject) {
         self.balance = other.balance;
         self.nonce = other.nonce;
-        self.code = other.code;
         self.storage_root = other.storage_root;
+        self.code_hash = other.code_hash;
+        self.code_state = other.code_state;
+        self.code = other.code;
+        self.code_size = other.code_size;
         self.storage_changes = other.storage_changes;
-        for (k, v) in other.storage_cache.into_inner() {
-            self.storage_cache.borrow_mut().insert(k, v);
-        }
     }
 }
