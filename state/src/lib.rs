@@ -1,9 +1,8 @@
-pub mod trie;
+extern crate bytes;
+extern crate cita_trie;
+extern crate ethereum_types;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub mod account;
+pub mod errors;
+pub mod object_entry;
+pub mod state;
