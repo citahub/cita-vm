@@ -82,7 +82,7 @@ impl<B: DB> State<B> {
         let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0).unwrap();
         match trie.get(&address) {
             Ok(Some(rlp)) => {
-                let state_object = StateObject::from_rlp(&rlp);
+                let state_object = StateObject::from_rlp(&rlp).unwrap();
                 self.insert_cache(
                     address,
                     StateObjectEntry::new_clean(Some(state_object.clone_clean())),
@@ -107,7 +107,7 @@ impl<B: DB> State<B> {
                     .unwrap();
                 match trie.get(&address) {
                     Ok(rlp) => {
-                        let mut state_object = StateObject::from_rlp(&rlp.unwrap());
+                        let mut state_object = StateObject::from_rlp(&rlp.unwrap()).unwrap();
                         state_object.set_storage(key, value);
                         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
                     }
@@ -154,8 +154,8 @@ impl<B: DB> State<B> {
             .filter(|&(_, ref a)| a.is_dirty())
         {
             if let Some(ref mut state_object) = entry.state_object {
-                state_object.commit_storage(&mut self.db);
-                state_object.commit_code(&mut self.db);
+                state_object.commit_storage(&mut self.db).unwrap();
+                state_object.commit_code(&mut self.db).unwrap();
             }
         }
 
@@ -287,7 +287,7 @@ impl<B: DB> StateObjectInfo for State<B> {
             if let Some(value) = state_object.get_storage_at_changes(key) {
                 return Some(value);
             }
-            if let Some(value) = state_object.get_storage_at_backend(&mut self.db, key) {
+            if let Some(value) = state_object.get_storage_at_backend(&mut self.db, key).unwrap() {
                 return Some(value);
             }
         }
