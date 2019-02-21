@@ -100,6 +100,10 @@ impl StateObject {
         account.into()
     }
 
+    pub fn rlp(&self) -> Vec<u8> {
+        rlp::encode(&self.account())
+    }
+
     pub fn account(&self) -> Account {
         Account {
             balance: self.balance,
@@ -123,7 +127,11 @@ impl StateObject {
         if !self.code.is_empty() {
             return self.code.clone();
         }
-        return db.get(&self.code_hash).unwrap().unwrap();
+        let c = db.get(&self.code_hash).unwrap().unwrap();
+        self.code = c.clone();
+        self.code_size = c.len();
+        self.code_state = CodeState::Clean;
+        c
     }
 
     pub fn balance(&self) -> U256 {
@@ -186,7 +194,7 @@ impl StateObject {
         None
     }
 
-    pub fn get_storage<B: DB>(&mut self, key: &H256, db: &mut B) -> Option<H256> {
+    pub fn get_storage<B: DB>(&mut self, db: &mut B, key: &H256) -> Option<H256> {
         if let Some(value) = self.get_storage_at_changes(key) {
             return Some(value);
         }
@@ -197,8 +205,11 @@ impl StateObject {
     }
 
     pub fn commit_storage<B: DB>(&mut self, db: &mut B) {
-        let mut trie =
-            PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap();
+        let mut trie =  if self.storage_root == KECCAK_NULL_RLP {
+            PatriciaTrie::new(db, RLPNodeCodec::default())
+        } else {
+            PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap()
+        };
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
                 trie.remove(&k).unwrap();
@@ -206,6 +217,7 @@ impl StateObject {
                 trie.insert(&k, &v).unwrap();
             }
         }
+        self.storage_root = trie.root().unwrap().into();
     }
 
     pub fn commit_code<B: DB>(&mut self, db: &mut B) {
@@ -251,5 +263,106 @@ impl StateObject {
         self.code = other.code;
         self.code_size = other.code_size;
         self.storage_changes = other.storage_changes;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+	#[test]
+	fn state_object_new() {
+        let o = StateObject::new(69u8.into(), 0u8.into());
+        assert_eq!(o.balance(), 69u8.into());
+        assert_eq!(o.nonce(), 0u8.into());
+        assert_eq!(o.code_hash(), KECCAK_EMPTY);
+		assert_eq!(o.storage_root, KECCAK_NULL_RLP);
+		assert_eq!(hex::encode(rlp::encode(&o.account())), "f8448045a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
+	}
+
+    #[test]
+    fn state_object_rlp() {
+        let a = StateObject::new(69u8.into(), 0u8.into());
+        let b = StateObject::from_rlp(&rlp::encode(&a.account())[..]);
+        assert_eq!(a.balance(), b.balance());
+		assert_eq!(a.nonce(), b.nonce());
+		assert_eq!(a.code_hash(), b.code_hash());
+		assert_eq!(a.storage_root, b.storage_root);
+    }
+
+    #[test]
+    fn state_object_code() {
+        let mut a = StateObject::new(69u8.into(), 0.into());
+        let mut db = cita_trie::db::MemoryDB::new();
+        a.init_code(vec![0x55, 0x44, 0xffu8]);
+        assert_eq!(a.code_state, CodeState::Dirty);
+        assert_eq!(a.code_size, 3);
+        a.commit_code(&mut db);
+        assert_eq!(a.code_state, CodeState::Clean);
+        assert_eq!(a.code_hash, "af231e631776a517ca23125370d542873eca1fb4d613ed9b5d5335a46ae5b7eb".into());
+        assert_eq!(db.get(&a.code_hash()).unwrap().unwrap(), vec![0x55, 0x44, 0xffu8]);
+        a.init_code(vec![0x55]);
+        assert_eq!(a.code_state, CodeState::Dirty);
+        assert_eq!(a.code_size, 1);
+        a.commit_code(&mut db);
+        assert_eq!(a.code_hash, "37bf2238b11b68cdc8382cece82651b59d3c3988873b6e0f33d79694aa45f1be".into());
+        assert_eq!(db.get(&a.code_hash()).unwrap().unwrap(), vec![0x55]);
+    }
+
+    #[test]
+    fn state_object_storage_1() {
+        let mut a = StateObject::new(69u8.into(), 0.into());
+        let mut db = cita_trie::db::MemoryDB::new();
+		a.set_storage(0.into(), 0x1234.into());
+		a.commit_storage(&mut db);
+		assert_eq!(a.storage_root, "ca8f89e4444c7453e96568511298af8049553232cfdb9255be8799d68c28b297".into());
+    }
+
+    #[test]
+    #[ignore]
+    fn state_object_storage_2() {
+        let mut a = StateObject::new(69u8.into(), 0.into());
+        let mut db = cita_trie::db::MemoryDB::new();
+		a.set_storage(0.into(), 0x1234.into());
+		a.commit_storage(&mut db);
+        assert_eq!(a.storage_root, "ca8f89e4444c7453e96568511298af8049553232cfdb9255be8799d68c28b297".into());
+		a.set_storage(1.into(), 0x1234.into());
+		a.commit_storage(&mut db);
+        assert_eq!(a.storage_root, "41cf81d2e6063cccd6965e9ca7d2b2ca95c6cf68012c9ac0be8564fd30e106b8".into());
+		a.set_storage(1.into(), 0.into());
+		a.commit_storage(&mut db);
+		assert_eq!(a.storage_root, "ca8f89e4444c7453e96568511298af8049553232cfdb9255be8799d68c28b297".into());
+    }
+
+    #[test]
+    fn state_object_storage_3() {
+        let mut a = StateObject::new(69u8.into(), 0.into());
+        let mut db = cita_trie::db::MemoryDB::new();
+        let a_rlp = {
+            a.set_storage(0x00u64.into(), 0x1234u64.into());
+            a.commit_storage(&mut db);
+            a.init_code(vec![]);
+            a.commit_code(&mut db);
+            rlp::encode(&a.account())
+        };
+		a =  StateObject::from_rlp(&a_rlp[..]);
+		assert_eq!(a.storage_root, "ca8f89e4444c7453e96568511298af8049553232cfdb9255be8799d68c28b297".into());
+		assert_eq!(a.get_storage(&mut db, &0x00u64.into()).unwrap(), 0x1234u64.into());
+		assert_eq!(a.get_storage(&mut db, &0x01u64.into()), None);
+    }
+
+
+    #[test]
+    fn state_object_note_code() {
+        let mut a = StateObject::new(69u8.into(), 0.into());
+        let mut db = cita_trie::db::MemoryDB::new();
+		let a_rlp = {
+			a.init_code(vec![0x55, 0x44, 0xffu8]);
+			a.commit_code(&mut db);
+			a.rlp()
+		};
+        a =  StateObject::from_rlp(&a_rlp[..]);
+        a.read_code(&mut db);
+		assert_eq!(a.code, vec![0x55, 0x44, 0xffu8]);
     }
 }
