@@ -205,7 +205,7 @@ impl StateObject {
     }
 
     pub fn commit_storage<B: DB>(&mut self, db: &mut B) {
-        let mut trie =  if self.storage_root == KECCAK_NULL_RLP {
+        let mut trie =  if self.storage_root == SHA3_NULL_RLP {
             PatriciaTrie::new(db, RLPNodeCodec::default())
         } else {
             PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap()
@@ -275,9 +275,9 @@ mod tests {
         let o = StateObject::new(69u8.into(), 0u8.into());
         assert_eq!(o.balance(), 69u8.into());
         assert_eq!(o.nonce(), 0u8.into());
-        assert_eq!(o.code_hash(), KECCAK_EMPTY);
-		assert_eq!(o.storage_root, KECCAK_NULL_RLP);
-		assert_eq!(hex::encode(rlp::encode(&o.account())), "f8448045a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
+        assert_eq!(o.code_hash(), SHA3_EMPTY);
+		assert_eq!(o.storage_root, SHA3_NULL_RLP);
+		assert_eq!(hex::encode(rlp::encode(&o.account())), "f8448045a0bc2071a4de846f285702447f2589dd163678e0972a8a1b0d28b04ed5c094547fa0a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a");
 	}
 
     #[test]
@@ -299,13 +299,13 @@ mod tests {
         assert_eq!(a.code_size, 3);
         a.commit_code(&mut db);
         assert_eq!(a.code_state, CodeState::Clean);
-        assert_eq!(a.code_hash, "af231e631776a517ca23125370d542873eca1fb4d613ed9b5d5335a46ae5b7eb".into());
+        assert_eq!(a.code_hash, "0dba2dca92d3283a8ec642a5c1d288f221c45f40d1f4798d58425c6df88d2ae5".into());
         assert_eq!(db.get(&a.code_hash()).unwrap().unwrap(), vec![0x55, 0x44, 0xffu8]);
         a.init_code(vec![0x55]);
         assert_eq!(a.code_state, CodeState::Dirty);
         assert_eq!(a.code_size, 1);
         a.commit_code(&mut db);
-        assert_eq!(a.code_hash, "37bf2238b11b68cdc8382cece82651b59d3c3988873b6e0f33d79694aa45f1be".into());
+        assert_eq!(a.code_hash, "78fe1396dda648dcbccc3c17af4cd29de873f2cdf5e4c5eb04e0ef08e86cc267".into());
         assert_eq!(db.get(&a.code_hash()).unwrap().unwrap(), vec![0x55]);
     }
 
