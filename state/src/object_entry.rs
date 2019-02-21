@@ -1,12 +1,13 @@
 use super::account::StateObject;
 
-#[derive(Eq, PartialEq, Clone)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub enum ObjectStatus {
     Clean,
     Dirty,
     Committed,
 }
 
+#[derive(Debug)]
 pub struct StateObjectEntry {
     /// State object entry. `None` if account known to be non-existant.
     pub state_object: Option<StateObject>,
@@ -45,6 +46,7 @@ impl StateObjectEntry {
         self.status = other.status;
         match other.state_object {
             Some(acc) => {
+                println!("merge ...");
                 if let Some(ref mut ours) = self.state_object {
                     ours.merge(acc);
                 }
