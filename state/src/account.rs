@@ -83,8 +83,8 @@ impl StateObject {
     /// this before `commit`ing.
     pub fn new(balance: U256, nonce: U256) -> StateObject {
         StateObject {
-            balance: balance,
-            nonce: nonce,
+            balance,
+            nonce,
             storage_root: SHA3_NULL_RLP,
             code_hash: SHA3_EMPTY,
             code: vec![],
@@ -131,7 +131,7 @@ impl StateObject {
         let c = db
             .get(&self.code_hash)
             .or(Err(Error::DBError))?
-            .unwrap_or(vec![]);
+            .unwrap_or_else(|| vec![]);
         self.code = c.clone();
         self.code_size = c.len();
         self.code_state = CodeState::Clean;
@@ -139,11 +139,11 @@ impl StateObject {
     }
 
     pub fn balance(&self) -> U256 {
-        self.balance.clone()
+        self.balance
     }
 
     pub fn nonce(&self) -> U256 {
-        self.nonce.clone()
+        self.nonce
     }
 
     pub fn code(&self) -> Option<Vec<u8>> {
@@ -154,7 +154,7 @@ impl StateObject {
     }
 
     pub fn code_hash(&self) -> H256 {
-        self.code_hash.clone()
+        self.code_hash
     }
 
     pub fn code_size(&self) -> usize {
@@ -162,7 +162,7 @@ impl StateObject {
     }
 
     pub fn inc_nonce(&mut self) {
-        self.nonce = self.nonce + U256::from(1u8);
+        self.nonce += U256::from(1u8);
     }
 
     pub fn add_balance(&mut self, x: U256) {
@@ -193,7 +193,7 @@ impl StateObject {
                 return Ok(Some(From::from(&b[..])));
             }
         }
-        return Ok(None);
+        Ok(None)
     }
 
     pub fn get_storage_at_changes(&self, key: &H256) -> Option<H256> {
@@ -238,7 +238,7 @@ impl StateObject {
                 self.code_state = CodeState::Clean;
             }
             (true, false) => {
-                db.insert(&self.code_hash.clone(), &self.code)
+                db.insert(&self.code_hash, &self.code)
                     .or(Err(Error::DBError))?;
                 self.code_size = self.code.len();
                 self.code_state = CodeState::Clean;
@@ -250,13 +250,13 @@ impl StateObject {
 
     pub fn clone_clean(&self) -> StateObject {
         StateObject {
-            balance: self.balance.clone(),
-            nonce: self.nonce.clone(),
-            storage_root: self.storage_root.clone(),
+            balance: self.balance,
+            nonce: self.nonce,
+            storage_root: self.storage_root,
             code: self.code.clone(),
-            code_hash: self.code_hash.clone(),
-            code_size: self.code_size.clone(),
-            code_state: self.code_state.clone(),
+            code_hash: self.code_hash,
+            code_size: self.code_size,
+            code_state: self.code_state,
             storage_changes: HashMap::new(),
         }
     }

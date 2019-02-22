@@ -38,8 +38,8 @@ impl<B: DB> State<B> {
             return Err(Error::InvalidStateRoot);
         }
         Ok(State {
-            db: db,
-            root: root,
+            db,
+            root,
             cache: RefCell::new(HashMap::new()),
             checkpoints: RefCell::new(Vec::new()),
             refund: BTreeMap::new(),
@@ -97,15 +97,13 @@ impl<B: DB> State<B> {
                     address,
                     StateObjectEntry::new_clean(Some(state_object.clone_clean())),
                 );
-                return Ok(state_object);
+                Ok(state_object)
             }
             Ok(None) => {
                 // this state object is not exist in patriciaTrie, maybe you need to crate a new contract
-                return Err(Error::DBError);
+                Err(Error::DBError)
             }
-            Err(_) => {
-                return Err(Error::TrieError);
-            }
+            Err(_) => Err(Error::TrieError),
         }
     }
 
@@ -121,7 +119,7 @@ impl<B: DB> State<B> {
                         state_object.set_storage(key, value);
                         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
                     }
-                    Err(_) => {
+                    Err(_err) => {
                         panic!("this state object is not exist in patriciaTrie.");
                     }
                 }
@@ -320,7 +318,7 @@ impl<B: DB> StateObjectInfo for State<B> {
                 // This account never exist, create one.
                 self.new_contract(a, U256::from(0u64), U256::from(0u64), None);
             }
-            Err(_) => {
+            Err(_err) => {
                 unimplemented!();
             }
         }
@@ -388,7 +386,7 @@ impl<B: DB> StateObjectInfo for State<B> {
                     state_object.sub_balance(decr);
                     self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
                 }
-                Err(_) => {
+                Err(_err) => {
                     unimplemented!();
                 }
             }

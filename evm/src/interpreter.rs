@@ -1012,7 +1012,7 @@ impl Interpreter {
                     params.gas = gas;
                     params.contract.code_address = address;
                     params.contract.code_data =
-                        Vec::from(self.data_provider.get_code(&params.contract.code_address));
+                        self.data_provider.get_code(&params.contract.code_address);
                     params.input = Vec::from(data);
                     match op {
                         opcodes::OpCode::CALL => {
