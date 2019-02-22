@@ -91,7 +91,7 @@ impl StateObject {
             code_size: Some(code.len()),
             code_state: CodeState::Dirty,
             storage_changes: storage,
-            storage_cache: Self::empty_storage_cache(),
+            storage_cache: RefCell::new(LruCache::new(STORAGE_CACHE_ITEMS)),
             original_storage_cache: None,
         }
     }
