@@ -1,5 +1,5 @@
 use super::account::StateObject;
-use super::object_entry::{ObjectStatus, StateObjectEntry};
+use super::state_object_entry::{ObjectStatus, StateObjectEntry};
 use cita_trie::codec::RLPNodeCodec;
 use cita_trie::db::DB;
 use cita_trie::trie::PatriciaTrie;
