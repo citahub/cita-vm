@@ -99,7 +99,7 @@ impl StateObject {
     pub fn new_state_object(
         balance: U256,
         nonce: U256,
-        original_storage_root: Option<H256>,
+        original_storage_root: H256,
     ) -> StateObject {
         StateObject {
             balance,
@@ -111,10 +111,10 @@ impl StateObject {
             code_state: CodeState::Clean,
             storage_changes: HashMap::new(),
             storage_cache: RefCell::new(LruCache::new(STORAGE_CACHE_ITEMS)),
-            original_storage_cache: if original_storage_root.is_none() || original_storage_root.unwrap() == KECCAK_NULL_RLP {
+            original_storage_cache: if original_storage_root == KECCAK_NULL_RLP {
                 None
             } else {
-                Some((original_storage_root.unwrap(), Self::empty_storage_cache()))
+                Some((original_storage_root, Self::empty_storage_cache()))
             },
         }
     }
