@@ -1,6 +1,4 @@
-use cita_trie::codec::RLPNodeCodec;
 use cita_trie::db::DB;
-use cita_trie::trie::{PatriciaTrie, Trie};
 use ethereum_types::{H256, U256};
 use keccak_hash::{keccak, KECCAK_EMPTY, KECCAK_NULL_RLP};
 use lru_cache::LruCache;
@@ -113,9 +111,7 @@ impl StateObject {
             code_state: CodeState::Clean,
             storage_changes: HashMap::new(),
             storage_cache: RefCell::new(LruCache::new(STORAGE_CACHE_ITEMS)),
-            original_storage_cache: if original_storage_root.is_none()
-                || original_storage_root.unwrap() == KECCAK_NULL_RLP
-            {
+            original_storage_cache: if original_storage_root.is_none() || original_storage_root.unwrap() == KECCAK_NULL_RLP {
                 None
             } else {
                 Some((original_storage_root.unwrap(), Self::empty_storage_cache()))
@@ -134,12 +130,12 @@ impl StateObject {
         self.code_state = CodeState::Dirty;
     }
 
-    pub fn balance(&self) -> U256 {
-        self.balance.clone()
+    pub fn balance(&self) -> &U256 {
+        &self.balance
     }
 
-    pub fn nonce(&self) -> U256 {
-        self.nonce.clone()
+    pub fn nonce(&self) -> &U256 {
+        &self.nonce
     }
 
     pub fn code(&self) -> Option<Bytes> {
@@ -185,19 +181,18 @@ impl StateObject {
         self.storage_changes.is_empty()
     }
 
-    pub fn inc_nonce(&mut self) {
+    pub fn increase_nonce(&mut self) {
         self.nonce = self.nonce + U256::from(1u8);
     }
 
-    pub fn add_balance(&mut self, x: U256) {
-        self.balance = self.balance.saturating_add(x);
+    pub fn add_balance(&mut self, x: &U256) {
+        self.balance = self.balance.saturating_add(*x);
     }
 
-    pub fn sub_balance(&mut self, x: U256) {
-        self.balance = self.balance.saturating_sub(x);
+    pub fn sub_balance(&mut self, x: &U256) {
+        self.balance = self.balance.saturating_sub(*x);
     }
 
-    /// Return the account's storage root or None if no storage changes
     pub fn storage_root(&self) -> Option<H256> {
         if self.storage_changes_is_null() {
             Some(self.storage_root)
@@ -214,16 +209,6 @@ impl StateObject {
         &self.storage_changes
     }
 
-    pub fn storage_at<B: DB>(&mut self, key: &H256, db: &mut B) -> Option<H256> {
-        if let Some(value) = self.cached_storage_at(key) {
-            return Some(value);
-        }
-        if let Some(value) = self.trie_storage_at(db, key) {
-            return Some(value);
-        }
-        None
-    }
-
     pub fn cached_storage_at(&self, key: &H256) -> Option<H256> {
         if let Some(value) = self.storage_changes.get(key) {
             return Some(*value);
@@ -236,10 +221,7 @@ impl StateObject {
     }
 
     pub fn trie_storage_at<B: DB>(&mut self, db: &mut B, key: &H256) -> Option<H256> {
-        // TODO: Fix all usage of unwrap(), avoid exceptional panic!!
-        let mut trie =
-            PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap();
-        let value = trie.get(key).unwrap().unwrap();
+        let value = db.get(key).unwrap().unwrap();
 
         self.storage_cache
             .borrow_mut()
@@ -248,14 +230,11 @@ impl StateObject {
     }
 
     pub fn commit_storage<B: DB>(&mut self, db: &mut B) {
-        let mut trie =
-            PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0).unwrap();
-
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
-                trie.remove(&k);
+                db.remove(&k);
             } else {
-                trie.insert(&k, &v);
+                db.insert(&k, &v);
             }
             self.storage_cache.borrow_mut().insert(k, k);
         }
