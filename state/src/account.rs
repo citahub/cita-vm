@@ -278,8 +278,8 @@ impl StateObject {
 
     pub fn rlp(&self) -> Vec<u8> {
         let mut stream = RlpStream::new_list(4);
-        stream.append(&self.nonce);
         stream.append(&self.balance);
+        stream.append(&self.nonce);
         stream.append(&self.storage_root);
         stream.append(&self.code_hash);
         stream.out()
