@@ -700,7 +700,7 @@ mod tests {
     #[test]
     fn checkpoint_create_contract_fail() {
         let state = get_temp_state();
-        let orig_root = state.drop().0.clone();
+        let orig_root = state.drop().0;
         let a: Address = 1000.into();
 
         let mut state = get_temp_state();
@@ -713,6 +713,6 @@ mod tests {
         state.revert_checkpoint(); // revert to c1
         assert_eq!(state.exist(&a), false);
         state.commit().unwrap();
-        assert_eq!(orig_root, state.drop().0.clone());
+        assert_eq!(orig_root, state.drop().0);
     }
 }

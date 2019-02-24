@@ -23,6 +23,7 @@ jobs:
       name: UnitTest
       script:
         - cd evm && cargo test
+        - cd ../state && cargo test
     - stage: Test
       name: IntegrationTest
       script:
