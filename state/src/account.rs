@@ -167,6 +167,7 @@ impl StateObject {
 
     pub fn add_balance(&mut self, x: U256) {
         let (a, b) = self.balance.overflowing_add(x);
+        // overflow is not allowed at state_object.
         assert_eq!(b, false);
         self.balance = a;
     }
