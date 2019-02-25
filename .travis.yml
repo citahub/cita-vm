@@ -22,8 +22,8 @@ jobs:
     - stage: Test
       name: UnitTest
       script:
-        - cd evm && cargo test
-        - cd ../state && cargo test
+        - cd evm && cargo test && cd ..
+        - cd state && cargo test && cd ..
     - stage: Test
       name: IntegrationTest
       script:

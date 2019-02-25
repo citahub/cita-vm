@@ -19,6 +19,7 @@ pub struct State<B> {
 }
 
 impl<B: DB> State<B> {
+    /// Creates empty state for test.
     pub fn new(mut db: B) -> State<B> {
         let mut trie = PatriciaTrie::new(&mut db, RLPNodeCodec::default());
         let root = trie.root().unwrap();
@@ -92,7 +93,7 @@ impl<B: DB> State<B> {
             .or(Err(Error::TrieError))?;
         match trie.get(&address) {
             Ok(Some(rlp)) => {
-                let state_object = StateObject::from_rlp(&rlp).unwrap();
+                let state_object = StateObject::from_rlp(&rlp)?;
                 self.insert_cache(
                     address,
                     StateObjectEntry::new_clean(Some(state_object.clone_clean())),
@@ -101,7 +102,7 @@ impl<B: DB> State<B> {
             }
             Ok(None) => {
                 // this state object is not exist in patriciaTrie, maybe you need to crate a new contract
-                Err(Error::DBError)
+                Err(Error::AccountNotExist)
             }
             Err(_) => Err(Error::TrieError),
         }
@@ -114,13 +115,17 @@ impl<B: DB> State<B> {
                 let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)
                     .or(Err(Error::TrieError))?;
                 match trie.get(&address) {
-                    Ok(rlp) => {
-                        let mut state_object = StateObject::from_rlp(&rlp.unwrap()).unwrap();
+                    Ok(Some(rlp)) => {
+                        let mut state_object = StateObject::from_rlp(&rlp)?;
                         state_object.set_storage(key, value);
                         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
                     }
+                    Ok(None) => {
+                        // this state object is not exist in patriciaTrie, maybe you need to crate a new contract
+                        return Err(Error::AccountNotExist);
+                    }
                     Err(_err) => {
-                        panic!("this state object is not exist in patriciaTrie.");
+                        return Err(Error::TrieError);
                     }
                 }
             }
@@ -190,11 +195,11 @@ impl<B: DB> State<B> {
                         .or(Err(Error::TrieReConstructFailed))?;
                 }
                 None => {
-                    trie.remove(address).unwrap();
+                    trie.remove(address).or(Err(Error::TrieError))?;
                 }
             }
         }
-        self.root = From::from(&trie.root().unwrap()[..]);
+        self.root = From::from(&trie.root().or(Err(Error::TrieError))?[..]);
         Ok(())
     }
 
@@ -307,19 +312,14 @@ impl<B: DB> StateObjectInfo for State<B> {
                 if let Some(value) = state_object.get_storage_at_changes(key) {
                     return Some(value);
                 }
-                if let Some(value) = state_object
-                    .get_storage_at_backend(&mut self.db, key)
-                    .unwrap()
-                {
+                if let Ok(Some(value)) = state_object.get_storage_at_backend(&mut self.db, key) {
                     return Some(value);
                 }
+                return None;
             }
-            Err(Error::DBError) => {
+            Err(_) => {
                 // This account never exist, create one.
                 self.new_contract(a, U256::from(0u64), U256::from(0u64), None);
-            }
-            Err(_err) => {
-                unimplemented!();
             }
         }
         None
@@ -327,7 +327,9 @@ impl<B: DB> StateObjectInfo for State<B> {
 
     fn code(&mut self, a: &Address) -> Option<Vec<u8>> {
         if let Ok(mut state_object) = self.get_state_object(a) {
-            return Some(state_object.read_code(&mut self.db).unwrap());
+            if let Ok(code) = state_object.read_code(&mut self.db) {
+                return Some(code);
+            }
         }
         None
     }
@@ -624,7 +626,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn ensure_cached() {
         let mut state = get_temp_state();
         let a = Address::zero();
@@ -633,7 +634,7 @@ mod tests {
         let (root, _db) = state.drop();
         assert_eq!(
             root,
-            "0ce23f3c809de377b008a4a3ee94a0834aac8bec1f86e28ffe4fdb5a15b0c785".into()
+            "3d019704df60561fb4ead78a6464021016353c761f2699851994e729ab95ef80".into()
         );
     }
 
