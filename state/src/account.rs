@@ -344,7 +344,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn state_object_storage_2() {
         let mut a = StateObject::new(69u8.into(), 0.into());
         let mut db = cita_trie::db::MemoryDB::new();
