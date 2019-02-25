@@ -97,7 +97,7 @@ impl StateObject {
     /// Create a new account from rlp bytes.
     /// Note: make sure you use `read_code` after this.
     pub fn from_rlp(data: &[u8]) -> Result<StateObject, Error> {
-        let account: Account = rlp::decode(data).or(Err(Error::InvalidRLP))?;
+        let account: Account = rlp::decode(data)?;
         Ok(account.into())
     }
 
@@ -130,7 +130,7 @@ impl StateObject {
         }
         let c = db
             .get(&self.code_hash)
-            .or(Err(Error::DBError))?
+            .or_else(|e| Err(Error::DB(format!("{}", e))))?
             .unwrap_or_else(|| vec![]);
         self.code = c.clone();
         self.code_size = c.len();
@@ -187,20 +187,15 @@ impl StateObject {
         key: &H256,
     ) -> Result<Option<H256>, Error> {
         let trie = PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0)
-            .or(Err(Error::DBError))?;
-        if let Ok(a) = trie.get(key) {
-            if let Some(b) = a {
-                return Ok(Some(From::from(&b[..])));
-            }
+            .or_else(|e| Err(Error::DB(format!("{}", e))))?;
+        if let Some(b) = trie.get(key)? {
+            return Ok(Some(From::from(&b[..])));
         }
         Ok(None)
     }
 
     pub fn get_storage_at_changes(&self, key: &H256) -> Option<H256> {
-        if let Some(value) = self.storage_changes.get(key) {
-            return Some(*value);
-        }
-        None
+        self.storage_changes.get(key).and_then(|e| Some(*e))
     }
 
     pub fn get_storage<B: DB>(&mut self, db: &mut B, key: &H256) -> Result<Option<H256>, Error> {
@@ -217,17 +212,16 @@ impl StateObject {
         let mut trie = if self.storage_root == SHA3_NULL_RLP {
             PatriciaTrie::new(db, RLPNodeCodec::default())
         } else {
-            PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0)
-                .or(Err(Error::TrieReConstructFailed))?
+            PatriciaTrie::from(db, RLPNodeCodec::default(), &self.storage_root.0)?
         };
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
-                trie.remove(&k).or(Err(Error::TrieReConstructFailed))?;
+                trie.remove(&k)?;
             } else {
-                trie.insert(&k, &v).or(Err(Error::TrieReConstructFailed))?;
+                trie.insert(&k, &v)?;
             }
         }
-        self.storage_root = trie.root().or(Err(Error::TrieReConstructFailed))?.into();
+        self.storage_root = trie.root()?.into();
         Ok(())
     }
 
@@ -239,7 +233,7 @@ impl StateObject {
             }
             (true, false) => {
                 db.insert(&self.code_hash, &self.code)
-                    .or(Err(Error::DBError))?;
+                    .or_else(|e| Err(Error::DB(format!("{}", e))))?;
                 self.code_size = self.code.len();
                 self.code_state = CodeState::Clean;
             }

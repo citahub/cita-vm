@@ -35,8 +35,11 @@ impl<B: DB> State<B> {
 
     /// Creates new state with existing state root
     pub fn from_existing(db: B, root: H256) -> Result<State<B>, Error> {
-        if !db.contains(&root.0[..]).or(Err(Error::InvalidStateRoot))? {
-            return Err(Error::InvalidStateRoot);
+        if !db
+            .contains(&root.0[..])
+            .or_else(|e| Err(Error::DB(format!("{}", e))))?
+        {
+            return Err(Error::KeyNotFound);
         }
         Ok(State {
             db,
@@ -74,10 +77,7 @@ impl<B: DB> State<B> {
     }
 
     pub fn exist(&mut self, a: &Address) -> bool {
-        if let Ok(_state_object) = self.get_state_object(a) {
-            return true;
-        }
-        false
+        self.get_state_object(a).ok().is_some()
     }
 
     /// Get state object
@@ -88,11 +88,9 @@ impl<B: DB> State<B> {
                 return Ok((*state_object).clone_dirty());
             }
         }
-
-        let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)
-            .or(Err(Error::TrieError))?;
-        match trie.get(&address) {
-            Ok(Some(rlp)) => {
+        let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)?;
+        match trie.get(&address)? {
+            Some(rlp) => {
                 let state_object = StateObject::from_rlp(&rlp)?;
                 self.insert_cache(
                     address,
@@ -100,11 +98,7 @@ impl<B: DB> State<B> {
                 );
                 Ok(state_object)
             }
-            Ok(None) => {
-                // this state object is not exist in patriciaTrie, maybe you need to crate a new contract
-                Err(Error::AccountNotExist)
-            }
-            Err(_) => Err(Error::TrieError),
+            None => Err(Error::KeyNotFound),
         }
     }
 
@@ -112,20 +106,15 @@ impl<B: DB> State<B> {
         if self.storage_at(address, &key) != Some(value) {
             let contain_key = self.cache.borrow().contains_key(address);
             if !contain_key {
-                let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)
-                    .or(Err(Error::TrieError))?;
-                match trie.get(&address) {
-                    Ok(Some(rlp)) => {
+                let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)?;
+                match trie.get(&address)? {
+                    Some(rlp) => {
                         let mut state_object = StateObject::from_rlp(&rlp)?;
                         state_object.set_storage(key, value);
                         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
                     }
-                    Ok(None) => {
-                        // this state object is not exist in patriciaTrie, maybe you need to crate a new contract
-                        return Err(Error::AccountNotExist);
-                    }
-                    Err(_err) => {
-                        return Err(Error::TrieError);
+                    None => {
+                        return Err(Error::KeyNotFound);
                     }
                 }
             }
@@ -171,17 +160,15 @@ impl<B: DB> State<B> {
             if let Some(ref mut state_object) = entry.state_object {
                 state_object
                     .commit_storage(&mut self.db)
-                    .or(Err(Error::DBError))?;
+                    .or_else(|e| Err(Error::DB(format!("{}", e))))?;;
                 state_object
                     .commit_code(&mut self.db)
-                    .or(Err(Error::DBError))?;
+                    .or_else(|e| Err(Error::DB(format!("{}", e))))?;;
             }
         }
 
         // secondly, update the whold state tree
-        let mut trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)
-            .or(Err(Error::TrieError))?;
-
+        let mut trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)?;
         for (address, entry) in self
             .cache
             .borrow_mut()
@@ -191,15 +178,14 @@ impl<B: DB> State<B> {
             entry.status = ObjectStatus::Committed;
             match entry.state_object {
                 Some(ref mut state_object) => {
-                    trie.insert(address, &rlp::encode(&state_object.account()))
-                        .or(Err(Error::TrieReConstructFailed))?;
+                    trie.insert(address, &rlp::encode(&state_object.account()))?;
                 }
                 None => {
-                    trie.remove(address).or(Err(Error::TrieError))?;
+                    trie.remove(address)?;
                 }
             }
         }
-        self.root = From::from(&trie.root().or(Err(Error::TrieError))?[..]);
+        self.root = From::from(&trie.root()?[..]);
         Ok(())
     }
 
@@ -278,17 +264,17 @@ pub trait StateObjectInfo {
 
     fn code_size(&mut self, a: &Address) -> Option<usize>;
 
-    fn add_balance(&mut self, a: &Address, incr: U256);
+    fn add_balance(&mut self, a: &Address, incr: U256) -> Result<(), Error>;
 
-    fn sub_balance(&mut self, a: &Address, decr: U256);
+    fn sub_balance(&mut self, a: &Address, decr: U256) -> Result<(), Error>;
 
-    fn transfer_balance(&mut self, from: &Address, to: &Address, by: U256);
+    fn transfer_balance(&mut self, from: &Address, to: &Address, by: U256) -> Result<(), Error>;
 
-    fn inc_nonce(&mut self, a: &Address);
+    fn inc_nonce(&mut self, a: &Address) -> Result<(), Error>;
 
-    fn add_refund(&mut self, address: &Address, n: u64);
+    fn add_refund(&mut self, address: &Address, n: u64) -> Result<(), Error>;
 
-    fn sub_refund(&mut self, address: &Address, n: u64);
+    fn sub_refund(&mut self, address: &Address, n: u64) -> Result<(), Error>;
 }
 
 impl<B: DB> StateObjectInfo for State<B> {
@@ -366,87 +352,93 @@ impl<B: DB> StateObjectInfo for State<B> {
         None
     }
 
-    fn add_balance(&mut self, a: &Address, incr: U256) {
-        if let false = incr.is_zero() {
-            match self.get_state_object(a) {
-                Ok(mut state_object) => {
-                    state_object.add_balance(incr);
-                    self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
-                }
-                Err(_) => {
-                    // This account never exist, create one.
-                    self.new_contract(a, incr, U256::from(0), None);
-                }
-            }
+    fn add_balance(&mut self, a: &Address, incr: U256) -> Result<(), Error> {
+        if incr.is_zero() {
+            return Ok(());
         }
-    }
-
-    fn sub_balance(&mut self, a: &Address, decr: U256) {
-        if let false = decr.is_zero() {
-            match self.get_state_object(a) {
-                Ok(mut state_object) => {
-                    state_object.sub_balance(decr);
-                    self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
-                }
-                Err(_err) => {
-                    unimplemented!();
-                }
+        match self.get_state_object(a) {
+            Ok(mut state_object) => {
+                state_object.add_balance(incr);
+                self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
             }
+            Err(Error::KeyNotFound) => {
+                self.new_contract(a, incr, U256::from(0), None);
+            }
+            Err(e) => return Err(e),
         }
+        Ok(())
     }
 
-    fn transfer_balance(&mut self, from: &Address, to: &Address, by: U256) {
-        self.sub_balance(from, by);
-        self.add_balance(to, by);
+    fn sub_balance(&mut self, a: &Address, decr: U256) -> Result<(), Error> {
+        if decr.is_zero() {
+            return Ok(());
+        }
+
+        match self.get_state_object(a) {
+            Ok(mut state_object) => {
+                state_object.sub_balance(decr);
+                self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
+            }
+            Err(e) => return Err(e),
+        }
+        Ok(())
     }
 
-    fn add_refund(&mut self, address: &Address, n: u64) {
+    fn transfer_balance(&mut self, from: &Address, to: &Address, by: U256) -> Result<(), Error> {
+        self.sub_balance(from, by)?;
+        self.add_balance(to, by)?;
+        Ok(())
+    }
+
+    fn add_refund(&mut self, address: &Address, n: u64) -> Result<(), Error> {
         match self.get_state_object(address) {
             Ok(mut state_object) => {
                 state_object.add_balance(U256::from(n));
                 self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)))
             }
-            Err(_) => {
-                // This account never exist, create one.
-                self.new_contract(address, U256::from(n), U256::from(0), None);
+            Err(Error::KeyNotFound) => {
+                self.new_contract(address, U256::from(0), U256::from(0), None);
             }
+            Err(e) => return Err(e),
         }
 
         self.refund
             .entry(*address)
             .and_modify(|v| *v += n)
             .or_insert(n);
+        Ok(())
     }
 
-    fn sub_refund(&mut self, address: &Address, n: u64) {
+    fn sub_refund(&mut self, address: &Address, n: u64) -> Result<(), Error> {
         match self.get_state_object(address) {
             Ok(mut state_object) => {
                 state_object.sub_balance(U256::from(n));
                 self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)))
             }
-            Err(_) => {
-                // This account never exist, create one.
-                self.new_contract(address, U256::from(n), U256::from(0), None);
+            Err(Error::KeyNotFound) => {
+                self.new_contract(address, U256::from(0), U256::from(0), None);
             }
+            Err(e) => return Err(e),
         }
-
         self.refund
             .entry(*address)
             .and_modify(|v| *v -= n)
             .or_insert(n);
+        Ok(())
     }
 
-    fn inc_nonce(&mut self, a: &Address) {
+    fn inc_nonce(&mut self, a: &Address) -> Result<(), Error> {
         match self.get_state_object(a) {
             Ok(mut state_object) => {
                 state_object.inc_nonce();
                 self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)))
             }
-            Err(_) => {
-                // This account never exist, create one.
+            Err(Error::KeyNotFound) => {
                 self.new_contract(a, U256::from(0), U256::from(1), None);
             }
+            Err(e) => return Err(e),
         }
+        Ok(())
     }
 }
 
@@ -522,8 +514,8 @@ mod tests {
         let a = Address::zero();
         let (root, db) = {
             let mut state = get_temp_state();
-            state.inc_nonce(&a);
-            state.add_balance(&a, U256::from(69u64));
+            state.inc_nonce(&a).unwrap();
+            state.add_balance(&a, U256::from(69u64)).unwrap();
             state.commit().unwrap();
             assert_eq!(state.balance(&a).unwrap(), U256::from(69u64));
             assert_eq!(state.nonce(&a).unwrap(), U256::from(1u64));
@@ -540,7 +532,7 @@ mod tests {
         let a = Address::zero();
         let mut state = get_temp_state();
         assert_eq!(state.exist(&a), false);
-        state.inc_nonce(&a);
+        state.inc_nonce(&a).unwrap();
         assert_eq!(state.exist(&a), true);
         assert_eq!(state.nonce(&a).unwrap(), U256::from(1u64));
         state.kill_contract(&a);
@@ -553,7 +545,7 @@ mod tests {
         let a = Address::zero();
         let (root, db) = {
             let mut state = get_temp_state();
-            state.add_balance(&a, U256::from(69u64));
+            state.add_balance(&a, U256::from(69u64)).unwrap();
             state.commit().unwrap();
             state.drop()
         };
@@ -580,17 +572,17 @@ mod tests {
         let a = Address::zero();
         let b: Address = 1u64.into();
 
-        state.add_balance(&a, U256::from(69u64));
+        state.add_balance(&a, U256::from(69u64)).unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(69u64));
         state.commit().unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(69u64));
 
-        state.sub_balance(&a, U256::from(42u64));
+        state.sub_balance(&a, U256::from(42u64)).unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(27u64));
         state.commit().unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(27u64));
 
-        state.transfer_balance(&a, &b, U256::from(18));
+        state.transfer_balance(&a, &b, U256::from(18)).unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(9u64));
         assert_eq!(state.balance(&b).unwrap(), U256::from(18u64));
         state.commit().unwrap();
@@ -602,13 +594,13 @@ mod tests {
     fn alter_nonce() {
         let mut state = get_temp_state();
         let a = Address::zero();
-        state.inc_nonce(&a);
+        state.inc_nonce(&a).unwrap();
         assert_eq!(state.nonce(&a).unwrap(), U256::from(1u64));
-        state.inc_nonce(&a);
+        state.inc_nonce(&a).unwrap();
         assert_eq!(state.nonce(&a).unwrap(), U256::from(2u64));
         state.commit().unwrap();
         assert_eq!(state.nonce(&a).unwrap(), U256::from(2u64));
-        state.inc_nonce(&a);
+        state.inc_nonce(&a).unwrap();
         assert_eq!(state.nonce(&a).unwrap(), U256::from(3u64));
         state.commit().unwrap();
         assert_eq!(state.nonce(&a).unwrap(), U256::from(3u64));
@@ -644,13 +636,13 @@ mod tests {
         let a = Address::zero();
 
         state.checkpoint();
-        state.add_balance(&a, U256::from(69u64));
+        state.add_balance(&a, U256::from(69u64)).unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(69u64));
         state.discard_checkpoint();
         assert_eq!(state.balance(&a).unwrap(), U256::from(69u64));
 
         state.checkpoint();
-        state.add_balance(&a, U256::from(1u64));
+        state.add_balance(&a, U256::from(1u64)).unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(70u64));
         state.revert_checkpoint();
         assert_eq!(state.balance(&a).unwrap(), U256::from(69u64));
@@ -662,7 +654,7 @@ mod tests {
         let a = Address::zero();
         state.checkpoint();
         state.checkpoint();
-        state.add_balance(&a, U256::from(69u64));
+        state.add_balance(&a, U256::from(69u64)).unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(69u64));
         state.discard_checkpoint();
         assert_eq!(state.balance(&a).unwrap(), U256::from(69u64));
@@ -707,9 +699,9 @@ mod tests {
         let mut state = get_temp_state();
         state.checkpoint(); // c1
         state.new_contract(&a, U256::zero(), U256::zero(), None);
-        state.add_balance(&a, U256::from(1));
+        state.add_balance(&a, U256::from(1)).unwrap();
         state.checkpoint(); // c2
-        state.add_balance(&a, U256::from(1));
+        state.add_balance(&a, U256::from(1)).unwrap();
         state.discard_checkpoint(); // discard c2
         state.revert_checkpoint(); // revert to c1
         assert_eq!(state.exist(&a), false);

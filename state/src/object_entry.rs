@@ -46,7 +46,6 @@ impl StateObjectEntry {
         self.status = other.status;
         match other.state_object {
             Some(acc) => {
-                println!("merge ...");
                 if let Some(ref mut ours) = self.state_object {
                     ours.merge(acc);
                 }
