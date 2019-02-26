@@ -4,7 +4,6 @@ pub enum Error {
     RLP(rlp::DecoderError),
     DB(String),
     KeyNotFound,
-    NotInCache,
 }
 
 impl std::error::Error for Error {}
@@ -15,7 +14,6 @@ impl std::fmt::Display for Error {
             Error::RLP(e) => return write!(f, "state rlp: {}", e),
             Error::DB(e) => return write!(f, "state db: {}", e),
             Error::KeyNotFound => return write!(f, "state: key not found"),
-            Error::NotInCache => return write!(f, "state: key not in cache"),
         }
     }
 }

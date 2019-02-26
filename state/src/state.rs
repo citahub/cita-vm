@@ -84,7 +84,8 @@ impl<B: DB> State<B> {
         let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)?;
         match trie.get(&address)? {
             Some(rlp) => {
-                let state_object = StateObject::from_rlp(&rlp)?;
+                let mut state_object = StateObject::from_rlp(&rlp)?;
+                state_object.read_code(&mut self.db)?;
                 self.insert_cache(
                     address,
                     StateObjectEntry::new_clean(Some(state_object.clone_clean())),
@@ -107,6 +108,7 @@ impl<B: DB> State<B> {
                 match trie.get(&address)? {
                     Some(rlp) => {
                         let mut state_object = StateObject::from_rlp(&rlp)?;
+                        state_object.read_code(&mut self.db)?;
                         state_object.set_storage(key, value);
                         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
                     }
@@ -124,7 +126,7 @@ impl<B: DB> State<B> {
                     state_object.set_storage(key, value);
                     state_object_entry.status = ObjectStatus::Dirty;
                 }
-                None => return Err(Error::NotInCache),
+                None => panic!("state object always exist in cache."),
             }
         }
         Ok(())
@@ -301,8 +303,8 @@ impl<B: DB> StateObjectInfo for State<B> {
     }
 
     fn code(&mut self, a: &Address) -> Result<Vec<u8>, Error> {
-        if let Some(mut state_object) = self.get_state_object(a)? {
-            return Ok(state_object.read_code(&mut self.db)?);
+        if let Some(state_object) = self.get_state_object(a)? {
+            return Ok(state_object.code());
         }
         Ok(vec![])
     }
@@ -323,16 +325,14 @@ impl<B: DB> StateObjectInfo for State<B> {
     }
 
     fn code_hash(&mut self, a: &Address) -> Result<H256, Error> {
-        if let Some(mut state_object) = self.get_state_object(a)? {
-            let _ = state_object.read_code(&mut self.db)?;
+        if let Some(state_object) = self.get_state_object(a)? {
             return Ok(state_object.code_hash());
         }
         Ok(H256::zero())
     }
 
     fn code_size(&mut self, a: &Address) -> Result<usize, Error> {
-        if let Some(mut state_object) = self.get_state_object(a)? {
-            let _ = state_object.read_code(&mut self.db)?;
+        if let Some(state_object) = self.get_state_object(a)? {
             return Ok(state_object.code_size());
         }
         Ok(0)

@@ -115,18 +115,15 @@ impl StateObject {
     }
 
     pub fn init_code(&mut self, code: Vec<u8>) {
-        self.code = code.clone();
-        self.code_hash = From::from(&Sha3_256::digest(&code)[..]);
-        self.code_size = code.len();
+        self.code = code;
+        self.code_hash = From::from(&Sha3_256::digest(&self.code)[..]);
+        self.code_size = self.code.len();
         self.code_state = CodeState::Dirty;
     }
 
-    pub fn read_code<B: DB>(&mut self, db: &mut B) -> Result<Vec<u8>, Error> {
+    pub fn read_code<B: DB>(&mut self, db: &mut B) -> Result<(), Error> {
         if self.code_hash == SHA3_EMPTY {
-            return Ok(vec![]);
-        }
-        if !self.code.is_empty() {
-            return Ok(self.code.clone());
+            return Ok(());
         }
         let c = db
             .get(&self.code_hash)
@@ -135,7 +132,7 @@ impl StateObject {
         self.code = c.clone();
         self.code_size = c.len();
         self.code_state = CodeState::Clean;
-        Ok(c)
+        Ok(())
     }
 
     pub fn balance(&self) -> U256 {
@@ -146,11 +143,8 @@ impl StateObject {
         self.nonce
     }
 
-    pub fn code(&self) -> Option<Vec<u8>> {
-        if self.code.is_empty() {
-            return None;
-        }
-        Some(self.code.clone())
+    pub fn code(&self) -> Vec<u8> {
+        self.code.clone()
     }
 
     pub fn code_hash(&self) -> H256 {
