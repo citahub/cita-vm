@@ -129,8 +129,8 @@ impl StateObject {
             .get(&self.code_hash)
             .or_else(|e| Err(Error::DB(format!("{}", e))))?
             .unwrap_or_else(|| vec![]);
-        self.code = c.clone();
-        self.code_size = c.len();
+        self.code = c;
+        self.code_size = self.code.len();
         self.code_state = CodeState::Clean;
         Ok(())
     }

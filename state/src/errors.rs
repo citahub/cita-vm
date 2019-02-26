@@ -3,7 +3,7 @@ pub enum Error {
     Trie(String),
     RLP(rlp::DecoderError),
     DB(String),
-    KeyNotFound,
+    NotFound,
 }
 
 impl std::error::Error for Error {}
@@ -13,7 +13,7 @@ impl std::fmt::Display for Error {
             Error::Trie(e) => return write!(f, "state trie: {}", e),
             Error::RLP(e) => return write!(f, "state rlp: {}", e),
             Error::DB(e) => return write!(f, "state db: {}", e),
-            Error::KeyNotFound => return write!(f, "state: key not found"),
+            Error::NotFound => return write!(f, "state: not found"),
         }
     }
 }

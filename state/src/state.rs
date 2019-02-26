@@ -37,7 +37,7 @@ impl<B: DB> State<B> {
             .contains(&root.0[..])
             .or_else(|e| Err(Error::DB(format!("{}", e))))?
         {
-            return Err(Error::KeyNotFound);
+            return Err(Error::NotFound);
         }
         Ok(State {
             db,
@@ -48,6 +48,7 @@ impl<B: DB> State<B> {
     }
 
     /// Create a contract account with code or not
+    /// Overwrite the code if the contract already exists
     pub fn new_contract(
         &mut self,
         contract: &Address,
@@ -69,8 +70,13 @@ impl<B: DB> State<B> {
         self.insert_cache(contract, StateObjectEntry::new_dirty(None));
     }
 
-    pub fn drop(self) -> (H256, B) {
-        (self.root, self.db)
+    /// Clear cache
+    /// Note that the cache is just a HashMap, so memory explosion will be
+    /// happend if you never call `clear()`. You should decide for yourself
+    /// when to call this function.
+    pub fn clear(&mut self) {
+        assert!(self.checkpoints.borrow().is_empty());
+        self.cache.borrow_mut().clear();
     }
 
     /// Get state object
@@ -96,30 +102,29 @@ impl<B: DB> State<B> {
         }
     }
 
+    /// Get state object from cache or trie.
+    /// If not exist, create one and then insert into cache.
+    pub fn get_state_object_or_default(&mut self, address: &Address) -> Result<StateObject, Error> {
+        match self.get_state_object(address)? {
+            Some(state_object) => Ok(state_object),
+            None => {
+                let state_object = self.new_contract(address, U256::zero(), U256::zero(), None);
+                Ok(state_object)
+            }
+        }
+    }
+
     pub fn exist(&mut self, a: &Address) -> Result<bool, Error> {
         Ok(self.get_state_object(a)?.is_some())
     }
 
     pub fn set_storage(&mut self, address: &Address, key: H256, value: H256) -> Result<(), Error> {
-        if self.storage_at(address, &key)? != value {
-            let contain_key = self.cache.borrow().contains_key(address);
-            if !contain_key {
-                let trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)?;
-                match trie.get(&address)? {
-                    Some(rlp) => {
-                        let mut state_object = StateObject::from_rlp(&rlp)?;
-                        state_object.read_code(&mut self.db)?;
-                        state_object.set_storage(key, value);
-                        self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
-                    }
-                    None => {
-                        return Err(Error::KeyNotFound);
-                    }
-                }
-            }
+        let mut state_object = self.get_state_object_or_default(address)?;
+        if state_object.get_storage(&mut self.db, &key)? == Some(value) {
+            return Ok(());
         }
-        self.add_checkpoint(address);
 
+        self.add_checkpoint(address);
         if let Some(ref mut state_object_entry) = self.cache.borrow_mut().get_mut(address) {
             match state_object_entry.state_object {
                 Some(ref mut state_object) => {
@@ -132,7 +137,7 @@ impl<B: DB> State<B> {
         Ok(())
     }
 
-    pub fn insert_cache(&self, address: &Address, state_object_entry: StateObjectEntry) {
+    fn insert_cache(&self, address: &Address, state_object_entry: StateObjectEntry) {
         let is_dirty = state_object_entry.is_dirty();
         let old_entry = self
             .cache
@@ -162,7 +167,7 @@ impl<B: DB> State<B> {
             }
         }
 
-        // secondly, update the whold state tree
+        // secondly, update the world state tree
         let mut trie = PatriciaTrie::from(&mut self.db, RLPNodeCodec::default(), &self.root.0)?;
         for (address, entry) in self
             .cache
@@ -184,6 +189,7 @@ impl<B: DB> State<B> {
         Ok(())
     }
 
+    /// Create a recoverable checkpoint of this state. Return the checkpoint index.
     pub fn checkpoint(&mut self) -> usize {
         let mut checkpoints = self.checkpoints.borrow_mut();
         let index = checkpoints.len();
@@ -202,7 +208,7 @@ impl<B: DB> State<B> {
         }
     }
 
-    // If the transaction if executed successfully
+    /// Merge last checkpoint with previous.
     pub fn discard_checkpoint(&mut self) {
         let last = self.checkpoints.borrow_mut().pop();
         if let Some(mut checkpoint) = last {
@@ -218,13 +224,15 @@ impl<B: DB> State<B> {
         }
     }
 
-    // If the transaction fails to execute
+    /// Revert to the last checkpoint and discard it.
     pub fn revert_checkpoint(&mut self) {
         if let Some(mut last) = self.checkpoints.borrow_mut().pop() {
             for (k, v) in last.drain() {
                 match v {
                     Some(v) => match self.cache.get_mut().entry(k) {
                         Entry::Occupied(mut e) => {
+                            // Merge checkpointed changes back into the main account
+                            // storage preserving the cache.
                             e.get_mut().merge(v);
                         }
                         Entry::Vacant(e) => {
@@ -249,7 +257,7 @@ pub trait StateObjectInfo {
 
     fn balance(&mut self, a: &Address) -> Result<U256, Error>;
 
-    fn storage_at(&mut self, a: &Address, key: &H256) -> Result<H256, Error>;
+    fn get_storage(&mut self, a: &Address, key: &H256) -> Result<H256, Error>;
 
     fn code(&mut self, a: &Address) -> Result<Vec<u8>, Error>;
 
@@ -270,87 +278,55 @@ pub trait StateObjectInfo {
 
 impl<B: DB> StateObjectInfo for State<B> {
     fn nonce(&mut self, a: &Address) -> Result<U256, Error> {
-        if let Some(state_object) = self.get_state_object(a)? {
-            return Ok(state_object.nonce());
-        }
-        Ok(U256::from(0))
+        Ok(self
+            .get_state_object(a)?
+            .map_or(U256::zero(), |e| e.nonce()))
     }
 
     fn balance(&mut self, a: &Address) -> Result<U256, Error> {
-        if let Some(state_object) = self.get_state_object(a)? {
-            return Ok(state_object.balance());
-        }
-        Ok(U256::from(0))
+        Ok(self
+            .get_state_object(a)?
+            .map_or(U256::zero(), |e| e.balance()))
     }
 
-    fn storage_at(&mut self, a: &Address, key: &H256) -> Result<H256, Error> {
+    fn get_storage(&mut self, a: &Address, key: &H256) -> Result<H256, Error> {
         match self.get_state_object(a)? {
-            Some(mut state_object) => {
-                if let Some(value) = state_object.get_storage_at_changes(key) {
-                    return Ok(value);
-                }
-                if let Some(value) = state_object.get_storage_at_backend(&mut self.db, key)? {
-                    return Ok(value);
-                }
-                Ok(H256::zero())
-            }
-            None => {
-                // This account never exist, create one.
-                self.new_contract(a, U256::from(0u64), U256::from(0u64), None);
-                Ok(H256::zero())
-            }
+            Some(mut state_object) => match state_object.get_storage(&mut self.db, key)? {
+                Some(v) => Ok(v),
+                None => Ok(H256::zero()),
+            },
+            None => Ok(H256::zero()),
         }
     }
 
     fn code(&mut self, a: &Address) -> Result<Vec<u8>, Error> {
-        if let Some(state_object) = self.get_state_object(a)? {
-            return Ok(state_object.code());
-        }
-        Ok(vec![])
+        Ok(self.get_state_object(a)?.map_or(vec![], |e| e.code()))
     }
 
     fn set_code(&mut self, a: &Address, code: Vec<u8>) -> Result<(), Error> {
-        match self.get_state_object(a)? {
-            Some(mut state_object) => {
-                self.add_checkpoint(&a);
-                state_object.init_code(code.clone());
-                self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
-                Ok(())
-            }
-            None => {
-                self.new_contract(a, U256::from(0), U256::from(0), Some(code));
-                Ok(())
-            }
-        }
+        let mut state_object = self.get_state_object_or_default(a)?;
+        state_object.init_code(code);
+        self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
+        Ok(())
     }
 
     fn code_hash(&mut self, a: &Address) -> Result<H256, Error> {
-        if let Some(state_object) = self.get_state_object(a)? {
-            return Ok(state_object.code_hash());
-        }
-        Ok(H256::zero())
+        Ok(self
+            .get_state_object(a)?
+            .map_or(H256::zero(), |e| e.code_hash()))
     }
 
     fn code_size(&mut self, a: &Address) -> Result<usize, Error> {
-        if let Some(state_object) = self.get_state_object(a)? {
-            return Ok(state_object.code_size());
-        }
-        Ok(0)
+        Ok(self.get_state_object(a)?.map_or(0, |e| e.code_size()))
     }
 
     fn add_balance(&mut self, a: &Address, incr: U256) -> Result<(), Error> {
         if incr.is_zero() {
             return Ok(());
         }
-        match self.get_state_object(a)? {
-            Some(mut state_object) => {
-                state_object.add_balance(incr);
-                self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
-            }
-            None => {
-                self.new_contract(a, incr, U256::from(0), None);
-            }
-        }
+        let mut state_object = self.get_state_object_or_default(a)?;
+        state_object.add_balance(incr);
+        self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
         Ok(())
     }
 
@@ -358,14 +334,9 @@ impl<B: DB> StateObjectInfo for State<B> {
         if decr.is_zero() {
             return Ok(());
         }
-
-        match self.get_state_object(a)? {
-            Some(mut state_object) => {
-                state_object.sub_balance(decr);
-                self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
-            }
-            None => return Err(Error::KeyNotFound),
-        }
+        let mut state_object = self.get_state_object_or_default(a)?;
+        state_object.sub_balance(decr);
+        self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
         Ok(())
     }
 
@@ -376,15 +347,9 @@ impl<B: DB> StateObjectInfo for State<B> {
     }
 
     fn inc_nonce(&mut self, a: &Address) -> Result<(), Error> {
-        match self.get_state_object(a)? {
-            Some(mut state_object) => {
-                state_object.inc_nonce();
-                self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)))
-            }
-            None => {
-                self.new_contract(a, U256::from(0), U256::from(1), None);
-            }
-        }
+        let mut state_object = self.get_state_object_or_default(a)?;
+        state_object.inc_nonce();
+        self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
         Ok(())
     }
 }
@@ -419,7 +384,7 @@ mod tests {
                 "0xfd1780a6fc9ee0dab26ceb4b3941ab03e66ccd970d1db91612c66df4515b0a0a".into()
             );
             assert_eq!(state.code_size(&a).unwrap(), 3);
-            state.drop()
+            (state.root, state.db)
         };
 
         let mut state = State::from_existing(db, root).unwrap();
@@ -432,7 +397,7 @@ mod tests {
     }
 
     #[test]
-    fn storage_at_from_datebase() {
+    fn get_storage_from_datebase() {
         let a = Address::zero();
         let (root, db) = {
             let mut state = get_temp_state();
@@ -444,13 +409,13 @@ mod tests {
                 )
                 .unwrap();
             state.commit().unwrap();
-            state.drop()
+            (state.root, state.db)
         };
 
         let mut state = State::from_existing(db, root).unwrap();
         assert_eq!(
             state
-                .storage_at(&a, &H256::from(&U256::from(1u64)))
+                .get_storage(&a, &H256::from(&U256::from(1u64)))
                 .unwrap(),
             H256::from(&U256::from(69u64))
         );
@@ -466,7 +431,7 @@ mod tests {
             state.commit().unwrap();
             assert_eq!(state.balance(&a).unwrap(), U256::from(69u64));
             assert_eq!(state.nonce(&a).unwrap(), U256::from(1u64));
-            state.drop()
+            (state.root, state.db)
         };
 
         let mut state = State::from_existing(db, root).unwrap();
@@ -494,7 +459,7 @@ mod tests {
             let mut state = get_temp_state();
             state.add_balance(&a, U256::from(69u64)).unwrap();
             state.commit().unwrap();
-            state.drop()
+            (state.root, state.db)
         };
 
         let (root, db) = {
@@ -505,7 +470,7 @@ mod tests {
             state.commit().unwrap();
             assert_eq!(state.exist(&a).unwrap(), false);
             assert_eq!(state.balance(&a).unwrap(), U256::from(0u64));
-            state.drop()
+            (state.root, state.db)
         };
 
         let mut state = State::from_existing(db, root).unwrap();
@@ -570,9 +535,8 @@ mod tests {
         let a = Address::zero();
         state.new_contract(&a, U256::from(0u64), U256::from(0u64), None);
         state.commit().unwrap();
-        let (root, _db) = state.drop();
         assert_eq!(
-            root,
+            state.root,
             "3d019704df60561fb4ead78a6464021016353c761f2699851994e729ab95ef80".into()
         );
     }
@@ -610,7 +574,7 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_revert_to_storage_at() {
+    fn checkpoint_revert_to_get_storage() {
         let mut state = get_temp_state();
         let a = Address::zero();
         let k = H256::from(U256::from(0));
@@ -618,9 +582,9 @@ mod tests {
         state.checkpoint();
         state.checkpoint();
         state.set_storage(&a, k, H256::from(1u64)).unwrap();
-        assert_eq!(state.storage_at(&a, &k).unwrap(), H256::from(1u64));
+        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from(1u64));
         state.revert_checkpoint();
-        assert!(state.storage_at(&a, &k).unwrap().is_zero());
+        assert!(state.get_storage(&a, &k).unwrap().is_zero());
     }
 
     #[test]
@@ -632,18 +596,20 @@ mod tests {
         state.set_storage(&a, k, H256::from(U256::from(1))).unwrap();
         state.checkpoint();
         state.kill_contract(&a);
-        assert!(state.storage_at(&a, &k).unwrap().is_zero());
+        assert!(state.get_storage(&a, &k).unwrap().is_zero());
         state.revert_checkpoint();
-        assert_eq!(state.storage_at(&a, &k).unwrap(), H256::from(U256::from(1)));
+        assert_eq!(
+            state.get_storage(&a, &k).unwrap(),
+            H256::from(U256::from(1))
+        );
     }
 
     #[test]
     fn checkpoint_create_contract_fail() {
-        let state = get_temp_state();
-        let orig_root = state.drop().0;
+        let mut state = get_temp_state();
+        let orig_root = state.root;
         let a: Address = 1000.into();
 
-        let mut state = get_temp_state();
         state.checkpoint(); // c1
         state.new_contract(&a, U256::zero(), U256::zero(), None);
         state.add_balance(&a, U256::from(1)).unwrap();
@@ -653,6 +619,102 @@ mod tests {
         state.revert_checkpoint(); // revert to c1
         assert_eq!(state.exist(&a).unwrap(), false);
         state.commit().unwrap();
-        assert_eq!(orig_root, state.drop().0);
+        assert_eq!(orig_root, state.root);
+    }
+
+    #[test]
+    fn create_contract_fail_previous_storage() {
+        let mut state = get_temp_state();
+        let a: Address = 1000.into();
+        let k = H256::from(U256::from(0));
+
+        state
+            .set_storage(&a, k, H256::from(U256::from(0xffff)))
+            .unwrap();
+        state.commit().unwrap();
+        state.clear();
+
+        let orig_root = state.root;
+        assert_eq!(
+            state.get_storage(&a, &k).unwrap(),
+            H256::from(U256::from(0xffff))
+        );
+        state.clear();
+
+        state.checkpoint(); // c1
+        state.new_contract(&a, U256::zero(), U256::zero(), None);
+        state.checkpoint(); // c2
+        state.set_storage(&a, k, H256::from(U256::from(2))).unwrap();
+        state.revert_checkpoint(); // revert to c2
+        assert_eq!(
+            state.get_storage(&a, &k).unwrap(),
+            H256::from(U256::from(0))
+        );
+        state.revert_checkpoint(); // revert to c1
+        assert_eq!(
+            state.get_storage(&a, &k).unwrap(),
+            H256::from(U256::from(0xffff))
+        );
+
+        state.commit().unwrap();
+        assert_eq!(orig_root, state.root);
+    }
+
+    #[test]
+    fn checkpoint_chores() {
+        let mut state = get_temp_state();
+        let a: Address = 1000.into();
+        let b: Address = 2000.into();
+        state.new_contract(&a, 5.into(), 0.into(), Some(vec![10u8, 20, 30, 40, 50]));
+        state.add_balance(&a, 5.into()).unwrap();
+        state.set_storage(&a, 10.into(), 10.into()).unwrap();
+        assert_eq!(state.code(&a).unwrap(), vec![10u8, 20, 30, 40, 50]);
+        assert_eq!(state.balance(&a).unwrap(), 10.into());
+        assert_eq!(state.get_storage(&a, &10.into()).unwrap(), 10.into());
+        state.commit().unwrap();
+        let orig_root = state.root;
+
+        // Top         => account_a: balance=8, nonce=0, code=[10, 20, 30, 40, 50],
+        //             |      stroage = { 10=15, 20=20 }
+        //             |  account_b: balance=30, nonce=0, code=[]
+        //             |      storage = { 55=55 }
+        //
+        //
+        // Checkpoint2 => account_a: balance=8, nonce=0, code=[10, 20, 30, 40, 50],
+        //             |      stroage = { 10=10, 20=20 }
+        //             |  account_b: None
+        //
+        // Checkpoint1 => account_a: balance=10, nonce=0, code=[10, 20, 30, 40, 50],
+        //             |      storage = { 10=10 }
+        //             |  account_b: None
+
+        state.checkpoint(); // c1
+        state.sub_balance(&a, 2.into()).unwrap();
+        state.set_storage(&a, 20.into(), 20.into()).unwrap();
+        assert_eq!(state.balance(&a).unwrap(), 8.into());
+        assert_eq!(state.get_storage(&a, &10.into()).unwrap(), 10.into());
+        assert_eq!(state.get_storage(&a, &20.into()).unwrap(), 20.into());
+
+        state.checkpoint(); // c2
+        state.new_contract(&b, 30.into(), 0.into(), None);
+        state.set_storage(&a, 10.into(), 15.into()).unwrap();
+        assert_eq!(state.balance(&b).unwrap(), 30.into());
+        assert_eq!(state.code(&b).unwrap(), vec![]);
+
+        state.revert_checkpoint(); // revert c2
+        assert_eq!(state.balance(&a).unwrap(), 8.into());
+        assert_eq!(state.get_storage(&a, &10.into()).unwrap(), 10.into());
+        assert_eq!(state.get_storage(&a, &20.into()).unwrap(), 20.into());
+        assert_eq!(state.balance(&b).unwrap(), 0.into());
+        assert_eq!(state.code(&b).unwrap(), vec![]);
+        assert_eq!(state.exist(&b).unwrap(), false);
+
+        state.revert_checkpoint(); // revert c1
+        assert_eq!(state.code(&a).unwrap(), vec![10u8, 20, 30, 40, 50]);
+        assert_eq!(state.balance(&a).unwrap(), 10.into());
+        assert_eq!(state.get_storage(&a, &10.into()).unwrap(), 10.into());
+
+        state.commit().unwrap();
+        assert_eq!(orig_root, state.root);
     }
 }

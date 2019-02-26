@@ -48,6 +48,8 @@ impl StateObjectEntry {
             Some(acc) => {
                 if let Some(ref mut ours) = self.state_object {
                     ours.merge(acc);
+                } else {
+                    self.state_object = Some(acc);
                 }
             }
             None => self.state_object = None,
