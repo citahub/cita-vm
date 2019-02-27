@@ -1,4 +1,6 @@
 use ethereum_types::*;
+use secp256k1;
+use tiny_keccak;
 
 pub fn clean_0x(s: &str) -> &str {
     if s.starts_with("0x") {
@@ -30,4 +32,30 @@ pub fn string_2_bytes(value: String) -> Vec<u8> {
     let v = Box::leak(value.into_boxed_str());
     let v = clean_0x(v);
     hex::decode(v).unwrap()
+}
+
+pub fn string_2_address(value: String) -> Address {
+    if value.is_empty() {
+        return Address::zero();
+    }
+    let v = Box::leak(value.into_boxed_str());
+    let v = clean_0x(v);
+    Address::from(v)
+}
+
+pub fn public_to_address(public: &Public) -> Address {
+    let hash = tiny_keccak::keccak256(&public.0);
+    let mut result = Address::default();
+    result.copy_from_slice(&hash[12..]);
+    result
+}
+
+pub fn secret_to_address(secret: &str) -> Address {
+    let a = hex::decode(clean_0x(secret)).unwrap();
+    let secret_key = secp256k1::SecretKey::parse_slice(a.as_slice()).unwrap();
+    let public_key = secp256k1::PublicKey::from_secret_key(&secret_key);
+    let serialized = public_key.serialize();
+    let mut public = Public::default();
+    public.copy_from_slice(&serialized[1..65]);
+    public_to_address(&public)
 }

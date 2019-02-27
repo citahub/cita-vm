@@ -27,17 +27,11 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn add_refund(&mut self, address: &Address, n: u64) {
-        self.refund
-            .entry(*address)
-            .and_modify(|v| *v += n)
-            .or_insert(n);
+        self.refund.entry(*address).and_modify(|v| *v += n).or_insert(n);
     }
 
     fn sub_refund(&mut self, address: &Address, n: u64) {
-        self.refund
-            .entry(*address)
-            .and_modify(|v| *v -= n)
-            .or_insert(n);
+        self.refund.entry(*address).and_modify(|v| *v -= n).or_insert(n);
     }
 
     fn get_refund(&self, address: &Address) -> u64 {
@@ -48,8 +42,8 @@ impl ext::DataProvider for DataProviderMock {
         self.db.get(address).map_or(0, |v| v.code.len() as u64)
     }
 
-    fn get_code(&self, address: &Address) -> &[u8] {
-        self.db.get(address).map_or(&[], |v| v.code.as_slice())
+    fn get_code(&self, address: &Address) -> Vec<u8> {
+        self.db.get(address).map_or(vec![], |v| v.code.clone())
     }
 
     fn get_code_hash(&self, address: &Address) -> H256 {
@@ -63,9 +57,9 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn get_storage(&self, address: &Address, key: &H256) -> H256 {
-        self.db.get(address).map_or(H256::zero(), |v| {
-            v.storage.get(key).map_or(H256::zero(), |&v| v)
-        })
+        self.db
+            .get(address)
+            .map_or(H256::zero(), |v| v.storage.get(key).map_or(H256::zero(), |&v| v))
     }
 
     fn set_storage(&mut self, address: &Address, key: H256, value: H256) {
@@ -77,9 +71,9 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn get_storage_origin(&self, address: &Address, key: &H256) -> H256 {
-        self.db_origin.get(address).map_or(H256::zero(), |v| {
-            v.storage.get(key).map_or(H256::zero(), |&v| v)
-        })
+        self.db_origin
+            .get(address)
+            .map_or(H256::zero(), |v| v.storage.get(key).map_or(H256::zero(), |&v| v))
     }
 
     fn set_storage_origin(&mut self, address: &Address, key: H256, value: H256) {
@@ -90,8 +84,9 @@ impl ext::DataProvider for DataProviderMock {
             .insert(key, value);
     }
 
-    fn selfdestruct(&mut self, address: &Address, _: &Address) {
+    fn selfdestruct(&mut self, address: &Address, _: &Address) -> bool {
         self.db.remove(address);
+        true
     }
 
     fn sha3(&self, data: &[u8]) -> H256 {
@@ -115,7 +110,6 @@ impl ext::DataProvider for DataProviderMock {
                     Box::new(DataProviderMock::default()),
                     params,
                 );
-                it.context.gas_price = U256::one();
                 let mut data_provider = DataProviderMock::default();
                 data_provider.db = self.db.clone();
                 it.data_provider = Box::new(data_provider);

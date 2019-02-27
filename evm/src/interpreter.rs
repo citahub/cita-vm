@@ -7,10 +7,8 @@ use super::stack;
 use ethereum_types::*;
 use std::cmp;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Context {
-    pub origin: Address,
-    pub gas_price: U256,
     pub gas_limit: u64,
     pub coinbase: Address,
     pub number: U256,
@@ -20,9 +18,10 @@ pub struct Context {
 
 // Log is the data struct for LOG0...LOG4.
 // The members are "Topics: Vec<H256>, Body: Vec<u8>"
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Log(pub Vec<H256>, pub Vec<u8>);
 
+#[derive(Clone, Debug)]
 pub enum InterpreterResult {
     // Return data, remain gas and Logs.
     Normal(Vec<u8>, u64, Vec<Log>),
@@ -33,43 +32,45 @@ pub enum InterpreterResult {
 
 #[derive(Clone)]
 pub struct InterpreterConf {
-    pub print_op: bool,
-    pub print_gas_used: bool,
-    pub print_stack: bool,
-    pub print_mem: bool,
     pub eip1283: bool,
     pub stack_limit: u64,
+    pub max_create_code_size: u64, // See: https://github.com/ethereum/EIPs/issues/659
+    pub max_call_depth: u64,
 
     pub gas_tier_step: [u64; 8],
-    pub gas_exp: u64,
-    pub gas_exp_byte: u64,
-    pub gas_sha3: u64,
-    pub gas_sha3_word: u64,
-    pub gas_memory: u64,
-    pub gas_sload: u64,
-    pub gas_sstore_noop: u64,
-    pub gas_sstore_init: u64,
-    pub gas_sstore_clear_refund: u64,
-    pub gas_sstore_clean: u64,
-    pub gas_sstore_dirty: u64,
-    pub gas_sstore_reset_clear_refund: u64,
-    pub gas_sstore_reset_refund: u64,
-    pub gas_sstore_set: u64,
-    pub gas_sstore_clear: u64,
-    pub gas_sstore_reset: u64,
-    pub gas_sstore_refund: u64,
-    pub gas_log: u64,
-    pub gas_log_data: u64,
-    pub gas_log_topic: u64,
-    pub gas_create: u64,
-    pub gas_jumpdest: u64,
-    pub gas_copy: u64,
-    pub gas_call: u64,
-    pub gas_call_new_account: u64,
-    pub gas_call_value_transfer: u64,
-    pub gas_call_stipend: u64,
-    pub gas_self_destruct: u64,
-    pub gas_extcode_size: u64,
+    pub gas_exp: u64,                       // Partial payment for an EXP operation.
+    pub gas_exp_byte: u64, // Partial payment when multiplied by dlog256(exponent)e for the EXP operation
+    pub gas_sha3: u64,     // Paid for each SHA3 operation.
+    pub gas_sha3_word: u64, // Paid for each word (rounded up) for input data to a SHA3 operation.
+    pub gas_balance: u64,  // Amount of gas to pay for a BALANCE operation.
+    pub gas_memory: u64,   // Paid for every additional word when expanding memory.
+    pub gas_sload: u64,    //  Paid for a SLOAD operation.
+    pub gas_sstore_noop: u64, // eip1283
+    pub gas_sstore_init: u64, // Paid for an SSTORE operation when the storage value is set to non-zero from zero.
+    pub gas_sstore_clear_refund: u64, // Refund given (added into refund counter) when the storage value is set to zero from non-zero.
+    pub gas_sstore_clean: u64, // Paid for an SSTORE operation when the storage value’s zeroness remains unchanged or is set to zero.
+    pub gas_sstore_dirty: u64, // eip1283
+    pub gas_sstore_reset_clear_refund: u64, // eip1283
+    pub gas_sstore_reset_refund: u64, // eip1283
+    pub gas_sstore_set: u64,   // eip1283
+    pub gas_sstore_clear: u64, // eip1283
+    pub gas_sstore_reset: u64, // eip1283
+    pub gas_sstore_refund: u64, // eip1283
+    pub gas_log: u64,          // Partial payment for a LOG operation.
+    pub gas_log_data: u64,     // Paid for each byte in a LOG operation’s data.
+    pub gas_log_topic: u64,    // Paid for each topic of a LOG operation.
+    pub gas_create: u64,       // Paid for a CREATE operation
+    pub gas_jumpdest: u64,     // Paid for a JUMPDEST operation
+    pub gas_copy: u64,         // Partial payment for *COPY operations, multiplied by words copied, rounded up.
+    pub gas_call: u64,         // Paid for a CALL operation.
+    pub gas_call_value_transfer: u64, // Paid for a non-zero value transfer as part of the CALL operation.
+    pub gas_call_stipend: u64, // A stipend for the called contract subtracted from Gcallvalue for a non-zero value transfer
+    pub gas_self_destruct: u64, // Amount of gas to pay for a SELFDESTRUCT operation.
+    pub gas_self_destruct_refund: u64, // Refund given (added into refund counter) for self-destructing an account.
+    pub gas_extcode: u64,      // Amount of gas to pay for operations of the set Wextcode.
+    pub gas_call_new_account: u64, // Paid for a CALL operation which creates an account
+    pub gas_self_destruct_new_account: u64, // Paid for a SELFDESTRUCT operation which creates an account
+    pub gas_ext_code_hash: u64, // Piad for a EXTCODEHASH operation. http://eips.ethereum.org/EIPS/eip-1052
 }
 
 impl InterpreterConf {
@@ -77,24 +78,19 @@ impl InterpreterConf {
     // But in order to pass the test, Some modifications must needed.
     //
     // If you want to step through the steps, let the
-    //   conf.print_op = true;
-    //   conf.print_gas_used = true;
-    //   conf.print_stack = true;
-    //   conf.print_mem = true;
     pub fn default() -> Self {
         InterpreterConf {
-            print_op: false,
-            print_gas_used: false,
-            print_stack: false,
-            print_mem: false,
             eip1283: false,
             stack_limit: 1024,
+            max_create_code_size: 24567,
+            max_call_depth: 1024,
 
             gas_tier_step: [0, 2, 3, 5, 8, 10, 20, 0],
             gas_exp: 10,
             gas_exp_byte: 50,
             gas_sha3: 30,
             gas_sha3_word: 6,
+            gas_balance: 400,
             gas_memory: 3,
             gas_sload: 200,
             gas_sstore_noop: 200,
@@ -115,31 +111,43 @@ impl InterpreterConf {
             gas_jumpdest: 1,
             gas_copy: 3,
             gas_call: 700,
-            gas_call_new_account: 25000,
             gas_call_value_transfer: 9000,
             gas_call_stipend: 2300,
             gas_self_destruct: 5000,
-            gas_extcode_size: 20,
+            gas_self_destruct_refund: 24000,
+            gas_extcode: 700,
+            gas_call_new_account: 25000,
+            gas_self_destruct_new_account: 25000,
+            gas_ext_code_hash: 400,
         }
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Contract {
     pub code_address: Address,
     pub code_data: Vec<u8>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct InterpreterParams {
-    pub address: Address,
-    pub sender: Address,
+    pub origin: Address,   // Who send the transaction
+    pub sender: Address,   // Who send the call
+    pub receiver: Address, // Who receive the transaction or call
+    pub address: Address,  // Which storage used
+
     pub value: U256,
     pub input: Vec<u8>,
+    pub nonce: U256,
+    pub gas_limit: u64,
+    pub gas_price: U256,
+
     pub read_only: bool,
     pub contract: Contract,
-    pub gas: u64,
-    pub extra: U256,
+    pub extra: H256,
+    pub is_create: bool,
+    pub disable_transfer_value: bool,
+    pub depth: u64,
 }
 
 pub struct Interpreter {
@@ -164,7 +172,7 @@ impl Interpreter {
         data_provider: Box<ext::DataProvider>,
         params: InterpreterParams,
     ) -> Self {
-        let gas = params.gas;
+        let gas = params.gas_limit;
         Interpreter {
             context,
             cfg,
@@ -183,54 +191,23 @@ impl Interpreter {
     #[allow(clippy::cyclomatic_complexity)]
     pub fn run(&mut self) -> Result<InterpreterResult, err::Error> {
         let mut pc = 0;
-        loop {
-            // Step 0: Get opcode
-            let op = self.get_op(pc)?;
+        while let Some(op) = self.get_op(pc)? {
             pc += 1;
-            // Step 1: Log opcode(if necessary)
-            if self.cfg.print_op {
-                if op >= opcodes::OpCode::PUSH1 && op <= opcodes::OpCode::PUSH32 {
-                    let n = op.clone() as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
-                    let r = {
-                        if pc + u64::from(n) > self.params.contract.code_data.len() as u64 {
-                            U256::zero()
-                        } else {
-                            U256::from(
-                                &self.params.contract.code_data
-                                    [pc as usize..(pc + u64::from(n)) as usize],
-                            )
-                        }
-                    };
-                    println!("[OP] {} {:#x}", op, r);
-                } else {
-                    println!("[OP] {}", op);
-                }
-                if self.cfg.print_stack {
-                    println!("[STACK]");
-                    let l = self.stack.data().len();
-                    for i in 0..l {
-                        println!("[{}] {:#x}", i, self.stack.back(i));
-                    }
-                }
-                if self.cfg.print_mem {
-                    println!("[MEM] len={}", self.mem.len());
-                }
-            }
-            // Step 2: Valid stack
+            // Trace the execution informations
+            self.trace(&op, pc);
+            // Ensure stack
             let stack_require = op.stack_require();
             if !self.stack.require(stack_require as usize) {
                 return Err(err::Error::OutOfStack);
             }
-            if self.stack.len() as u64 - op.stack_require() + op.stack_returns()
-                > self.cfg.stack_limit
-            {
+            if self.stack.len() as u64 - op.stack_require() + op.stack_returns() > self.cfg.stack_limit {
                 return Err(err::Error::OutOfStack);
             }
-            // Step 3: Valid state mod
+            // Ensure no state changes in static call
             if self.params.read_only && op.state_changes() {
                 return Err(err::Error::MutableCallInStaticContext);
             }
-            // Step 4: Gas cost and mem expand.
+            // Gas cost and mem expand.
             let op_gas = self.cfg.gas_tier_step[op.gas_price_tier().idx()];
             self.use_gas(op_gas)?;
             match op {
@@ -247,6 +224,9 @@ impl Interpreter {
                     self.use_gas(self.cfg.gas_sha3)?;
                     self.use_gas(common::to_word_size(mem_len.low_u64()) * self.cfg.gas_sha3_word)?;
                 }
+                opcodes::OpCode::BALANCE => {
+                    self.use_gas(self.cfg.gas_balance)?;
+                }
                 opcodes::OpCode::CALLDATACOPY => {
                     let mem_offset = self.stack.back(0);
                     let mem_len = self.stack.back(2);
@@ -262,7 +242,26 @@ impl Interpreter {
                     self.use_gas(gas)?;
                 }
                 opcodes::OpCode::EXTCODESIZE => {
-                    self.use_gas(self.cfg.gas_extcode_size)?;
+                    self.use_gas(self.cfg.gas_extcode)?;
+                }
+                opcodes::OpCode::EXTCODECOPY => {
+                    let mem_offset = self.stack.back(1);
+                    let mem_len = self.stack.back(3);
+                    self.use_gas(self.cfg.gas_extcode)?;
+                    self.mem_gas_work(mem_offset, mem_len)?;
+                    let gas = common::to_word_size(mem_len.low_u64()) * self.cfg.gas_copy;
+                    self.use_gas(gas)?;
+                }
+                opcodes::OpCode::EXTCODEHASH => {
+                    self.use_gas(self.cfg.gas_ext_code_hash)?;
+                }
+                opcodes::OpCode::RETURNDATACOPY => {
+                    let mem_offset = self.stack.back(0);
+                    let size = self.stack.back(2);
+                    self.mem_gas_work(mem_offset, size)?;
+                    let size_min = cmp::min(self.return_data.len() as u64, size.low_u64());
+                    let gas = common::to_word_size(size_min) * self.cfg.gas_copy;
+                    self.use_gas(gas)?;
                 }
                 opcodes::OpCode::MLOAD => {
                     let mem_offset = self.stack.back(0);
@@ -276,25 +275,17 @@ impl Interpreter {
                 }
                 opcodes::OpCode::MSTORE8 => {
                     let mem_offset = self.stack.back(0);
-                    let mem_len = U256::from(8);
-                    self.mem_gas_work(mem_offset, mem_len)?;
+                    self.mem_gas_work(mem_offset, U256::one())?;
                 }
                 opcodes::OpCode::SLOAD => {
                     self.use_gas(self.cfg.gas_sload)?;
                 }
                 opcodes::OpCode::SSTORE => {
                     let address = H256::from(&self.stack.back(0));
-                    let current_value = U256::from(
-                        &*self
-                            .data_provider
-                            .get_storage(&self.params.address, &address),
-                    );
+                    let current_value = U256::from(&*self.data_provider.get_storage(&self.params.address, &address));
                     let new_value = self.stack.back(1);
-                    let original_value = U256::from(
-                        &*self
-                            .data_provider
-                            .get_storage_origin(&self.params.address, &address),
-                    );
+                    let original_value =
+                        U256::from(&*self.data_provider.get_storage_origin(&self.params.address, &address));
                     let gas: u64 = {
                         if self.cfg.eip1283 {
                             // See https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1283.md
@@ -305,38 +296,28 @@ impl Interpreter {
                                     self.cfg.gas_sstore_init
                                 } else {
                                     if new_value.is_zero() {
-                                        self.data_provider.add_refund(
-                                            &self.params.address,
-                                            self.cfg.gas_sstore_clear_refund,
-                                        );
+                                        self.data_provider
+                                            .add_refund(&self.params.origin, self.cfg.gas_sstore_clear_refund);
                                     }
                                     self.cfg.gas_sstore_clean
                                 }
                             } else {
                                 if !original_value.is_zero() {
                                     if current_value.is_zero() {
-                                        self.data_provider.sub_refund(
-                                            &self.params.address,
-                                            self.cfg.gas_sstore_clear_refund,
-                                        );
+                                        self.data_provider
+                                            .sub_refund(&self.params.origin, self.cfg.gas_sstore_clear_refund);
                                     } else if new_value.is_zero() {
-                                        self.data_provider.add_refund(
-                                            &self.params.address,
-                                            self.cfg.gas_sstore_clear_refund,
-                                        );
+                                        self.data_provider
+                                            .add_refund(&self.params.origin, self.cfg.gas_sstore_clear_refund);
                                     }
                                 }
                                 if original_value == new_value {
                                     if original_value.is_zero() {
-                                        self.data_provider.add_refund(
-                                            &self.params.address,
-                                            self.cfg.gas_sstore_reset_clear_refund,
-                                        );
+                                        self.data_provider
+                                            .add_refund(&self.params.origin, self.cfg.gas_sstore_reset_clear_refund);
                                     } else {
-                                        self.data_provider.add_refund(
-                                            &self.params.address,
-                                            self.cfg.gas_sstore_reset_refund,
-                                        );
+                                        self.data_provider
+                                            .add_refund(&self.params.origin, self.cfg.gas_sstore_reset_refund);
                                     }
                                 }
                                 self.cfg.gas_sstore_dirty
@@ -345,7 +326,7 @@ impl Interpreter {
                             self.cfg.gas_sstore_set
                         } else if !current_value.is_zero() && new_value.is_zero() {
                             self.data_provider
-                                .add_refund(&self.params.address, self.cfg.gas_sstore_refund);
+                                .add_refund(&self.params.origin, self.cfg.gas_sstore_refund);
                             self.cfg.gas_sstore_clear
                         } else {
                             self.cfg.gas_sstore_reset
@@ -373,6 +354,9 @@ impl Interpreter {
                 opcodes::OpCode::CREATE => {
                     let mem_offset = self.stack.back(1);
                     let mem_len = self.stack.back(2);
+                    if mem_len > U256::from(self.cfg.max_create_code_size) {
+                        return Err(err::Error::ExccedMaxCodeSize);
+                    }
                     self.mem_gas_work(mem_offset, mem_len)?;
                     self.use_gas(self.cfg.gas_create)?;
                     self.gas_tmp = self.gas - self.gas / 64;
@@ -387,16 +371,10 @@ impl Interpreter {
                     let out_offset = self.stack.back(5);
                     let out_len = self.stack.back(6);
 
-                    if gas_req.bits() > 64 {
-                        return Err(err::Error::OutOfGas);
-                    }
                     self.use_gas(self.cfg.gas_call)?;
 
                     let is_value_transfer = !value.is_zero();
-                    if op == opcodes::OpCode::CALL
-                        && is_value_transfer
-                        && self.data_provider.is_empty(&address)
-                    {
+                    if op == opcodes::OpCode::CALL && is_value_transfer && self.data_provider.is_empty(&address) {
                         self.use_gas(self.cfg.gas_call_new_account)?;
                     }
                     if is_value_transfer {
@@ -418,9 +396,6 @@ impl Interpreter {
                     let mem_len = self.stack.back(3);
                     let out_offset = self.stack.back(4);
                     let out_len = self.stack.back(5);
-                    if gas_req.bits() > 64 {
-                        return Err(err::Error::OutOfGas);
-                    }
                     self.use_gas(self.cfg.gas_call)?;
                     self.mem_gas_work(mem_offset, mem_len)?;
                     self.mem_gas_work(out_offset, out_len)?;
@@ -430,6 +405,9 @@ impl Interpreter {
                 opcodes::OpCode::CREATE2 => {
                     let mem_offset = self.stack.back(1);
                     let mem_len = self.stack.back(2);
+                    if mem_len > U256::from(self.cfg.max_create_code_size) {
+                        return Err(err::Error::ExccedMaxCodeSize);
+                    }
                     self.mem_gas_work(mem_offset, mem_len)?;
                     self.use_gas(self.cfg.gas_create)?;
                     self.use_gas(common::to_word_size(mem_len.low_u64()) * self.cfg.gas_sha3_word)?;
@@ -442,7 +420,15 @@ impl Interpreter {
                     self.mem_gas_work(mem_offset, mem_len)?;
                 }
                 opcodes::OpCode::SELFDESTRUCT => {
+                    let address = self.stack.peek();
                     self.use_gas(self.cfg.gas_self_destruct)?;
+                    if !self.data_provider.get_balance(&self.params.address).is_zero()
+                        && self.data_provider.is_empty(&common::u256_to_address(&address))
+                    {
+                        self.use_gas(self.cfg.gas_self_destruct_new_account)?;
+                    }
+                    self.data_provider
+                        .add_refund(&self.params.origin, self.cfg.gas_self_destruct_refund);
                 }
                 _ => {}
             }
@@ -467,8 +453,7 @@ impl Interpreter {
                 opcodes::OpCode::DIV => {
                     let a = self.stack.pop();
                     let b = self.stack.pop();
-                    self.stack
-                        .push(if b.is_zero() { U256::zero() } else { a / b })
+                    self.stack.push(if b.is_zero() { U256::zero() } else { a / b })
                 }
                 opcodes::OpCode::SDIV => {
                     let (a, neg_a) = common::get_sign(self.stack.pop());
@@ -485,8 +470,7 @@ impl Interpreter {
                 opcodes::OpCode::MOD => {
                     let a = self.stack.pop();
                     let b = self.stack.pop();
-                    self.stack
-                        .push(if !b.is_zero() { a % b } else { U256::zero() });
+                    self.stack.push(if !b.is_zero() { a % b } else { U256::zero() });
                 }
                 opcodes::OpCode::SMOD => {
                     let ua = self.stack.pop();
@@ -505,10 +489,10 @@ impl Interpreter {
                     let b = self.stack.pop();
                     let c = self.stack.pop();
                     self.stack.push(if !c.is_zero() {
-                        let a5 = U512::from(a);
-                        let res = a5.overflowing_add(U512::from(b)).0;
-                        let x = res % U512::from(c);
-                        U256::from(x)
+                        let res = U512::from(a);
+                        let res = res.overflowing_add(U512::from(b)).0;
+                        let res = res % U512::from(c);
+                        U256::from(res)
                     } else {
                         U256::zero()
                     });
@@ -518,10 +502,10 @@ impl Interpreter {
                     let b = self.stack.pop();
                     let c = self.stack.pop();
                     self.stack.push(if !c.is_zero() {
-                        let a5 = U512::from(a);
-                        let res = a5.overflowing_mul(U512::from(b)).0;
-                        let x = res % U512::from(c);
-                        U256::from(x)
+                        let res = U512::from(a);
+                        let res = res.overflowing_mul(U512::from(b)).0;
+                        let res = res % U512::from(c);
+                        U256::from(res)
                     } else {
                         U256::zero()
                     });
@@ -539,8 +523,7 @@ impl Interpreter {
                         let bit_position = (bit.low_u64() * 8 + 7) as usize;
                         let bit = number.bit(bit_position);
                         let mask = (U256::one() << bit_position) - U256::one();
-                        self.stack
-                            .push(if bit { number | !mask } else { number & mask });
+                        self.stack.push(if bit { number | !mask } else { number & mask });
                     }
                 }
                 opcodes::OpCode::LT => {
@@ -658,15 +641,13 @@ impl Interpreter {
                 opcodes::OpCode::SHA3 => {
                     let mem_offset = self.stack.pop();
                     let mem_len = self.stack.pop();
-                    let k = self.data_provider.sha3(
-                        self.mem
-                            .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize),
-                    );
+                    let k = self
+                        .data_provider
+                        .sha3(self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize));
                     self.stack.push(U256::from(k));
                 }
                 opcodes::OpCode::ADDRESS => {
-                    self.stack
-                        .push(common::address_to_u256(self.params.address));
+                    self.stack.push(common::address_to_u256(self.params.address));
                 }
                 opcodes::OpCode::BALANCE => {
                     let address = common::u256_to_address(&self.stack.pop());
@@ -674,8 +655,7 @@ impl Interpreter {
                     self.stack.push(balance);
                 }
                 opcodes::OpCode::ORIGIN => {
-                    self.stack
-                        .push(common::address_to_u256(self.context.origin));
+                    self.stack.push(common::address_to_u256(self.params.origin));
                 }
                 opcodes::OpCode::CALLER => {
                     self.stack.push(common::address_to_u256(self.params.sender));
@@ -712,22 +692,17 @@ impl Interpreter {
                     self.mem.set(mem_offset.as_usize(), data.as_slice());
                 }
                 opcodes::OpCode::CODESIZE => {
-                    self.stack
-                        .push(U256::from(self.params.contract.code_data.len()));
+                    self.stack.push(U256::from(self.params.contract.code_data.len()));
                 }
                 opcodes::OpCode::CODECOPY => {
                     let mem_offset = self.stack.pop();
                     let raw_offset = self.stack.pop();
                     let size = self.stack.pop();
-                    let data = common::copy_data(
-                        self.params.contract.code_data.as_slice(),
-                        raw_offset,
-                        size,
-                    );
+                    let data = common::copy_data(self.params.contract.code_data.as_slice(), raw_offset, size);
                     self.mem.set(mem_offset.as_usize(), data.as_slice());
                 }
                 opcodes::OpCode::GASPRICE => {
-                    self.stack.push(self.context.gas_price);
+                    self.stack.push(self.params.gas_price);
                 }
                 opcodes::OpCode::EXTCODESIZE => {
                     let address = common::u256_to_address(&self.stack.pop());
@@ -736,15 +711,14 @@ impl Interpreter {
                 }
                 opcodes::OpCode::EXTCODECOPY => {
                     let address = common::u256_to_address(&self.stack.pop());
+                    let mem_offset = self.stack.pop();
                     let code_offset = self.stack.pop();
-                    let len = self.stack.pop();
+                    let size = self.stack.pop();
                     let code = self.data_provider.get_code(&address);
-                    let val = common::copy_data(code, code_offset, len);
-                    self.mem.set(code_offset.as_usize(), val.as_slice())
+                    let data = common::copy_data(code.as_slice(), code_offset, size);
+                    self.mem.set(mem_offset.as_usize(), data.as_slice())
                 }
-                opcodes::OpCode::RETURNDATASIZE => {
-                    self.stack.push(U256::from(self.return_data.len()))
-                }
+                opcodes::OpCode::RETURNDATASIZE => self.stack.push(U256::from(self.return_data.len())),
                 opcodes::OpCode::RETURNDATACOPY => {
                     let mem_offset = self.stack.pop();
                     let raw_offset = self.stack.pop();
@@ -767,8 +741,7 @@ impl Interpreter {
                     self.stack.push(U256::from(&*block_hash));
                 }
                 opcodes::OpCode::COINBASE => {
-                    self.stack
-                        .push(common::address_to_u256(self.context.coinbase));
+                    self.stack.push(common::address_to_u256(self.context.coinbase));
                 }
                 opcodes::OpCode::TIMESTAMP => {
                     self.stack.push(U256::from(self.context.timestamp));
@@ -780,6 +753,7 @@ impl Interpreter {
                     self.stack.push(self.context.difficulty);
                 }
                 opcodes::OpCode::GASLIMIT => {
+                    // Get the block's gas limit
                     self.stack.push(U256::from(self.context.gas_limit));
                 }
                 opcodes::OpCode::POP => {
@@ -799,39 +773,30 @@ impl Interpreter {
                 opcodes::OpCode::MSTORE8 => {
                     let offset = self.stack.pop();
                     let word = self.stack.pop();
-                    self.mem
-                        .set(offset.low_u64() as usize, &[word.low_u64() as u8]);
+                    self.mem.set(offset.low_u64() as usize, &[word.low_u64() as u8]);
                 }
                 opcodes::OpCode::SLOAD => {
                     let key = H256::from(self.stack.pop());
-                    let word =
-                        U256::from(&*self.data_provider.get_storage(&self.params.address, &key));
+                    let word = U256::from(&*self.data_provider.get_storage(&self.params.address, &key));
                     self.stack.push(word);
                 }
                 opcodes::OpCode::SSTORE => {
                     let address = H256::from(&self.stack.pop());
                     let value = self.stack.pop();
-                    self.data_provider.set_storage(
-                        &self.params.address,
-                        address,
-                        H256::from(&value),
-                    );
+                    self.data_provider
+                        .set_storage(&self.params.address, address, H256::from(&value));
                 }
                 opcodes::OpCode::JUMP => {
-                    let jump = self.stack.pop().low_u64();
-                    if jump >= self.params.contract.code_data.len() as u64 {
-                        return Err(err::Error::OutOfCode);
-                    }
-                    pc = jump;
+                    let jump = self.stack.pop();
+                    self.pre_jump(jump)?;
+                    pc = jump.low_u64();
                 }
                 opcodes::OpCode::JUMPI => {
-                    let jump = self.stack.pop().low_u64();
+                    let jump = self.stack.pop();
                     let condition = self.stack.pop();
                     if !condition.is_zero() {
-                        if jump >= self.params.contract.code_data.len() as u64 {
-                            return Err(err::Error::OutOfCode);
-                        }
-                        pc = jump;
+                        self.pre_jump(jump)?;
+                        pc = jump.low_u64();
                     }
                 }
                 opcodes::OpCode::PC => {
@@ -934,32 +899,50 @@ impl Interpreter {
                         let r = H256::from(self.stack.pop());
                         topics.push(r);
                     }
-                    let data = self
-                        .mem
-                        .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
+                    let data = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
                     self.logs.push(Log(topics, Vec::from(data)));
                 }
                 opcodes::OpCode::CREATE | opcodes::OpCode::CREATE2 => {
+                    // clear return data buffer before creating new call frame.
+                    self.return_data = vec![];
+
                     let value = self.stack.pop();
                     let mem_offset = self.stack.pop();
                     let mem_len = self.stack.pop();
-                    let salt = {
+                    let salt = H256::from({
                         match op {
                             opcodes::OpCode::CREATE => U256::zero(),
                             opcodes::OpCode::CREATE2 => self.stack.pop(),
                             _ => panic!("instruction can only be CREATE/CREATE2 checked above"),
                         }
-                    };
-                    let data = self
-                        .mem
-                        .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-
+                    });
+                    let data = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
+                    if value > self.data_provider.get_balance(&self.params.address) {
+                        self.stack.push(U256::zero());
+                        self.gas += self.gas_tmp;
+                        continue;
+                    }
+                    // Exit immediately if value > balance.
+                    if value > self.data_provider.get_balance(&self.params.address) {
+                        self.gas += self.gas_tmp;
+                        self.stack.push(U256::zero());
+                        continue;
+                    }
+                    // Exit immediately if depth exceed limit.
+                    if self.params.depth >= self.cfg.max_call_depth {
+                        self.gas += self.gas_tmp;
+                        self.stack.push(U256::zero());
+                        continue;
+                    }
                     let mut params = InterpreterParams::default();
+                    params.origin = self.params.origin;
                     params.sender = self.params.address;
-                    params.gas = self.gas_tmp;
+                    params.gas_limit = self.gas_tmp;
+                    params.gas_price = self.params.gas_price;
                     params.input = Vec::from(data);
                     params.value = value;
                     params.extra = salt;
+                    params.depth = self.params.depth + 1;
                     let r = self.data_provider.call(op, params);
                     match r {
                         Ok(data) => match data {
@@ -971,7 +954,6 @@ impl Interpreter {
                                 self.stack.push(U256::zero());
                                 self.gas += gas;
                                 self.return_data = ret;
-                                break;
                             }
                             _ => {}
                         },
@@ -996,53 +978,106 @@ impl Interpreter {
                     let mem_offset = self.stack.pop();
                     let mem_len = self.stack.pop();
                     let out_offset = self.stack.pop();
-                    let _ = self.stack.pop();
+                    let out_len = self.stack.pop();
+
+                    if op == opcodes::OpCode::CALL && self.params.read_only && !value.is_zero() {
+                        return Err(err::Error::MutableCallInStaticContext);
+                    }
+
+                    // clear return data buffer before creating new call frame.
+                    self.return_data = vec![];
 
                     let mut gas = self.gas_tmp;
+                    // Add stipend (only CALL|CALLCODE when value > 0)
                     if !value.is_zero() {
                         gas += self.cfg.gas_call_stipend;
                     }
-
-                    let data = self
-                        .mem
-                        .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-
+                    // Exit immediately if value > balance.
+                    if value > self.data_provider.get_balance(&self.params.address) {
+                        self.gas += gas;
+                        self.stack.push(U256::zero());
+                        continue;
+                    }
+                    // Exit immediately if depth exceed limit.
+                    if self.params.depth >= self.cfg.max_call_depth {
+                        self.gas += gas;
+                        self.stack.push(U256::zero());
+                        continue;
+                    }
+                    let data = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
                     let mut params = InterpreterParams::default();
-                    params.sender = self.params.address;
-                    params.gas = gas;
+                    params.origin = self.params.origin;
+                    params.gas_limit = gas;
+                    params.gas_price = self.params.gas_price;
                     params.contract.code_address = address;
-                    params.contract.code_data = self
-                        .data_provider
-                        .get_code(&params.contract.code_address)
-                        .to_vec();
+                    params.contract.code_data = self.data_provider.get_code(&params.contract.code_address).to_vec();
                     params.input = Vec::from(data);
+                    params.depth = self.params.depth + 1;
+                    // The flag `read_only` should geneticed from the parent.
+                    // Let's explain it. Take a example belows:
+                    //
+                    // User -> ContractA(STATICCALL)-> ContractB(CALL) -> ContractC(Set a Log)
+                    //         read_only=false         read_only=true     read_only=???
+                    //
+                    // What's the value of `read_only` in ContractC?
+                    // Fine, the answer should be `true`. So, ContractC can't do any changes.
+                    params.read_only = self.params.read_only;
+
                     match op {
                         opcodes::OpCode::CALL => {
+                            params.sender = self.params.address;
+                            params.receiver = address;
                             params.address = address;
                             params.value = value;
                         }
                         opcodes::OpCode::CALLCODE => {
+                            params.sender = self.params.address;
+                            params.receiver = self.params.address;
                             params.address = self.params.address;
                             params.value = value;
                         }
                         opcodes::OpCode::DELEGATECALL => {
+                            params.sender = self.params.sender;
+                            params.receiver = self.params.address;
                             params.address = self.params.address;
+                            // DELEGATECALL should NEVER transfer balances, we set the
+                            // params.value to the CALLVALUE opcode.
+                            //
+                            // Take below as an example:
+                            //
+                            // User -> value=10 ->  Contract A -> value=0 -> Contract B (op CALLVALUE)
+                            //
+                            // Contract A call a DELEGATECALL to Contract B, with no balance, but
+                            // when CALLVALUE did in Contract B, value=10 should be given.
+                            params.value = self.params.value;
+                            params.disable_transfer_value = true;
                         }
                         opcodes::OpCode::STATICCALL => {
+                            params.sender = self.params.address;
+                            params.receiver = address;
                             params.address = address;
+                            params.read_only = true;
                         }
                         _ => {}
                     }
                     let r = self.data_provider.call(op, params);
                     match r {
                         Ok(data) => match data {
-                            InterpreterResult::Normal(ret, gas, _) => {
+                            InterpreterResult::Normal(mut ret, gas, _) => {
                                 self.stack.push(U256::one());
+                                self.return_data = ret.clone();
+                                if ret.len() > out_len.low_u64() as usize {
+                                    ret.resize(out_len.low_u64() as usize, 0u8);
+                                }
                                 self.mem.set(out_offset.low_u64() as usize, ret.as_slice());
                                 self.gas += gas;
                             }
-                            InterpreterResult::Revert(ret, gas, _) => {
+                            InterpreterResult::Revert(mut ret, gas, _) => {
                                 self.stack.push(U256::zero());
+                                self.return_data = ret.clone();
+                                if ret.len() > out_len.low_u64() as usize {
+                                    ret.resize(out_len.low_u64() as usize, 0u8);
+                                }
                                 self.mem.set(out_offset.low_u64() as usize, ret.as_slice());
                                 self.gas += gas;
                             }
@@ -1056,47 +1091,50 @@ impl Interpreter {
                 opcodes::OpCode::RETURN => {
                     let mem_offset = self.stack.pop();
                     let mem_len = self.stack.pop();
-                    let r = self
-                        .mem
-                        .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    self.return_data = Vec::from(r);
-                    break;
+                    let r = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
+                    let return_data = Vec::from(r);
+                    return Ok(InterpreterResult::Normal(
+                        return_data.clone(),
+                        self.gas,
+                        self.logs.clone(),
+                    ));
                 }
                 opcodes::OpCode::REVERT => {
                     let mem_offset = self.stack.pop();
                     let mem_len = self.stack.pop();
-                    let r = self
-                        .mem
-                        .get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    self.return_data = Vec::from(r);
+                    let r = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
+                    let return_data = Vec::from(r);
                     return Ok(InterpreterResult::Revert(
-                        self.return_data.clone(),
+                        return_data.clone(),
                         self.gas,
                         self.logs.clone(),
                     ));
                 }
                 opcodes::OpCode::SELFDESTRUCT => {
                     let address = self.stack.pop();
-                    self.data_provider
+                    let b = self
+                        .data_provider
                         .selfdestruct(&self.params.address, &common::u256_to_address(&address));
+                    if !b {
+                        // Imaging this, what if we `SELFDESTRUCT` a contract twice,
+                        // waht will happend?
+                        //
+                        // Obviously, we should not `add_refund` for each `SELFDESTRUCT`.
+                        // But it is difficult to know whether the address has been destructed,
+                        // so an eclectic approach is sub the refund after call.
+                        self.data_provider
+                            .sub_refund(&self.params.origin, self.cfg.gas_self_destruct_refund);
+                    }
                     break;
                 }
             }
-            if self.cfg.print_op {
-                println!();
-            }
+            debug!("");
         }
-        Ok(InterpreterResult::Normal(
-            self.return_data.clone(),
-            self.gas,
-            self.logs.clone(),
-        ))
+        Ok(InterpreterResult::Normal(vec![], self.gas, self.logs.clone()))
     }
 
     fn use_gas(&mut self, gas: u64) -> Result<(), err::Error> {
-        if self.cfg.print_gas_used && gas != 0 {
-            println!("[Gas] - {}", gas);
-        }
+        debug!("[Gas] - {}", gas);
         if self.gas < gas {
             return Err(err::Error::OutOfGas);
         }
@@ -1116,8 +1154,16 @@ impl Interpreter {
     }
 
     fn mem_gas_work(&mut self, mem_offset: U256, mem_len: U256) -> Result<(), err::Error> {
+        if mem_len.is_zero() {
+            return Ok(());
+        }
         let (mem_sum, b) = mem_offset.overflowing_add(mem_len);
-        if b || mem_sum.bits() > 64 {
+        // Ethereum's max block gas is 8000000, when mem size > 1024 * 64,
+        // about 8000000 gas should be fired. That's means this transaction
+        // will never success.
+        //
+        // But to keep some imagination, 1G is used as the ceil.
+        if b || mem_sum.bits() > 64 || mem_sum.low_u64() > 1024 * 1024 * 1024 {
             return Err(err::Error::OutOfGas);
         }
         if mem_len != U256::zero() {
@@ -1128,18 +1174,59 @@ impl Interpreter {
         Ok(())
     }
 
-    fn get_byte(&self, n: u64) -> u8 {
+    fn get_byte(&self, n: u64) -> Option<u8> {
         if n < self.params.contract.code_data.len() as u64 {
-            return self.params.contract.code_data[n as usize];
+            return Some(self.params.contract.code_data[n as usize]);
         }
-        0
+        None
     }
 
-    fn get_op(&self, n: u64) -> Result<opcodes::OpCode, err::Error> {
-        if let Some(data) = opcodes::OpCode::from_u8(self.get_byte(n)) {
-            return Ok(data);
+    fn get_op(&self, n: u64) -> Result<Option<opcodes::OpCode>, err::Error> {
+        match self.get_byte(n) {
+            Some(a) => match opcodes::OpCode::from_u8(a) {
+                Some(b) => Ok(Some(b)),
+                None => Err(err::Error::InvalidOpcode),
+            },
+            None => Ok(None),
         }
-        Err(err::Error::InvalidOpcode)
+    }
+
+    fn pre_jump(&self, n: U256) -> Result<(), err::Error> {
+        if n.bits() > 63 {
+            return Err(err::Error::InvalidJumpDestination);
+        }
+        let n = n.low_u64() as usize;
+        if n >= self.params.contract.code_data.len() {
+            return Err(err::Error::InvalidJumpDestination);
+        }
+        // Only JUMPDESTs allowed for destinations
+        if self.params.contract.code_data[n] != opcodes::OpCode::JUMPDEST as u8 {
+            return Err(err::Error::InvalidJumpDestination);
+        }
+        Ok(())
+    }
+
+    /// Function trace outputs execution informations.
+    fn trace(&self, op: &opcodes::OpCode, pc: u64) {
+        if *op >= opcodes::OpCode::PUSH1 && *op <= opcodes::OpCode::PUSH32 {
+            let n = op.clone() as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
+            let r = {
+                if pc + u64::from(n) > self.params.contract.code_data.len() as u64 {
+                    U256::zero()
+                } else {
+                    U256::from(&self.params.contract.code_data[pc as usize..(pc + u64::from(n)) as usize])
+                }
+            };
+            debug!("[OP] {} {:#x} gas={}", op, r, self.gas);
+        } else {
+            debug!("[OP] {} gas={}", op, self.gas);
+        }
+        debug!("[STACK]");
+        let l = self.stack.data().len();
+        for i in 0..l {
+            debug!("[{}] {:#x}", i, self.stack.back(i));
+        }
+        debug!("[MEM] len={}", self.mem.len());
     }
 }
 
@@ -1157,29 +1244,9 @@ mod tests {
             InterpreterParams::default(),
         );
         it.context.gas_limit = 1_000_000;
-        it.params.gas = 1_000_000;
+        it.params.gas_limit = 1_000_000;
         it.gas = 1_000_000;
         it
-    }
-
-    #[test]
-    fn test_interpreter_execute() {
-        let mut it = default_interpreter();;
-        it.params.contract.code_data = vec![
-            opcodes::OpCode::PUSH1 as u8,
-            10,
-            opcodes::OpCode::PUSH1 as u8,
-            0,
-            opcodes::OpCode::MSTORE as u8,
-            opcodes::OpCode::PUSH1 as u8,
-            32,
-            opcodes::OpCode::PUSH1 as u8,
-            0,
-            opcodes::OpCode::RETURN as u8,
-        ];
-        it.run().unwrap();
-        let r = U256::from_big_endian(&it.return_data[..]);
-        assert_eq!(r, U256::from(10));
     }
 
     #[test]
@@ -1666,16 +1733,10 @@ mod tests {
             let mut it = default_interpreter();;
             it.cfg.eip1283 = true;
             assert_eq!(it.gas, it.context.gas_limit);
-            it.data_provider.set_storage_origin(
-                &it.params.contract.code_address,
-                H256::zero(),
-                H256::from(origin),
-            );
-            it.data_provider.set_storage(
-                &it.params.contract.code_address,
-                H256::zero(),
-                H256::from(origin),
-            );
+            it.data_provider
+                .set_storage_origin(&it.params.contract.code_address, H256::zero(), H256::from(origin));
+            it.data_provider
+                .set_storage(&it.params.contract.code_address, H256::zero(), H256::from(origin));
             it.params.contract.code_data = common::hex_decode(code).unwrap();
             it.run().unwrap();
             assert_eq!(it.gas, it.context.gas_limit - use_gas);
@@ -1690,108 +1751,5 @@ mod tests {
         let r = it.run();
         assert!(r.is_err());
         assert_eq!(r.err(), Some(err::Error::InvalidOpcode))
-    }
-
-    #[test]
-    fn test_op_call() {
-        // Test from https://github.com/ethereum/tests/blob/develop/GeneralStateTests/stCallCodes/callcall_00.json
-        // Step from go-ethereum:
-        //
-        // PUSH1           pc=00000000 gas=1000000 cost=3
-        // PUSH1           pc=00000002 gas=999997 cost=3
-        // PUSH1           pc=00000004 gas=999994 cost=3
-        // PUSH1           pc=00000006 gas=999991 cost=3
-        // PUSH1           pc=00000008 gas=999988 cost=3
-        // PUSH20          pc=00000010 gas=999985 cost=3
-        // PUSH3           pc=00000031 gas=999982 cost=3
-        // CALL            pc=00000035 gas=999979 cost=359706     // 1st CALL
-        // PUSH1           pc=00000000 gas=352300 cost=3
-        // PUSH1           pc=00000002 gas=352297 cost=3
-        // PUSH1           pc=00000004 gas=352294 cost=3
-        // PUSH1           pc=00000006 gas=352291 cost=3
-        // PUSH1           pc=00000008 gas=352288 cost=3
-        // PUSH20          pc=00000010 gas=352285 cost=3
-        // PUSH3           pc=00000031 gas=352282 cost=3
-        // CALL            pc=00000035 gas=352279 cost=259706     // 2nd CALL
-        // PUSH1           pc=00000000 gas=252300 cost=3
-        // PUSH1           pc=00000002 gas=252297 cost=3
-        // SSTORE          pc=00000004 gas=252294 cost=20000
-        // CALLER          pc=00000005 gas=232294 cost=2
-        // PUSH1           pc=00000006 gas=232292 cost=3
-        // SSTORE          pc=00000008 gas=232289 cost=20000
-        // CALLVALUE       pc=00000009 gas=212289 cost=2
-        // PUSH1           pc=00000010 gas=212287 cost=3
-        // SSTORE          pc=00000012 gas=212284 cost=20000
-        // ADDRESS         pc=00000013 gas=192284 cost=2
-        // PUSH1           pc=00000014 gas=192282 cost=3
-        // SSTORE          pc=00000016 gas=192279 cost=20000
-        // ORIGIN          pc=00000017 gas=172279 cost=2
-        // PUSH1           pc=00000018 gas=172277 cost=3
-        // SSTORE          pc=00000020 gas=172274 cost=5000
-        // CALLDATASIZE    pc=00000021 gas=167274 cost=2
-        // PUSH1           pc=00000022 gas=167272 cost=3
-        // SSTORE          pc=00000024 gas=167269 cost=20000
-        // CODESIZE        pc=00000025 gas=147269 cost=2
-        // PUSH1           pc=00000026 gas=147267 cost=3
-        // SSTORE          pc=00000028 gas=147264 cost=20000
-        // GASPRICE        pc=00000029 gas=127264 cost=2
-        // PUSH1           pc=00000030 gas=127262 cost=3
-        // SSTORE          pc=00000032 gas=127259 cost=20000
-        // STOP            pc=00000033 gas=107259 cost=0          // 2nd CALL end
-        // PUSH1           pc=00000036 gas=199832 cost=3
-        // SSTORE          pc=00000038 gas=199829 cost=20000
-        // STOP            pc=00000039 gas=179829 cost=0          // 1nd CALL end
-        // PUSH1           pc=00000036 gas=820102 cost=3
-        // SSTORE          pc=00000038 gas=820099 cost=20000
-        // STOP            pc=00000039 gas=800099 cost=0
-        //
-        // Cost = 199901
-        let mut it = default_interpreter();
-        it.context.gas_price = U256::one();
-        let mut data_provider = extmock::DataProviderMock::default();
-
-        let mut account0 = extmock::Account::default();
-        account0.balance = U256::from("0de0b6b3a7640000");
-        account0.code = common::hex_decode(
-            "0x6040600060406000600173100000000000000000000000000000000000000162055730f1600055",
-        )
-        .unwrap();
-        data_provider.db.insert(
-            Address::from("0x1000000000000000000000000000000000000000"),
-            account0,
-        );
-
-        let mut account1 = extmock::Account::default();
-        account1.balance = U256::from("0de0b6b3a7640000");
-        account1.code = common::hex_decode(
-            "0x604060006040600060027310000000000000000000000000000000000000026203d090f1600155",
-        )
-        .unwrap();
-        data_provider.db.insert(
-            Address::from("0x1000000000000000000000000000000000000001"),
-            account1,
-        );
-
-        let mut account2 = extmock::Account::default();
-        account2.balance = U256::zero();
-        account2.code = common::hex_decode(
-            "0x600160025533600455346007553060e6553260e8553660ec553860ee553a60f055",
-        )
-        .unwrap();
-        data_provider.db.insert(
-            Address::from("0x1000000000000000000000000000000000000002"),
-            account2,
-        );
-
-        it.data_provider = Box::new(data_provider);
-        it.params.contract.code_data = common::hex_decode(
-            "0x6040600060406000600173100000000000000000000000000000000000000162055730f1600055",
-        )
-        .unwrap();
-        let r = it.run().unwrap();
-        match r {
-            InterpreterResult::Normal(_, gas, _) => assert_eq!(gas, it.params.gas - 199_901),
-            _ => assert!(false),
-        }
     }
 }

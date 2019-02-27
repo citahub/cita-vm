@@ -10,4 +10,12 @@ hex = "0.3.2"
 rlp = "0.3.0"
 lru-cache = "0.1.1"
 ethereum-types = "0.4"
-cita_trie = "0.1.5"
+cita_trie = "0.1.6"
+tiny-keccak = "1.4.2"
+log = "0.4.0"
+env_logger = "0.6.1"
+
+[features]
+default = ["hashlib-keccak"]
+hashlib-keccak = []
+hashlib-sha3 = []

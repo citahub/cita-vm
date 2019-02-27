@@ -75,7 +75,17 @@ pub struct PostData {
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Post {
     #[serde(rename = "Byzantium")]
-    pub byzantium: Vec<PostData>,
+    pub byzantium: Option<Vec<PostData>>,
+    #[serde(rename = "Constantinople")]
+    pub constantinople: Option<Vec<PostData>>,
+    #[serde(rename = "EIP150")]
+    pub eip150: Option<Vec<PostData>>,
+    #[serde(rename = "EIP158")]
+    pub eip158: Option<Vec<PostData>>,
+    #[serde(rename = "Frontier")]
+    pub frontier: Option<Vec<PostData>>,
+    #[serde(rename = "Homestead")]
+    pub homestead: Option<Vec<PostData>>,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
@@ -83,7 +93,7 @@ pub struct Vm {
     #[serde(rename = "env")]
     pub env: Env,
     #[serde(rename = "transaction")]
-    pub exec: Transaction,
+    pub transaction: Transaction,
     #[serde(rename = "post")]
     pub post: Option<Post>,
     #[serde(rename = "pre")]
@@ -117,10 +127,7 @@ mod tests {
     use std::fs;
     #[test]
     fn test_json_tests_parse() {
-        let f = fs::File::open(
-            "./tests/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json",
-        )
-        .unwrap();
+        let f = fs::File::open("./tests/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json").unwrap();
         let t = Test::load(f).unwrap();
         assert!(t.0.contains_key("addmodNonConst"));
         let v = &t.0["addmodNonConst"];
