@@ -11,10 +11,11 @@
 
 # 底层数据
 
-数据库存储两类信息:
+数据库存储三类信息:
 
 - account: rlp(nonce, balance, storage_root, code_hash)
 - account.storage_root: storage_trie
+- account.code_hash: code
 
 注意的是 world trie root 并没有存储在该数据库中, 因此使用者需要自己想办法存储 world trie root(一个好的想法是存在 DB for blocks 中).
 
@@ -68,6 +69,8 @@ pub fn checkpoint(&mut self) -> usize {
 ```
 
 **在创建 checkpoint 后对某个账号进行的第一次 Dirty 操作, 将把操作前的 StateObjectEntry 写入 checkpoints 列表的最后一项**
+
+假设初始账号 A 拥有一个 (Key: Value0), 创建 checkpoint 后先后 set(Key, Value1) 和 set(Key, Value2), 则在最近的 checkpoint 中存储的值是 Key: Value0
 
 ## 合并 checkpoint
 
