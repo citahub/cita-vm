@@ -8,19 +8,6 @@ edition = "2018"
 sha3 = "0.8.0"
 hex = "0.3.2"
 rlp = "0.3.0"
-
-hash-db = { git = "https://github.com/paritytech/trie", default-features = false }
-trie-db = { git = "https://github.com/paritytech/trie", optional = true }
-trie-root = { git = "https://github.com/paritytech/trie", default-features = false }
-memory-db = { git = "https://github.com/paritytech/trie", optional = true }
-hash256-std-hasher = { git = "https://github.com/paritytech/trie", optional = true }
-
-[features]
-default = ["std"]
-std = [
-	"hash-db/std",
-	"memory-db",
-	"trie-db",
-	"trie-root/std",
-	"hash256-std-hasher"
-]
+lru-cache = "0.1.1"
+ethereum-types = "0.4"
+cita_trie = "0.1.5"

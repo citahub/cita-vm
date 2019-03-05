@@ -1011,8 +1011,10 @@ impl Interpreter {
                     params.sender = self.params.address;
                     params.gas = gas;
                     params.contract.code_address = address;
-                    params.contract.code_data =
-                        Vec::from(self.data_provider.get_code(&params.contract.code_address));
+                    params.contract.code_data = self
+                        .data_provider
+                        .get_code(&params.contract.code_address)
+                        .to_vec();
                     params.input = Vec::from(data);
                     match op {
                         opcodes::OpCode::CALL => {
