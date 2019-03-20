@@ -15,6 +15,7 @@ pub enum Error {
     InvalidJumpDestination,
 }
 
+impl error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -31,5 +32,3 @@ impl fmt::Display for Error {
         };
     }
 }
-
-impl error::Error for Error {}

@@ -2,7 +2,7 @@ use super::err;
 use super::ext;
 use super::interpreter;
 use super::opcodes;
-use ethereum_types::*;
+use ethereum_types::{Address, H256, U256};
 use keccak_hash;
 use std::collections::BTreeMap;
 

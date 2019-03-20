@@ -1,12 +1,8 @@
-extern crate ethereum_types;
-extern crate hex;
-extern crate serde;
-extern crate serde_json;
-
-use ethereum_types::*;
+use ethereum_types::Address;
+use serde_derive::Deserialize;
 use serde_json::Error;
 use std::collections::BTreeMap;
-use std::io::prelude::*;
+use std::io::Read;
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct CallCreates {}
@@ -15,12 +11,16 @@ pub struct CallCreates {}
 pub struct Env {
     #[serde(rename = "currentCoinbase")]
     pub current_coinbase: Address,
+
     #[serde(rename = "currentDifficulty")]
     pub current_difficulty: String,
+
     #[serde(rename = "currentGasLimit")]
     pub current_gas_limit: String,
+
     #[serde(rename = "currentNumber")]
     pub current_number: String,
+
     #[serde(rename = "currentTimestamp")]
     pub current_timestamp: String,
 }
@@ -29,18 +29,25 @@ pub struct Env {
 pub struct Exec {
     #[serde(rename = "address")]
     pub address: Address,
+
     #[serde(rename = "caller")]
     pub caller: Address,
+
     #[serde(rename = "code")]
     pub code: String,
+
     #[serde(rename = "data")]
     pub data: String,
+
     #[serde(rename = "gas")]
     pub gas: String,
+
     #[serde(rename = "gasPrice")]
     pub gas_price: String,
+
     #[serde(rename = "origin")]
     pub origin: Address,
+
     #[serde(rename = "value")]
     pub value: String,
 }
@@ -69,18 +76,25 @@ impl IntoIterator for State {
 pub struct Vm {
     #[serde(rename = "callcreates")]
     pub call_creates: Option<Vec<CallCreates>>,
+
     #[serde(rename = "env")]
     pub env: Env,
+
     #[serde(rename = "exec")]
     pub exec: Exec,
+
     #[serde(rename = "gas")]
     pub gas: Option<String>,
+
     #[serde(rename = "logs")]
     pub logs: Option<String>,
+
     #[serde(rename = "out")]
     pub out: Option<String>,
+
     #[serde(rename = "post")]
     pub post: Option<State>,
+
     #[serde(rename = "pre")]
     pub pre: Option<State>,
 }

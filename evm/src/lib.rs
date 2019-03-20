@@ -1,12 +1,13 @@
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-
 pub mod common;
-pub mod err;
-pub mod ext;
+mod err;
+mod ext;
 pub mod extmock;
-pub mod interpreter;
-pub mod memory;
-pub mod opcodes;
-pub mod stack;
+mod interpreter;
+mod memory;
+mod opcodes;
+mod stack;
+
+pub use err::Error;
+pub use ext::DataProvider;
+pub use interpreter::{Context, Contract, Interpreter, InterpreterConf, InterpreterParams, InterpreterResult, Log};
+pub use opcodes::OpCode;

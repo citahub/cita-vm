@@ -25,6 +25,7 @@ impl<C: cita_trie::codec::NodeCodec, B: cita_trie::db::DB> From<cita_trie::error
         Error::Trie(format!("{}", error))
     }
 }
+
 impl From<rlp::DecoderError> for Error {
     fn from(error: rlp::DecoderError) -> Self {
         Error::RLP(error)

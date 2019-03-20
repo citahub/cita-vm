@@ -1,12 +1,10 @@
-extern crate cita_vm;
-extern crate evm;
-
+use cita_vm;
 use cita_vm::json_tests::common::*;
+use evm;
 use evm::extmock;
-use evm::interpreter;
 use std::fs;
 use std::io;
-use std::io::prelude::*;
+use std::io::Write;
 
 fn test_json_file(p: &str) {
     let f = fs::File::open(p).unwrap();
@@ -15,7 +13,7 @@ fn test_json_file(p: &str) {
         io::stderr().write_all(format!("{}::{}\n", p, name).as_bytes()).unwrap();
         let vm: cita_vm::json_tests::vm_test::Vm = data;
         // Init context
-        let mut ctx = interpreter::Context::default();
+        let mut ctx = evm::Context::default();
         ctx.coinbase = vm.env.current_coinbase;
         ctx.difficulty = string_2_u256(vm.env.current_difficulty);
         ctx.gas_limit = string_2_u256(vm.env.current_gas_limit).low_u64();
@@ -23,14 +21,14 @@ fn test_json_file(p: &str) {
         ctx.timestamp = string_2_u256(vm.env.current_timestamp).low_u64() as u64;
 
         // Init Config
-        let mut cfg = interpreter::InterpreterConf::default();
+        let mut cfg = evm::InterpreterConf::default();
         cfg.gas_exp_byte = 10;
         cfg.gas_sload = 50;
         cfg.gas_self_destruct = 0;
         cfg.gas_self_destruct_new_account = 0;
 
         // Init params
-        let mut params = interpreter::InterpreterParams::default();
+        let mut params = evm::InterpreterParams::default();
         params.origin = vm.exec.origin;
         params.contract.code_address = vm.exec.address;
         params.address = vm.exec.address;
@@ -45,7 +43,7 @@ fn test_json_file(p: &str) {
         params.value = string_2_u256(vm.exec.value);
         params.contract.code_data = string_2_bytes(vm.exec.code);
 
-        let mut it = interpreter::Interpreter::new(ctx, cfg, Box::new(extmock::DataProviderMock::default()), params);
+        let mut it = evm::Interpreter::new(ctx, cfg, Box::new(extmock::DataProviderMock::default()), params);
 
         // Init state db
         if let Some(data) = vm.pre {
@@ -65,8 +63,7 @@ fn test_json_file(p: &str) {
         match r {
             Ok(data) => {
                 match data {
-                    evm::interpreter::InterpreterResult::Normal(ret, gas, _)
-                    | evm::interpreter::InterpreterResult::Revert(ret, gas, _) => {
+                    evm::InterpreterResult::Normal(ret, gas, _) | evm::InterpreterResult::Revert(ret, gas) => {
                         // Check statedb
                         if let Some(data) = vm.post {
                             for (address, account) in data.into_iter() {

@@ -4,7 +4,8 @@ use super::ext;
 use super::memory;
 use super::opcodes;
 use super::stack;
-use ethereum_types::*;
+use ethereum_types::{Address, H256, U256, U512};
+use log::debug;
 use std::cmp;
 
 #[derive(Clone, Debug, Default)]
@@ -23,11 +24,12 @@ pub struct Log(pub Vec<H256>, pub Vec<u8>);
 
 #[derive(Clone, Debug)]
 pub enum InterpreterResult {
-    // Return data, remain gas and Logs.
+    // Return data, remain gas, logs.
     Normal(Vec<u8>, u64, Vec<Log>),
-    Revert(Vec<u8>, u64, Vec<Log>),
-    // Return data, contract address and remain gas.
-    Create(Vec<u8>, Address, u64),
+    // Return data, remain gas
+    Revert(Vec<u8>, u64),
+    // Return data, remain gas, logs, contract address
+    Create(Vec<u8>, u64, Vec<Log>, Address),
 }
 
 #[derive(Clone)]
@@ -73,12 +75,12 @@ pub struct InterpreterConf {
     pub gas_ext_code_hash: u64, // Piad for a EXTCODEHASH operation. http://eips.ethereum.org/EIPS/eip-1052
 }
 
-impl InterpreterConf {
+impl Default for InterpreterConf {
     // The default is version "2d0661f 2018-11-08" of https://ethereum.github.io/yellowpaper/paper.pdf
     // But in order to pass the test, Some modifications must needed.
     //
     // If you want to step through the steps, let the
-    pub fn default() -> Self {
+    fn default() -> Self {
         InterpreterConf {
             eip1283: false,
             stack_limit: 1024,
@@ -903,7 +905,7 @@ impl Interpreter {
                     self.logs.push(Log(topics, Vec::from(data)));
                 }
                 opcodes::OpCode::CREATE | opcodes::OpCode::CREATE2 => {
-                    // clear return data buffer before creating new call frame.
+                    // Clear return data buffer before creating new call frame.
                     self.return_data = vec![];
 
                     let value = self.stack.pop();
@@ -946,11 +948,12 @@ impl Interpreter {
                     let r = self.data_provider.call(op, params);
                     match r {
                         Ok(data) => match data {
-                            InterpreterResult::Create(_, add, gas) => {
+                            InterpreterResult::Create(_, gas, logs, add) => {
                                 self.stack.push(common::address_to_u256(add));
                                 self.gas += gas;
+                                self.logs.extend(logs);
                             }
-                            InterpreterResult::Revert(ret, gas, _) => {
+                            InterpreterResult::Revert(ret, gas) => {
                                 self.stack.push(U256::zero());
                                 self.gas += gas;
                                 self.return_data = ret;
@@ -984,11 +987,11 @@ impl Interpreter {
                         return Err(err::Error::MutableCallInStaticContext);
                     }
 
-                    // clear return data buffer before creating new call frame.
+                    // Clear return data buffer before creating new call frame.
                     self.return_data = vec![];
 
                     let mut gas = self.gas_tmp;
-                    // Add stipend (only CALL|CALLCODE when value > 0)
+                    // Add stipend (only when CALL|CALLCODE and value > 0)
                     if !value.is_zero() {
                         gas += self.cfg.gas_call_stipend;
                     }
@@ -1063,7 +1066,7 @@ impl Interpreter {
                     let r = self.data_provider.call(op, params);
                     match r {
                         Ok(data) => match data {
-                            InterpreterResult::Normal(mut ret, gas, _) => {
+                            InterpreterResult::Normal(mut ret, gas, logs) => {
                                 self.stack.push(U256::one());
                                 self.return_data = ret.clone();
                                 if ret.len() > out_len.low_u64() as usize {
@@ -1071,8 +1074,9 @@ impl Interpreter {
                                 }
                                 self.mem.set(out_offset.low_u64() as usize, ret.as_slice());
                                 self.gas += gas;
+                                self.logs.extend(logs);
                             }
-                            InterpreterResult::Revert(mut ret, gas, _) => {
+                            InterpreterResult::Revert(mut ret, gas) => {
                                 self.stack.push(U256::zero());
                                 self.return_data = ret.clone();
                                 if ret.len() > out_len.low_u64() as usize {
@@ -1104,11 +1108,7 @@ impl Interpreter {
                     let mem_len = self.stack.pop();
                     let r = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
                     let return_data = Vec::from(r);
-                    return Ok(InterpreterResult::Revert(
-                        return_data.clone(),
-                        self.gas,
-                        self.logs.clone(),
-                    ));
+                    return Ok(InterpreterResult::Revert(return_data.clone(), self.gas));
                 }
                 opcodes::OpCode::SELFDESTRUCT => {
                     let address = self.stack.pop();
@@ -1117,7 +1117,7 @@ impl Interpreter {
                         .selfdestruct(&self.params.address, &common::u256_to_address(&address));
                     if !b {
                         // Imaging this, what if we `SELFDESTRUCT` a contract twice,
-                        // waht will happend?
+                        // what will happend?
                         //
                         // Obviously, we should not `add_refund` for each `SELFDESTRUCT`.
                         // But it is difficult to know whether the address has been destructed,

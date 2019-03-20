@@ -1,7 +1,14 @@
-#[derive(Debug, PartialEq, Eq, Clone)]
+use std::error;
+use std::fmt;
+use std::io;
+
+#[derive(Debug)]
 pub enum Error {
-    Evm(evm::err::Error),
-    State(state::err::Error),
+    Evm(evm::Error),
+    State(state::Error),
+    Secp256k1(secp256k1::Error),
+    IO(io::Error),
+    Str(String),
     NotEnoughBaseGas,
     NotEnoughBalance,
     InvalidNonce,
@@ -11,13 +18,15 @@ pub enum Error {
     ExccedMaxCallDepth,
 }
 
-impl std::error::Error for Error {}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl error::Error for Error {}
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::Evm(e) => return write!(f, "{}", e),
             Error::State(e) => return write!(f, "{}", e),
+            Error::Secp256k1(e) => return write!(f, "{:?}", e),
+            Error::IO(e) => return write!(f, "{:?}", e),
+            Error::Str(e) => return write!(f, "{:?}", e),
             Error::NotEnoughBaseGas => return write!(f, "NotEnoughBaseGas"),
             Error::NotEnoughBalance => return write!(f, "NotEnoughBalance"),
             Error::InvalidNonce => return write!(f, "InvalidNonce"),
@@ -29,14 +38,26 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl From<evm::err::Error> for Error {
-    fn from(error: evm::err::Error) -> Self {
+impl From<evm::Error> for Error {
+    fn from(error: evm::Error) -> Self {
         Error::Evm(error)
     }
 }
 
-impl From<state::err::Error> for Error {
-    fn from(error: state::err::Error) -> Self {
+impl From<state::Error> for Error {
+    fn from(error: state::Error) -> Self {
         Error::State(error)
+    }
+}
+
+impl From<secp256k1::Error> for Error {
+    fn from(error: secp256k1::Error) -> Self {
+        Error::Secp256k1(error)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(error: io::Error) -> Self {
+        Error::IO(error)
     }
 }

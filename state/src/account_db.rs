@@ -1,56 +1,48 @@
+use super::err::Error;
 use cita_trie::db::DB;
 use ethereum_types::Address;
 
 #[derive(Debug)]
-pub struct AccountDB<'a, B: cita_trie::db::DB> {
+pub struct AccountDB<'a, B: DB> {
     address: Address,
     db: &'a mut B,
 }
 
-impl<'a, B: cita_trie::db::DB> AccountDB<'a, B> {
+impl<'a, B: DB> AccountDB<'a, B> {
     pub fn new(address: Address, db: &'a mut B) -> Self {
         AccountDB { address, db }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum AccountDBError {
-    Unknown,
-}
-impl std::error::Error for AccountDBError {}
-impl std::fmt::Display for AccountDBError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            AccountDBError::Unknown => write!(f, "Unknown"),
-        }
-    }
-}
-
-impl<'a, B: cita_trie::db::DB> DB for AccountDB<'a, B> {
-    type Error = AccountDBError;
+impl<'a, B: DB> DB for AccountDB<'a, B> {
+    type Error = Error;
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         let concatenated = [&self.address.0[..], &key[..]].concat();
-        self.db.get(concatenated.as_slice()).or(Err(AccountDBError::Unknown))
+        self.db
+            .get(concatenated.as_slice())
+            .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
     fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
         let concatenated = [&self.address.0[..], &key[..]].concat();
         self.db
             .insert(concatenated.as_slice(), value)
-            .or(Err(AccountDBError::Unknown))
+            .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
         let concatenated = [&self.address.0[..], &key[..]].concat();
         self.db
             .contains(concatenated.as_slice())
-            .or(Err(AccountDBError::Unknown))
+            .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
     fn remove(&mut self, key: &[u8]) -> Result<(), Self::Error> {
         let concatenated = [&self.address.0[..], &key[..]].concat();
-        self.db.remove(concatenated.as_slice()).or(Err(AccountDBError::Unknown))
+        self.db
+            .remove(concatenated.as_slice())
+            .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 }
 

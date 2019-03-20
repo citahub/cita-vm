@@ -1,4 +1,7 @@
+//! Package hash_sha3 is a function set for implementing Ethereum's state
+//! which use sha3 instead of keccak.
 use super::err;
+pub use cita_trie::codec::RLPNodeCodec;
 use ethereum_types::H256;
 use sha3::Digest;
 

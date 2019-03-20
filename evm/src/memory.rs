@@ -34,14 +34,6 @@ impl Memory {
     pub fn len(&self) -> usize {
         self.store.len()
     }
-
-    pub fn data(&self) -> &[u8] {
-        &self.store
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.store.is_empty()
-    }
 }
 
 #[cfg(test)]

@@ -18,6 +18,7 @@ impl<T: Clone + Copy> Stack<T> {
         self.data.push(d)
     }
 
+    #[cfg(test)]
     pub fn push_n(&mut self, ds: &[T]) {
         self.data.extend_from_slice(ds)
     }
@@ -28,10 +29,6 @@ impl<T: Clone + Copy> Stack<T> {
 
     pub fn len(&self) -> usize {
         self.data.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
     }
 
     pub fn swap(&mut self, n: usize) {

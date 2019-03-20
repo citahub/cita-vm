@@ -15,6 +15,7 @@ pub struct StateObjectEntry {
 }
 
 impl StateObjectEntry {
+    /// Create a new entry with status `Clean`.
     pub fn new_clean(state_object: Option<StateObject>) -> StateObjectEntry {
         StateObjectEntry {
             state_object,
@@ -22,6 +23,7 @@ impl StateObjectEntry {
         }
     }
 
+    /// Create a new entry with status `Dirty`.
     pub fn new_dirty(state_object: Option<StateObject>) -> StateObjectEntry {
         StateObjectEntry {
             state_object,
@@ -29,6 +31,7 @@ impl StateObjectEntry {
         }
     }
 
+    /// Return true is status == Dirty.
     pub fn is_dirty(&self) -> bool {
         self.status == ObjectStatus::Dirty
     }
@@ -42,6 +45,7 @@ impl StateObjectEntry {
         }
     }
 
+    /// Merge with others.
     pub fn merge(&mut self, other: StateObjectEntry) {
         self.status = other.status;
         match other.state_object {

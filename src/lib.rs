@@ -1,13 +1,11 @@
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-#[macro_use]
-extern crate serde_derive;
-
-pub use evm;
-pub use state;
-pub mod err;
-pub mod executive;
+mod err;
+mod executive;
 pub mod json_tests;
-#[allow(dead_code, unused_variables)]
-pub mod precompile;
+pub mod precompiled;
+
+pub use err::Error;
+pub use evm;
+pub use executive::{
+    exec, BlockDataProvider, BlockDataProviderMock, Config, CreateKind, DataProvider, Store, Transaction,
+};
+pub use state;

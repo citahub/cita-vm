@@ -1,8 +1,11 @@
 use super::err;
+use super::precompiled;
+use cita_trie::db::DB;
 use ethereum_types::{Address, H256, U256};
-use evm::interpreter::InterpreterParams;
+use evm::InterpreterParams;
+use log::debug;
 use rlp::RlpStream;
-use state::state::{State, StateObjectInfo};
+use state::{State, StateObjectInfo};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -37,7 +40,7 @@ impl BlockDataProvider for BlockDataProviderMock {
 }
 
 /// Store storages shared datas.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Store {
     refund: HashMap<Address, u64>,                 // For record refunds
     origin: HashMap<Address, HashMap<H256, H256>>, // For record origin value
@@ -49,22 +52,8 @@ pub struct Store {
     //   ./tests/jsondata/GeneralStateTests/stSStoreTest/sstore_combinations_initial1.json
     //   ./tests/jsondata/GeneralStateTests/stSStoreTest/sstore_combinations_initial2.json
     inused: HashSet<Address>,
-    evm_context: evm::interpreter::Context,
-    evm_cfg: evm::interpreter::InterpreterConf,
-}
-
-impl Default for Store {
-    /// Create a empty instance. It's obvious.
-    fn default() -> Self {
-        Store {
-            refund: HashMap::new(),
-            origin: HashMap::new(),
-            selfdestruct: HashSet::new(),
-            inused: HashSet::new(),
-            evm_context: evm::interpreter::Context::default(),
-            evm_cfg: evm::interpreter::InterpreterConf::default(),
-        }
-    }
+    evm_context: evm::Context,
+    evm_cfg: evm::InterpreterConf,
 }
 
 impl Store {
@@ -84,14 +73,14 @@ impl Store {
     }
 }
 
-/// An implemention for evm::ext::DataProvider
+/// An implemention for evm::DataProvider
 pub struct DataProvider<B> {
     block_provider: Arc<Box<BlockDataProvider>>,
     state_provider: Arc<RefCell<State<B>>>,
     store: Arc<RefCell<Store>>,
 }
 
-impl<B: cita_trie::db::DB> DataProvider<B> {
+impl<B: DB> DataProvider<B> {
     /// Create a new instance. It's obvious.
     pub fn new(b: Arc<Box<BlockDataProvider>>, s: Arc<RefCell<State<B>>>, store: Arc<RefCell<Store>>) -> Self {
         DataProvider {
@@ -130,24 +119,10 @@ pub enum CreateKind {
 }
 
 /// Returns the default interpreter configs for Constantinople.
-pub fn get_interpreter_conf() -> evm::interpreter::InterpreterConf {
-    let mut evm_cfg = evm::interpreter::InterpreterConf::default();
+pub fn get_interpreter_conf() -> evm::InterpreterConf {
+    let mut evm_cfg = evm::InterpreterConf::default();
     evm_cfg.eip1283 = true;
     evm_cfg
-}
-
-/// There are 8 precompiled contracts in ethereum, which are belows:
-///   common.BytesToAddress([]byte{1}): &ecrecover{},
-///   common.BytesToAddress([]byte{2}): &sha256hash{},
-///   common.BytesToAddress([]byte{3}): &ripemd160hash{},
-///   common.BytesToAddress([]byte{4}): &dataCopy{},
-///   common.BytesToAddress([]byte{5}): &bigModExp{},
-///   common.BytesToAddress([]byte{6}): &bn256Add{},
-///   common.BytesToAddress([]byte{7}): &bn256ScalarMul{},
-///   common.BytesToAddress([]byte{8}): &bn256Pairing{},
-pub fn is_precompiled_contract(address: &Address) -> bool {
-    let i = U256::from(H256::from(address));
-    i <= U256::from(8) && !i.is_zero()
 }
 
 /// If a contract creation is attempted, due to either a creation transaction
@@ -158,8 +133,8 @@ pub fn is_precompiled_contract(address: &Address) -> bool {
 /// retroactively starting from genesis.
 ///
 /// See: EIP 684
-pub fn can_create<B: cita_trie::db::DB + 'static>(
-    state_provider: Arc<RefCell<state::state::State<B>>>,
+pub fn can_create<B: DB + 'static>(
+    state_provider: Arc<RefCell<state::State<B>>>,
     address: &Address,
 ) -> Result<bool, err::Error> {
     let a = state_provider.borrow_mut().nonce(&address)?;
@@ -198,8 +173,8 @@ pub fn get_refund(store: Arc<RefCell<Store>>, request: &InterpreterParams, gas_l
 }
 
 /// Liquidtion for a transaction.
-pub fn clear<B: cita_trie::db::DB + 'static>(
-    state_provider: Arc<RefCell<state::state::State<B>>>,
+pub fn clear<B: DB + 'static>(
+    state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
     gas_left: u64,
@@ -216,18 +191,18 @@ pub fn clear<B: cita_trie::db::DB + 'static>(
 }
 
 /// Mutable configs in cita-vm's execution.
-#[derive(Debug, Default)]
-pub struct Cfg {
+#[derive(Clone, Debug, Default)]
+pub struct Config {
     pub block_gas_limit: u64, // gas limit for a block.
 }
 
 /// Function call_pure enters into the specific contract with no check or checkpoints.
-fn call_pure<B: cita_trie::db::DB + 'static>(
+fn call_pure<B: DB + 'static>(
     block_provider: Arc<Box<BlockDataProvider>>,
-    state_provider: Arc<RefCell<state::state::State<B>>>,
+    state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
-) -> Result<evm::interpreter::InterpreterResult, err::Error> {
+) -> Result<evm::InterpreterResult, err::Error> {
     let evm_context = store.borrow().evm_context.clone();
     let evm_cfg = store.borrow().evm_cfg.clone();
     let evm_params = request.clone();
@@ -238,23 +213,34 @@ fn call_pure<B: cita_trie::db::DB + 'static>(
             .borrow_mut()
             .transfer_balance(&request.sender, &request.receiver, request.value)?;
     }
+    // Execute pre-compiled contracts.
+    if precompiled::contains(&request.contract.code_address) {
+        let c = precompiled::get(request.contract.code_address);
+        let gas = c.required_gas(&request.input);
+        if request.gas_limit < gas {
+            return Err(err::Error::Evm(evm::Error::OutOfGas));
+        }
+        let r = c.run(&request.input);
+        match r {
+            Ok(ok) => {
+                return Ok(evm::InterpreterResult::Normal(ok, request.gas_limit - gas, vec![]));
+            }
+            Err(e) => return Err(e),
+        }
+    }
     // Run
-    let mut evm_it = evm::interpreter::Interpreter::new(evm_context, evm_cfg, Box::new(evm_data_provider), evm_params);
+    let mut evm_it = evm::Interpreter::new(evm_context, evm_cfg, Box::new(evm_data_provider), evm_params);
     Ok(evm_it.run()?)
 }
 
 /// Function call enters into the specific contract.
-fn call<B: cita_trie::db::DB + 'static>(
+fn call<B: DB + 'static>(
     block_provider: Arc<Box<BlockDataProvider>>,
-    state_provider: Arc<RefCell<state::state::State<B>>>,
+    state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
-) -> Result<evm::interpreter::InterpreterResult, err::Error> {
+) -> Result<evm::InterpreterResult, err::Error> {
     debug!("call request={:?}", request);
-    // Precompiled contracts are not allowed.
-    if is_precompiled_contract(&request.contract.code_address) {
-        return Err(err::Error::Evm(evm::err::Error::OutOfGas));
-    }
     // Ensure balance
     if !request.disable_transfer_value && state_provider.borrow_mut().balance(&request.sender)? < request.value {
         return Err(err::Error::NotEnoughBalance);
@@ -270,14 +256,14 @@ fn call<B: cita_trie::db::DB + 'static>(
     );
     debug!("call result={:?}", r);
     match r {
-        Ok(evm::interpreter::InterpreterResult::Normal(output, gas_left, logs)) => {
+        Ok(evm::InterpreterResult::Normal(output, gas_left, logs)) => {
             state_provider.borrow_mut().discard_checkpoint();
             store.borrow_mut().merge(store_son);
-            Ok(evm::interpreter::InterpreterResult::Normal(output, gas_left, logs))
+            Ok(evm::InterpreterResult::Normal(output, gas_left, logs))
         }
-        Ok(evm::interpreter::InterpreterResult::Revert(output, gas_left, logs)) => {
+        Ok(evm::InterpreterResult::Revert(output, gas_left)) => {
             state_provider.borrow_mut().revert_checkpoint();
-            Ok(evm::interpreter::InterpreterResult::Revert(output, gas_left, logs))
+            Ok(evm::InterpreterResult::Revert(output, gas_left))
         }
         Err(e) => {
             state_provider.borrow_mut().revert_checkpoint();
@@ -288,13 +274,13 @@ fn call<B: cita_trie::db::DB + 'static>(
 }
 
 /// Function create creates a new contract.
-fn create<B: cita_trie::db::DB + 'static>(
+fn create<B: DB + 'static>(
     block_provider: Arc<Box<BlockDataProvider>>,
-    state_provider: Arc<RefCell<state::state::State<B>>>,
+    state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
     create_kind: CreateKind,
-) -> Result<evm::interpreter::InterpreterResult, err::Error> {
+) -> Result<evm::InterpreterResult, err::Error> {
     debug!("create request={:?}", request);
     let address = match create_kind {
         CreateKind::FromAddressAndNonce => {
@@ -324,20 +310,20 @@ fn create<B: cita_trie::db::DB + 'static>(
         // ContractB with address 0x1ff...fff, but ContractB's init code contains some
         // op like "get code hash from 0x1ff..fff or get code size form 0x1ff...fff",
         // The right result should be "summary(none)" and "0".
-        None,
+        vec![],
     );
     let mut reqchan = request.clone();
     reqchan.address = address;
     reqchan.receiver = address;
     reqchan.is_create = false;
     reqchan.input = vec![];
-    reqchan.contract = evm::interpreter::Contract {
+    reqchan.contract = evm::Contract {
         code_address: address,
         code_data: request.input.clone(),
     };
     let r = call(block_provider.clone(), state_provider.clone(), store.clone(), &reqchan);
     match r {
-        Ok(evm::interpreter::InterpreterResult::Normal(output, gas_left, _)) => {
+        Ok(evm::InterpreterResult::Normal(output, gas_left, logs)) => {
             // Ensure code size
             if output.len() as u64 > MAX_CREATE_CODE_SIZE {
                 state_provider.borrow_mut().revert_checkpoint();
@@ -347,19 +333,19 @@ fn create<B: cita_trie::db::DB + 'static>(
             let gas_code_deposit: u64 = G_CODE_DEPOSIT * output.len() as u64;
             if gas_left < gas_code_deposit {
                 state_provider.borrow_mut().revert_checkpoint();
-                return Err(err::Error::Evm(evm::err::Error::OutOfGas));
+                return Err(err::Error::Evm(evm::Error::OutOfGas));
             }
             let gas_left = gas_left - gas_code_deposit;
             state_provider.borrow_mut().set_code(&address, output.clone())?;
             state_provider.borrow_mut().discard_checkpoint();
-            let r = Ok(evm::interpreter::InterpreterResult::Create(output, address, gas_left));
+            let r = Ok(evm::InterpreterResult::Create(output, gas_left, logs, address));
             debug!("create result={:?}", r);
             debug!("create gas_left={:?}", gas_left);
             r
         }
-        Ok(evm::interpreter::InterpreterResult::Revert(output, gas_left, logs)) => {
+        Ok(evm::InterpreterResult::Revert(output, gas_left)) => {
             state_provider.borrow_mut().revert_checkpoint();
-            let r = Ok(evm::interpreter::InterpreterResult::Revert(output, gas_left, logs));
+            let r = Ok(evm::InterpreterResult::Revert(output, gas_left));
             debug!("create gas_left={:?}", gas_left);
             debug!("create result={:?}", r);
             r
@@ -380,16 +366,57 @@ const G_CREATE: u64 = 32000; // Paid for contract create
 const G_CODE_DEPOSIT: u64 = 200; // Paid per byte for a CREATE operation to succeed in placing code into state.
 const MAX_CREATE_CODE_SIZE: u64 = 24576; // See: https://github.com/ethereum/EIPs/issues/659
 
+/// Transaction struct.
+pub struct Transaction {
+    pub from: Address,
+    pub to: Option<Address>, // Some for call and None for create.
+    pub value: U256,
+    pub nonce: U256,
+    pub gas_limit: u64,
+    pub gas_price: U256,
+    pub input: Vec<u8>,
+}
+
+/// Reinterpret tx to interpreter params.
+fn reinterpret_tx<B: DB + 'static>(
+    tx: Transaction,
+    state_provider: Arc<RefCell<state::State<B>>>,
+) -> InterpreterParams {
+    let mut request = evm::InterpreterParams::default();
+    request.origin = tx.from;
+    request.sender = tx.from;
+    match tx.to {
+        Some(data) => {
+            request.receiver = data;
+            request.address = data;
+            request.contract = evm::Contract {
+                code_address: data,
+                code_data: state_provider.borrow_mut().code(&data).unwrap_or_default(),
+            };
+        }
+        None => {
+            request.is_create = true;
+        }
+    }
+    request.gas_price = tx.gas_price;
+    request.gas_limit = tx.gas_limit;
+    request.value = tx.value;
+    request.input = tx.input;
+    request.nonce = tx.nonce;
+    request
+}
+
 /// Execute the transaction from transaction pool
-pub fn exec<B: cita_trie::db::DB + 'static>(
+pub fn exec<B: DB + 'static>(
     block_provider: Arc<Box<BlockDataProvider>>,
-    state_provider: Arc<RefCell<state::state::State<B>>>,
-    evm_context: evm::interpreter::Context,
-    cfg: Cfg,
-    request: &InterpreterParams,
-) -> Result<evm::interpreter::InterpreterResult, err::Error> {
+    state_provider: Arc<RefCell<state::State<B>>>,
+    evm_context: evm::Context,
+    config: Config,
+    tx: Transaction,
+) -> Result<evm::InterpreterResult, err::Error> {
+    let request = &reinterpret_tx(tx, state_provider.clone());
     // Ensure gas < block_gas_limit
-    if cfg.block_gas_limit > G_TRANSACTION && request.gas_limit > cfg.block_gas_limit {
+    if config.block_gas_limit > G_TRANSACTION && request.gas_limit > config.block_gas_limit {
         return Err(err::Error::ExccedMaxBlockGasLimit);
     }
     // Ensure nonce
@@ -433,7 +460,7 @@ pub fn exec<B: cita_trie::db::DB + 'static>(
     // Finalize
     debug!("exec result={:?}", r);
     match r {
-        Ok(evm::interpreter::InterpreterResult::Normal(output, gas_left, logs)) => {
+        Ok(evm::InterpreterResult::Normal(output, gas_left, logs)) => {
             debug!("exec gas_left={:?}", gas_left);
             let refund = get_refund(store.clone(), &request, gas_left);
             debug!("exec refund={:?}", refund);
@@ -445,16 +472,16 @@ pub fn exec<B: cita_trie::db::DB + 'static>(
             }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
             state_provider.borrow_mut().commit()?;
-            Ok(evm::interpreter::InterpreterResult::Normal(output, gas_left, logs))
+            Ok(evm::InterpreterResult::Normal(output, gas_left, logs))
         }
-        Ok(evm::interpreter::InterpreterResult::Revert(output, gas_left, logs)) => {
+        Ok(evm::InterpreterResult::Revert(output, gas_left)) => {
             debug!("exec gas_left={:?}", gas_left);
             clear(state_provider.clone(), store.clone(), &request, gas_left, 0)?;
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
             state_provider.borrow_mut().commit()?;
-            Ok(evm::interpreter::InterpreterResult::Revert(output, gas_left, logs))
+            Ok(evm::InterpreterResult::Revert(output, gas_left))
         }
-        Ok(evm::interpreter::InterpreterResult::Create(output, addr, gas_left)) => {
+        Ok(evm::InterpreterResult::Create(output, gas_left, logs, addr)) => {
             debug!("exec gas_left={:?}", gas_left);
             let refund = get_refund(store.clone(), &request, gas_left);
             debug!("exec refund={:?}", refund);
@@ -464,7 +491,7 @@ pub fn exec<B: cita_trie::db::DB + 'static>(
             }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
             state_provider.borrow_mut().commit()?;
-            Ok(evm::interpreter::InterpreterResult::Create(output, addr, gas_left))
+            Ok(evm::InterpreterResult::Create(output, gas_left, logs, addr))
         }
         Err(e) => {
             // When error, coinbase eats all gas as it's price, yummy.
@@ -476,7 +503,7 @@ pub fn exec<B: cita_trie::db::DB + 'static>(
     }
 }
 
-impl<B: cita_trie::db::DB + 'static> evm::ext::DataProvider for DataProvider<B> {
+impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     fn get_balance(&self, address: &Address) -> U256 {
         self.state_provider
             .borrow_mut()
@@ -596,14 +623,11 @@ impl<B: cita_trie::db::DB + 'static> evm::ext::DataProvider for DataProvider<B> 
 
     fn call(
         &self,
-        opcode: evm::opcodes::OpCode,
-        params: evm::interpreter::InterpreterParams,
-    ) -> (Result<evm::interpreter::InterpreterResult, evm::err::Error>) {
+        opcode: evm::OpCode,
+        params: evm::InterpreterParams,
+    ) -> (Result<evm::InterpreterResult, evm::Error>) {
         match opcode {
-            evm::opcodes::OpCode::CALL
-            | evm::opcodes::OpCode::CALLCODE
-            | evm::opcodes::OpCode::DELEGATECALL
-            | evm::opcodes::OpCode::STATICCALL => {
+            evm::OpCode::CALL | evm::OpCode::CALLCODE | evm::OpCode::DELEGATECALL | evm::OpCode::STATICCALL => {
                 self.store.borrow_mut().used(params.address);
                 let r = call(
                     self.block_provider.clone(),
@@ -611,30 +635,30 @@ impl<B: cita_trie::db::DB + 'static> evm::ext::DataProvider for DataProvider<B> 
                     self.store.clone(),
                     &params,
                 );
-                r.or(Err(evm::err::Error::CallError))
+                r.or(Err(evm::Error::CallError))
             }
-            evm::opcodes::OpCode::CREATE | evm::opcodes::OpCode::CREATE2 => {
+            evm::OpCode::CREATE | evm::OpCode::CREATE2 => {
                 let mut request = params.clone();
                 request.nonce = self
                     .state_provider
                     .borrow_mut()
                     .nonce(&request.sender)
-                    .or(Err(evm::err::Error::CallError))?;
+                    .or(Err(evm::Error::CallError))?;
                 // Must inc nonce for sender
                 // See: https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
                 self.state_provider
                     .borrow_mut()
                     .inc_nonce(&request.sender)
-                    .or(Err(evm::err::Error::CallError))?;
+                    .or(Err(evm::Error::CallError))?;
                 let r = match opcode {
-                    evm::opcodes::OpCode::CREATE => create(
+                    evm::OpCode::CREATE => create(
                         self.block_provider.clone(),
                         self.state_provider.clone(),
                         self.store.clone(),
                         &request,
                         CreateKind::FromAddressAndNonce,
                     ),
-                    evm::opcodes::OpCode::CREATE2 => create(
+                    evm::OpCode::CREATE2 => create(
                         self.block_provider.clone(),
                         self.state_provider.clone(),
                         self.store.clone(),
@@ -643,7 +667,7 @@ impl<B: cita_trie::db::DB + 'static> evm::ext::DataProvider for DataProvider<B> 
                     ),
                     _ => unimplemented!(),
                 }
-                .or(Err(evm::err::Error::CallError));
+                .or(Err(evm::Error::CallError));
                 debug!("ext.create.result = {:?}", r);
                 r
             }

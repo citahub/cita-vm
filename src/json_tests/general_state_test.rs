@@ -1,25 +1,26 @@
-extern crate ethereum_types;
-extern crate hex;
-extern crate serde;
-extern crate serde_json;
-
-use ethereum_types::*;
+use ethereum_types::Address;
+use serde_derive::Deserialize;
 use serde_json::Error;
 use std::collections::BTreeMap;
-use std::io::prelude::*;
+use std::io::Read;
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Env {
     #[serde(rename = "currentCoinbase")]
     pub current_coinbase: Address,
+
     #[serde(rename = "currentDifficulty")]
     pub current_difficulty: String,
+
     #[serde(rename = "currentGasLimit")]
     pub current_gas_limit: String,
+
     #[serde(rename = "currentNumber")]
     pub current_number: String,
+
     #[serde(rename = "currentTimestamp")]
     pub current_timestamp: String,
+
     #[serde(rename = "previousHash")]
     pub previous_hash: String,
 }
@@ -28,16 +29,22 @@ pub struct Env {
 pub struct Transaction {
     #[serde(rename = "data")]
     pub data: Vec<String>,
+
     #[serde(rename = "gasLimit")]
     pub gas_limit: Vec<String>,
+
     #[serde(rename = "gasPrice")]
     pub gas_price: String,
+
     #[serde(rename = "nonce")]
     pub nonce: String,
+
     #[serde(rename = "secretKey")]
     pub secret_key: String,
+
     #[serde(rename = "to")]
     pub to: String,
+
     #[serde(rename = "value")]
     pub value: Vec<String>,
 }
@@ -66,8 +73,10 @@ impl IntoIterator for State {
 pub struct PostData {
     #[serde(rename = "hash")]
     pub hash: String,
+
     #[serde(rename = "indexes")]
     pub indexes: BTreeMap<String, usize>,
+
     #[serde(rename = "logs")]
     pub logs: String,
 }
@@ -76,14 +85,19 @@ pub struct PostData {
 pub struct Post {
     #[serde(rename = "Byzantium")]
     pub byzantium: Option<Vec<PostData>>,
+
     #[serde(rename = "Constantinople")]
     pub constantinople: Option<Vec<PostData>>,
+
     #[serde(rename = "EIP150")]
     pub eip150: Option<Vec<PostData>>,
+
     #[serde(rename = "EIP158")]
     pub eip158: Option<Vec<PostData>>,
+
     #[serde(rename = "Frontier")]
     pub frontier: Option<Vec<PostData>>,
+
     #[serde(rename = "Homestead")]
     pub homestead: Option<Vec<PostData>>,
 }
@@ -92,10 +106,13 @@ pub struct Post {
 pub struct Vm {
     #[serde(rename = "env")]
     pub env: Env,
+
     #[serde(rename = "transaction")]
     pub transaction: Transaction,
+
     #[serde(rename = "post")]
     pub post: Option<Post>,
+
     #[serde(rename = "pre")]
     pub pre: Option<State>,
 }

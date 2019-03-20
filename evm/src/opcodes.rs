@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter, Result};
+use std::fmt;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum OpCode {
@@ -143,8 +143,8 @@ pub enum OpCode {
     SELFDESTRUCT = 0xff,
 }
 
-impl Display for OpCode {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+impl fmt::Display for OpCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             OpCode::STOP => write!(f, "STOP"),
             OpCode::ADD => write!(f, "ADD"),

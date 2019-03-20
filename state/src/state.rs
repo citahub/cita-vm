@@ -6,14 +6,17 @@ use super::object_entry::{ObjectStatus, StateObjectEntry};
 use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
 use ethereum_types::{Address, H256, U256};
+use log::debug;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 
+/// State is the one who managers all accounts and states in Ethereum's system.
 pub struct State<B> {
     pub db: B,
     pub root: H256,
     pub cache: RefCell<HashMap<Address, StateObjectEntry>>,
+    /// Checkpoints are used to revert to history.
     pub checkpoints: RefCell<Vec<HashMap<Address, Option<StateObjectEntry>>>>,
 }
 
@@ -46,27 +49,21 @@ impl<B: DB> State<B> {
 
     /// Create a contract account with code or not
     /// Overwrite the code if the contract already exists
-    pub fn new_contract(
-        &mut self,
-        contract: &Address,
-        balance: U256,
-        nonce: U256,
-        code: Option<Vec<u8>>,
-    ) -> StateObject {
+    pub fn new_contract(&mut self, contract: &Address, balance: U256, nonce: U256, code: Vec<u8>) -> StateObject {
         debug!(
             "state.new_contract contract={:?} balance={:?}, nonce={:?} code={:?}",
             contract, balance, nonce, code
         );
         let mut state_object = StateObject::new(balance, nonce);
-        state_object.init_code(code.unwrap_or_default());
-        state_object.set_address(contract);
+        state_object.init_code(code);
 
         self.insert_cache(contract, StateObjectEntry::new_dirty(Some(state_object.clone_dirty())));
         state_object
     }
 
+    /// Kill a contract.
     pub fn kill_contract(&mut self, contract: &Address) {
-        debug!("state.kill_contract contract=={:?}", contract);
+        debug!("state.kill_contract contract={:?}", contract);
         self.insert_cache(contract, StateObjectEntry::new_dirty(None));
     }
 
@@ -93,8 +90,7 @@ impl<B: DB> State<B> {
         self.cache.borrow_mut().clear();
     }
 
-    /// Get state object
-    /// Firstly, search from cache. If not, get from trie.
+    /// Get state object.
     pub fn get_state_object(&mut self, address: &Address) -> Result<Option<StateObject>, Error> {
         if let Some(state_object_entry) = self.cache.borrow().get(address) {
             if let Some(state_object) = &state_object_entry.state_object {
@@ -107,7 +103,6 @@ impl<B: DB> State<B> {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 let mut accdb = AccountDB::new(*address, &mut self.db);
                 state_object.read_code(&mut accdb)?;
-                state_object.set_address(address);
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(Some(state_object))
             }
@@ -115,31 +110,33 @@ impl<B: DB> State<B> {
         }
     }
 
-    /// Get state object from cache or trie.
-    /// If not exist, create one and then insert into cache.
+    /// Get state object. If not exists, create a fresh one.
     pub fn get_state_object_or_default(&mut self, address: &Address) -> Result<StateObject, Error> {
         match self.get_state_object(address)? {
             Some(state_object) => Ok(state_object),
             None => {
-                let state_object = self.new_contract(address, U256::zero(), U256::zero(), None);
+                let state_object = self.new_contract(address, U256::zero(), U256::zero(), vec![]);
                 Ok(state_object)
             }
         }
     }
 
-    pub fn exist(&mut self, a: &Address) -> Result<bool, Error> {
-        Ok(self.get_state_object(a)?.is_some())
+    /// Check if an account exists.
+    pub fn exist(&mut self, address: &Address) -> Result<bool, Error> {
+        Ok(self.get_state_object(address)?.is_some())
     }
 
-    // is_empty returns whether the given account is empty. Empty
-    // is defined according to EIP161 (balance = nonce = code = 0).
+    /// Check if an account is empty. Empty is defined according to
+    /// EIP161 (balance = nonce = code = 0).
     #[allow(clippy::wrong_self_convention)]
-    pub fn is_empty(&mut self, a: &Address) -> Result<bool, Error> {
-        let b = self.get_state_object_or_default(a)?.is_empty();
-        debug!("state.is_empty={:?} address={:?}", b, a);
-        Ok(b)
+    pub fn is_empty(&mut self, address: &Address) -> Result<bool, Error> {
+        match self.get_state_object(address)? {
+            Some(data) => Ok(data.is_empty()),
+            None => Ok(true),
+        }
     }
 
+    /// Set (key, value) in storage cache.
     pub fn set_storage(&mut self, address: &Address, key: H256, value: H256) -> Result<(), Error> {
         debug!(
             "state.set_storage address={:?} key={:?} value={:?}",
@@ -164,35 +161,38 @@ impl<B: DB> State<B> {
         Ok(())
     }
 
-    pub fn set_code(&mut self, a: &Address, code: Vec<u8>) -> Result<(), Error> {
-        debug!("state.set_code address={:?} code={:?}", a, code);
-        let mut state_object = self.get_state_object_or_default(a)?;
+    /// Set code for an account.
+    pub fn set_code(&mut self, address: &Address, code: Vec<u8>) -> Result<(), Error> {
+        debug!("state.set_code address={:?} code={:?}", address, code);
+        let mut state_object = self.get_state_object_or_default(address)?;
         state_object.init_code(code);
-        self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
+        self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
         Ok(())
     }
 
-    pub fn add_balance(&mut self, a: &Address, incr: U256) -> Result<(), Error> {
-        debug!("state.add_balance a={:?} incr={:?}", a, incr);
+    /// Add balance by incr for an account.
+    pub fn add_balance(&mut self, address: &Address, incr: U256) -> Result<(), Error> {
+        debug!("state.add_balance a={:?} incr={:?}", address, incr);
         if incr.is_zero() {
             return Ok(());
         }
-        let mut state_object = self.get_state_object_or_default(a)?;
-        if state_object.balance().overflowing_add(incr).1 {
+        let mut state_object = self.get_state_object_or_default(address)?;
+        if state_object.balance.overflowing_add(incr).1 {
             return Err(Error::BalanceError);
         }
         state_object.add_balance(incr);
-        self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
+        self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
         Ok(())
     }
 
+    /// Sub balance by decr for an account.
     pub fn sub_balance(&mut self, a: &Address, decr: U256) -> Result<(), Error> {
         debug!("state.sub_balance a={:?} decr={:?}", a, decr);
         if decr.is_zero() {
             return Ok(());
         }
         let mut state_object = self.get_state_object_or_default(a)?;
-        if state_object.balance().overflowing_sub(decr).1 {
+        if state_object.balance.overflowing_sub(decr).1 {
             return Err(Error::BalanceError);
         }
         state_object.sub_balance(decr);
@@ -200,20 +200,23 @@ impl<B: DB> State<B> {
         Ok(())
     }
 
+    /// Transfer balance from `from` to `to` by `by`.
     pub fn transfer_balance(&mut self, from: &Address, to: &Address, by: U256) -> Result<(), Error> {
         self.sub_balance(from, by)?;
         self.add_balance(to, by)?;
         Ok(())
     }
 
-    pub fn inc_nonce(&mut self, a: &Address) -> Result<(), Error> {
-        debug!("state.inc_nonce a={:?}", a);
-        let mut state_object = self.get_state_object_or_default(a)?;
+    /// Increase nonce for an account.
+    pub fn inc_nonce(&mut self, address: &Address) -> Result<(), Error> {
+        debug!("state.inc_nonce a={:?}", address);
+        let mut state_object = self.get_state_object_or_default(address)?;
         state_object.inc_nonce();
-        self.insert_cache(a, StateObjectEntry::new_dirty(Some(state_object)));
+        self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
         Ok(())
     }
 
+    /// Insert a state object entry into cache.
     fn insert_cache(&self, address: &Address, state_object_entry: StateObjectEntry) {
         let is_dirty = state_object_entry.is_dirty();
         let old_entry = self
@@ -228,10 +231,11 @@ impl<B: DB> State<B> {
         }
     }
 
+    /// Flush the data from cache to database.
     pub fn commit(&mut self) -> Result<(), Error> {
         assert!(self.checkpoints.borrow().is_empty());
 
-        // firstly, update account storage tree
+        // Firstly, update account storage tree
         for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
             if let Some(ref mut state_object) = entry.state_object {
                 let mut accdb = AccountDB::new(*address, &mut self.db);
@@ -240,7 +244,7 @@ impl<B: DB> State<B> {
             }
         }
 
-        // secondly, update the world state tree
+        // Secondly, update the world state tree
         let mut trie = PatriciaTrie::from(&mut self.db, hashlib::RLPNodeCodec::default(), &self.root.0)?;
         for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
             entry.status = ObjectStatus::Committed;
@@ -321,13 +325,6 @@ impl<B: DB> State<B> {
             }
         }
     }
-
-    pub fn revert_checkpoint_all(&mut self) {
-        let c = self.checkpoints.borrow_mut().len();
-        for _ in 0..c {
-            self.revert_checkpoint();
-        }
-    }
 }
 
 pub trait StateObjectInfo {
@@ -346,11 +343,11 @@ pub trait StateObjectInfo {
 
 impl<B: DB> StateObjectInfo for State<B> {
     fn nonce(&mut self, a: &Address) -> Result<U256, Error> {
-        Ok(self.get_state_object(a)?.map_or(U256::zero(), |e| e.nonce()))
+        Ok(self.get_state_object(a)?.map_or(U256::zero(), |e| e.nonce))
     }
 
     fn balance(&mut self, a: &Address) -> Result<U256, Error> {
-        Ok(self.get_state_object(a)?.map_or(U256::zero(), |e| e.balance()))
+        Ok(self.get_state_object(a)?.map_or(U256::zero(), |e| e.balance))
     }
 
     fn get_storage(&mut self, a: &Address, key: &H256) -> Result<H256, Error> {
@@ -367,21 +364,20 @@ impl<B: DB> StateObjectInfo for State<B> {
     }
 
     fn code(&mut self, a: &Address) -> Result<Vec<u8>, Error> {
-        Ok(self.get_state_object(a)?.map_or(vec![], |e| e.code()))
+        Ok(self.get_state_object(a)?.map_or(vec![], |e| e.code.clone()))
     }
 
     fn code_hash(&mut self, a: &Address) -> Result<H256, Error> {
-        Ok(self.get_state_object(a)?.map_or(H256::zero(), |e| e.code_hash()))
+        Ok(self.get_state_object(a)?.map_or(H256::zero(), |e| e.code_hash))
     }
 
     fn code_size(&mut self, a: &Address) -> Result<usize, Error> {
-        Ok(self.get_state_object(a)?.map_or(0, |e| e.code_size()))
+        Ok(self.get_state_object(a)?.map_or(0, |e| e.code_size))
     }
 }
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use cita_trie::db::MemoryDB;
 
@@ -552,7 +548,7 @@ mod tests {
     fn ensure_cached() {
         let mut state = get_temp_state();
         let a = Address::zero();
-        state.new_contract(&a, U256::from(0u64), U256::from(0u64), None);
+        state.new_contract(&a, U256::from(0u64), U256::from(0u64), vec![]);
         state.commit().unwrap();
         assert_eq!(
             state.root,
@@ -627,7 +623,7 @@ mod tests {
         let a: Address = 1000.into();
 
         state.checkpoint(); // c1
-        state.new_contract(&a, U256::zero(), U256::zero(), None);
+        state.new_contract(&a, U256::zero(), U256::zero(), vec![]);
         state.add_balance(&a, U256::from(1)).unwrap();
         state.checkpoint(); // c2
         state.add_balance(&a, U256::from(1)).unwrap();
@@ -653,7 +649,7 @@ mod tests {
         state.clear();
 
         state.checkpoint(); // c1
-        state.new_contract(&a, U256::zero(), U256::zero(), None);
+        state.new_contract(&a, U256::zero(), U256::zero(), vec![]);
         state.checkpoint(); // c2
         state.set_storage(&a, k, H256::from(U256::from(2))).unwrap();
         state.revert_checkpoint(); // revert to c2
@@ -670,7 +666,7 @@ mod tests {
         let mut state = get_temp_state();
         let a: Address = 1000.into();
         let b: Address = 2000.into();
-        state.new_contract(&a, 5.into(), 0.into(), Some(vec![10u8, 20, 30, 40, 50]));
+        state.new_contract(&a, 5.into(), 0.into(), vec![10u8, 20, 30, 40, 50]);
         state.add_balance(&a, 5.into()).unwrap();
         state.set_storage(&a, 10.into(), 10.into()).unwrap();
         assert_eq!(state.code(&a).unwrap(), vec![10u8, 20, 30, 40, 50]);
@@ -701,7 +697,7 @@ mod tests {
         assert_eq!(state.get_storage(&a, &20.into()).unwrap(), 20.into());
 
         state.checkpoint(); // c2
-        state.new_contract(&b, 30.into(), 0.into(), None);
+        state.new_contract(&b, 30.into(), 0.into(), vec![]);
         state.set_storage(&a, 10.into(), 15.into()).unwrap();
         assert_eq!(state.balance(&b).unwrap(), 30.into());
         assert_eq!(state.code(&b).unwrap(), vec![]);
