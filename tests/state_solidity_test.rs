@@ -120,8 +120,8 @@ fn test_solidity_erc20() {
     let address0 = Address::from("0x1000000000000000000000000000000000000000");
     let address1 = Address::from("0x1000000000000000000000000000000000000001");
 
-    state.new_contract(&address0, U256::from(100000000000000000u64), U256::from(1), vec![]);
-    state.new_contract(&address1, U256::from(100000000000000000u64), U256::from(1), vec![]);
+    state.new_contract(&address0, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
+    state.new_contract(&address1, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
 
     // Create a new contract
     let code = "606060405234620000005760405162001617380380620016178339810160405280805190602001909190805182\
@@ -267,7 +267,7 @@ fn test_solidity_erc20() {
         to: None,
         value: U256::from(0),
         nonce: U256::from(1),
-        gas_limit: 8000000,
+        gas_limit: 8_000_000,
         gas_price: U256::from(1),
         input: hex::decode(code).unwrap(),
     };
