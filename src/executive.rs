@@ -515,6 +515,34 @@ pub fn exec<B: DB + 'static>(
     }
 }
 
+/// Handle the call request in read only mode.
+/// Note:
+///   1) tx.to shouldn't be none
+///   2) tx.nonce is just omited
+///   3) tx.value must be 0. This is due to solidity's check.
+///
+/// This function is similar with `exec`, but all check & checkpoints are removed.
+#[allow(unused_variables)]
+pub fn exec_static<B: DB + 'static>(
+    block_provider: Arc<Box<BlockDataProvider>>,
+    state_provider: Arc<RefCell<state::State<B>>>,
+    evm_context: evm::Context,
+    config: Config,
+    tx: Transaction,
+) -> Result<evm::InterpreterResult, err::Error> {
+    if tx.to.is_none() {
+        return Err(err::Error::CreateInStaticCall);
+    }
+    let mut request = reinterpret_tx(tx, state_provider.clone());
+    request.read_only = true;
+    request.disable_transfer_value = true;
+    let mut store = Store::default();
+    store.evm_cfg = get_interpreter_conf();
+    store.evm_context = evm_context.clone();
+    let store = Arc::new(RefCell::new(store));
+    call_pure(block_provider.clone(), state_provider.clone(), store.clone(), &request)
+}
+
 impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     fn get_balance(&self, address: &Address) -> U256 {
         self.state_provider

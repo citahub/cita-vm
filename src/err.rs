@@ -16,6 +16,7 @@ pub enum Error {
     ExccedMaxCodeSize,
     ExccedMaxBlockGasLimit,
     ExccedMaxCallDepth,
+    CreateInStaticCall,
 }
 
 impl error::Error for Error {}
@@ -34,6 +35,7 @@ impl fmt::Display for Error {
             Error::ExccedMaxCodeSize => return write!(f, "ExccedMaxCodeSize"),
             Error::ExccedMaxBlockGasLimit => return write!(f, "ExccedMaxBlockGasLimit"),
             Error::ExccedMaxCallDepth => return write!(f, "ExccedMaxCallDepth"),
+            Error::CreateInStaticCall => return write!(f, "CreateInStaticCall"),
         };
     }
 }
