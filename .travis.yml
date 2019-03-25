@@ -27,4 +27,4 @@ jobs:
     - stage: Test
       name: IntegrationTest
       script:
-        - cargo test
+        - RUST_MIN_STACK=134217728 cargo test

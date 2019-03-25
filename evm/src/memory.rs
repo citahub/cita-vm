@@ -15,6 +15,9 @@ impl Memory {
     }
 
     pub fn get(&self, offset: usize, size: usize) -> &[u8] {
+        if size == 0 {
+            return &[];
+        }
         &self.store[offset..offset + size]
     }
 
@@ -30,14 +33,6 @@ impl Memory {
 
     pub fn len(&self) -> usize {
         self.store.len()
-    }
-
-    pub fn data(&self) -> &[u8] {
-        &self.store
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.store.is_empty()
     }
 }
 

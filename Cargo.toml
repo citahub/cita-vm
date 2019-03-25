@@ -5,13 +5,24 @@ authors = ["Cryptape Technologies <contact@cryptape.com>"]
 edition = "2018"
 
 [dependencies]
+byteorder = "1.0"
+cita_trie = "0.2.0"
+env_logger = "0.6.1"
 ethereum-types = "0.4.0"
+hex = "0.3"
+libsecp256k1 = "0.2.2"
+log = "0.4.0"
+ripemd160 = "0.8"
+rlp = "0.3"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-hex = "0.3"
+sha2 = "0.8"
+sha3 = "0.8"
+tiny-keccak = "1.4.2"
+
 evm = { path="./evm" }
-state = { path="./state" }
+state = { path="./state", default-features = false }
 
 [workspace]
 members = [
@@ -19,3 +30,8 @@ members = [
     "ewasm",
     "state"
 ]
+
+[features]
+default = ['state/hashlib-keccak']
+hashlib-keccak = ['state/hashlib-keccak']
+hashlib-sha3 = ['state/hashlib-sha3']

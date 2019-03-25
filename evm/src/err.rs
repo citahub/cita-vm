@@ -10,8 +10,12 @@ pub enum Error {
     OutOfData,
     MutableCallInStaticContext,
     InvalidOpcode,
+    CallError,
+    ExccedMaxCodeSize,
+    InvalidJumpDestination,
 }
 
+impl error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -22,8 +26,9 @@ impl fmt::Display for Error {
             Error::OutOfData => return write!(f, "OutOfData"),
             Error::MutableCallInStaticContext => return write!(f, "MutableCallInStaticContext"),
             Error::InvalidOpcode => return write!(f, "InvalidOpcode"),
+            Error::CallError => return write!(f, "CallError"),
+            Error::ExccedMaxCodeSize => return write!(f, "ExccedMaxCodeSize"),
+            Error::InvalidJumpDestination => return write!(f, "InvalidJumpDestination"),
         };
     }
 }
-
-impl error::Error for Error {}
