@@ -12,10 +12,11 @@
 //!
 //! Contracts 5 to 8 reference parity-ethereum's code.
 use super::err;
-use bn::{pairing, AffineG1, AffineG2, Fq, Fq2, Group, Gt, G1, G2};
 use byteorder::{BigEndian, ByteOrder};
 use ethereum_types::{Address, H256, H512, U256};
 use num::{BigUint, One, Zero};
+use parity_bn as bn;
+use parity_bn::{pairing, AffineG1, AffineG2, Fq, Fq2, Group, Gt, G1, G2};
 use ripemd160::{Digest, Ripemd160};
 use sha2::Sha256;
 use std::io;

@@ -18,9 +18,9 @@ pub struct Context {
 }
 
 // Log is the data struct for LOG0...LOG4.
-// The members are "Topics: Vec<H256>, Body: Vec<u8>"
+// The members are "Address: Address, Topics: Vec<H256>, Body: Vec<u8>"
 #[derive(Clone, Debug)]
-pub struct Log(pub Vec<H256>, pub Vec<u8>);
+pub struct Log(pub Address, pub Vec<H256>, pub Vec<u8>);
 
 #[derive(Clone, Debug)]
 pub enum InterpreterResult {
@@ -902,7 +902,7 @@ impl Interpreter {
                         topics.push(r);
                     }
                     let data = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    self.logs.push(Log(topics, Vec::from(data)));
+                    self.logs.push(Log(self.params.address, topics, Vec::from(data)));
                 }
                 opcodes::OpCode::CREATE | opcodes::OpCode::CREATE2 => {
                     // Clear return data buffer before creating new call frame.

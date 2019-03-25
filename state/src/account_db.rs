@@ -3,18 +3,27 @@ use cita_trie::db::DB;
 use ethereum_types::Address;
 
 #[derive(Debug)]
-pub struct AccountDB<'a, B: DB> {
+pub struct AccountDB<B: DB> {
     address: Address,
-    db: &'a mut B,
+    db: B,
 }
 
-impl<'a, B: DB> AccountDB<'a, B> {
-    pub fn new(address: Address, db: &'a mut B) -> Self {
+impl<B: DB> AccountDB<B> {
+    pub fn new(address: Address, db: B) -> Self {
         AccountDB { address, db }
     }
 }
 
-impl<'a, B: DB> DB for AccountDB<'a, B> {
+impl<B: DB> Clone for AccountDB<B> {
+    fn clone(&self) -> Self {
+        AccountDB {
+            address: self.address,
+            db: self.db.clone(),
+        }
+    }
+}
+
+impl<B: DB> DB for AccountDB<B> {
     type Error = Error;
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
@@ -54,7 +63,7 @@ mod test_account_db {
     #[test]
     fn test_accdb_get() {
         let mut memdb = MemoryDB::new();
-        let mut accdb = AccountDB::new(Address::zero(), &mut memdb);
+        let mut accdb = AccountDB::new(Address::zero(), memdb);
         accdb.insert(b"test-key", b"test-value").unwrap();
         let v = accdb.get(b"test-key").unwrap().unwrap();
         assert_eq!(v, b"test-value")
@@ -63,7 +72,7 @@ mod test_account_db {
     #[test]
     fn test_accdb_contains() {
         let mut memdb = MemoryDB::new();
-        let mut accdb = AccountDB::new(Address::zero(), &mut memdb);
+        let mut accdb = AccountDB::new(Address::zero(), memdb);
         accdb.insert(b"test", b"test").unwrap();
         let contains = accdb.contains(b"test").unwrap();
         assert_eq!(contains, true)
@@ -72,7 +81,7 @@ mod test_account_db {
     #[test]
     fn test_accdb_remove() {
         let mut memdb = MemoryDB::new();
-        let mut accdb = AccountDB::new(Address::zero(), &mut memdb);
+        let mut accdb = AccountDB::new(Address::zero(), memdb);
         accdb.insert(b"test", b"test").unwrap();
         accdb.remove(b"test").unwrap();
         let contains = accdb.contains(b"test").unwrap();

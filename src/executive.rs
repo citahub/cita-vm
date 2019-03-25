@@ -191,9 +191,19 @@ pub fn clear<B: DB + 'static>(
 }
 
 /// Mutable configs in cita-vm's execution.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Config {
     pub block_gas_limit: u64, // gas limit for a block.
+    pub check_nonce: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            block_gas_limit: 8_000_000,
+            check_nonce: true,
+        }
+    }
 }
 
 /// Function call_pure enters into the specific contract with no check or checkpoints.
@@ -419,9 +429,11 @@ pub fn exec<B: DB + 'static>(
     if config.block_gas_limit > G_TRANSACTION && request.gas_limit > config.block_gas_limit {
         return Err(err::Error::ExccedMaxBlockGasLimit);
     }
-    // Ensure nonce
-    if request.nonce != state_provider.borrow_mut().nonce(&request.sender)? {
-        return Err(err::Error::InvalidNonce);
+    if config.check_nonce {
+        // Ensure nonce
+        if request.nonce != state_provider.borrow_mut().nonce(&request.sender)? {
+            return Err(err::Error::InvalidNonce);
+        }
     }
     // Ensure gas
     let gas_prepare = get_gas_prepare(request);

@@ -101,7 +101,7 @@ impl<B: DB> State<B> {
         match trie.get(hashlib::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
-                let mut accdb = AccountDB::new(*address, &mut self.db);
+                let mut accdb = AccountDB::new(*address, self.db.clone());
                 state_object.read_code(&mut accdb)?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(Some(state_object))
@@ -143,7 +143,7 @@ impl<B: DB> State<B> {
             address, key, value
         );
         let mut state_object = self.get_state_object_or_default(address)?;
-        let mut accdb = AccountDB::new(*address, &mut self.db);
+        let mut accdb = AccountDB::new(*address, self.db.clone());
         if state_object.get_storage(&mut accdb, &key)? == Some(value) {
             return Ok(());
         }
@@ -238,7 +238,7 @@ impl<B: DB> State<B> {
         // Firstly, update account storage tree
         for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
             if let Some(ref mut state_object) = entry.state_object {
-                let mut accdb = AccountDB::new(*address, &mut self.db);
+                let mut accdb = AccountDB::new(*address, self.db.clone());
                 state_object.commit_storage(&mut accdb)?;
                 state_object.commit_code(&mut accdb)?;
             }
@@ -353,7 +353,7 @@ impl<B: DB> StateObjectInfo for State<B> {
     fn get_storage(&mut self, a: &Address, key: &H256) -> Result<H256, Error> {
         match self.get_state_object(a)? {
             Some(mut state_object) => {
-                let mut accdb = AccountDB::new(*a, &mut self.db);
+                let mut accdb = AccountDB::new(*a, self.db.clone());
                 match state_object.get_storage(&mut accdb, key)? {
                     Some(v) => Ok(v),
                     None => Ok(H256::zero()),

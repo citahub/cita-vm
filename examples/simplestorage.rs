@@ -31,9 +31,7 @@ fn main() {
         Arc::new(Box::new(cita_vm::BlockDataProviderMock::default()));
     let state_data_provider = Arc::new(RefCell::new(state));
     let context = cita_vm::evm::Context::default();
-    let config = cita_vm::Config {
-        block_gas_limit: 8000000,
-    };
+    let config = cita_vm::Config::default();
 
     let tx = cita_vm::Transaction {
         from: Address::from("0x1000000000000000000000000000000000000000"),
