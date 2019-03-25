@@ -1,6 +1,7 @@
 mod err;
 mod executive;
 pub mod json_tests;
+#[allow(dead_code)]
 pub mod precompiled;
 
 pub use err::Error;
