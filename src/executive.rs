@@ -13,7 +13,7 @@ use std::sync::Arc;
 /// BlockDataProvider provides functions to get block's hash from chain.
 ///
 /// Block data(only hash) are required to cita-vm from externalize database.
-pub trait BlockDataProvider {
+pub trait BlockDataProvider: Send + Sync {
     /// Function get_block_hash returns the block_hash of the specific block.
     fn get_block_hash(&self, number: &U256) -> H256;
 }
