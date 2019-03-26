@@ -484,14 +484,12 @@ pub fn exec<B: DB + 'static>(
                 state_provider.borrow_mut().kill_contract(&e)
             }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
-            state_provider.borrow_mut().commit()?;
             Ok(evm::InterpreterResult::Normal(output, gas_left, logs))
         }
         Ok(evm::InterpreterResult::Revert(output, gas_left)) => {
             debug!("exec gas_left={:?}", gas_left);
             clear(state_provider.clone(), store.clone(), &request, gas_left, 0)?;
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
-            state_provider.borrow_mut().commit()?;
             Ok(evm::InterpreterResult::Revert(output, gas_left))
         }
         Ok(evm::InterpreterResult::Create(output, gas_left, logs, addr)) => {
@@ -503,14 +501,12 @@ pub fn exec<B: DB + 'static>(
                 state_provider.borrow_mut().kill_contract(&e)
             }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
-            state_provider.borrow_mut().commit()?;
             Ok(evm::InterpreterResult::Create(output, gas_left, logs, addr))
         }
         Err(e) => {
             // When error, coinbase eats all gas as it's price, yummy.
             clear(state_provider.clone(), store.clone(), &request, 0, 0)?;
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
-            state_provider.borrow_mut().commit()?;
             Err(e)
         }
     }
@@ -542,6 +538,53 @@ pub fn exec_static<B: DB + 'static>(
     store.evm_context = evm_context.clone();
     let store = Arc::new(RefCell::new(store));
     call_pure(block_provider.clone(), state_provider.clone(), store.clone(), &request)
+}
+
+pub struct Executive<B> {
+    pub block_provider: Arc<Box<BlockDataProvider>>,
+    pub state_provider: Arc<RefCell<state::State<B>>>,
+    pub config: Config,
+}
+
+impl<B: DB + 'static> Executive<B> {
+    pub fn new(block_provider: Arc<Box<BlockDataProvider>>, state_provider: state::State<B>, config: Config) -> Self {
+        Self {
+            block_provider,
+            state_provider: Arc::new(RefCell::new(state_provider)),
+            config,
+        }
+    }
+
+    pub fn exec(&self, evm_context: evm::Context, tx: Transaction) -> Result<evm::InterpreterResult, err::Error> {
+        exec(
+            self.block_provider.clone(),
+            self.state_provider.clone(),
+            evm_context,
+            self.config.clone(),
+            tx,
+        )
+    }
+
+    pub fn exec_static(
+        block_provider: Arc<Box<BlockDataProvider>>,
+        state_provider: state::State<B>,
+        evm_context: evm::Context,
+        config: Config,
+        tx: Transaction,
+    ) -> Result<evm::InterpreterResult, err::Error> {
+        exec_static(
+            block_provider,
+            Arc::new(RefCell::new(state_provider)),
+            evm_context,
+            config,
+            tx,
+        )
+    }
+
+    pub fn commit(&self) -> Result<H256, err::Error> {
+        self.state_provider.borrow_mut().commit()?;
+        Ok(self.state_provider.borrow_mut().root)
+    }
 }
 
 impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {

@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 byteorder = "1.0"
-cita_trie = "0.2.0"
+cita_trie = "0.2.1"
 env_logger = "0.6.1"
 ethereum-types = "0.4.0"
 hex = "0.3"
