@@ -12,6 +12,8 @@ ethereum-types = "0.4.0"
 hex = "0.3"
 libsecp256k1 = "0.2.2"
 log = "0.4.0"
+num = { version = "0.1", default-features = false, features = ["bigint"] }
+numext-fixed-uint = { git = "https://github.com/yangby-cryptape/rust-numext", branch = "fix-div-slow-bug" }
 ripemd160 = "0.8"
 rlp = "0.3"
 serde = "1.0"
