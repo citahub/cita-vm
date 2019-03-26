@@ -28,7 +28,7 @@ And, wrap this db as a `WorldState`
 let mut state = cita_vm::state::State::new(db).unwrap();
 ```
 
-Create some accounts in `WorldState`, one of them stores the [SimpleStorage](./examples/simplestorage.sol) code.
+Create some accounts in `WorldState`, one of them stores the [SimpleStorage](./examples/storage_example/simplestorage.sol) code.
 
 ```rs
 let code = "6080604052600436106049576000357c0100000000000000000000000000000\
@@ -109,7 +109,7 @@ let r = cita_vm::exec(
 println!("return={:?}", r); // 42 is outputed
 ```
 
-Full code could be found [here](./examples/simplestorage.rs).
+Full code could be found [here](./examples/storage_example/simplestorage.rs).
 
 # Performance comparison with parity and geth
 
