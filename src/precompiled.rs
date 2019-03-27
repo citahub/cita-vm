@@ -261,7 +261,7 @@ impl PrecompiledContract for BigModExp {
         if length_of_modulus.is_zero() && length_of_base.is_zero() {
             return 0;
         }
-        let lim = EU256::from(4096u32); // Limit to U4096
+        let lim = EU256::from(512u32); // Limit to U4096
         if length_of_base > lim || length_of_modulus > lim || length_of_exponent > lim {
             return u64::MAX;
         }
