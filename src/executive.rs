@@ -377,6 +377,7 @@ const G_CODE_DEPOSIT: u64 = 200; // Paid per byte for a CREATE operation to succ
 const MAX_CREATE_CODE_SIZE: u64 = 24576; // See: https://github.com/ethereum/EIPs/issues/659
 
 /// Transaction struct.
+#[derive(Clone, Debug)]
 pub struct Transaction {
     pub from: Address,
     pub to: Option<Address>, // Some for call and None for create.

@@ -24,6 +24,13 @@ tiny-keccak = "1.4.2"
 evm = { path="./evm" }
 state = { path="./state", default-features = false }
 
+[dev-dependencies]
+bencher = "0.1"
+
+[[bench]]
+name = "c"
+harness = false
+
 [workspace]
 members = [
     "evm",
