@@ -28,7 +28,7 @@ state = { path="./state", default-features = false }
 bencher = "0.1"
 
 [[bench]]
-name = "c"
+name = "benchmark"
 harness = false
 
 [workspace]
