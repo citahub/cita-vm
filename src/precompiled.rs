@@ -11,9 +11,14 @@
 //!   8. Checking a pairing equation on curve alt_bn128
 use super::err;
 use ethereum_types::{Address, H256, H512, U256};
+use num::Zero;
+use numext_fixed_uint::{U256 as EU256, U4096 as EU4096};
 use ripemd160::{Digest, Ripemd160};
 use sha2::Sha256;
+use std::cmp;
 use std::io::Write;
+use std::io::{self, Read};
+use std::u64;
 
 /// Implementation of a pre-compiled contract.
 pub trait PrecompiledContract: Send + Sync {
@@ -171,15 +176,135 @@ impl PrecompiledContract for DataCopy {
 }
 
 /// BigModExp implements a native big integer exponential modular operation.
+/// Input in the following format:
+///   <length_of_BASE> <length_of_EXPONENT> <length_of_MODULUS> <BASE> <EXPONENT> <MODULUS>
+///
+/// See: https://github.com/ethereum/EIPs/blob/master/EIPS/eip-198.md
 pub struct BigModExp {}
 
-impl PrecompiledContract for BigModExp {
-    fn required_gas(&self, _: &[u8]) -> u64 {
-        0
+impl BigModExp {
+    fn get_len(&self, r: &mut impl Read) -> EU256 {
+        let mut buf = vec![0; 32];
+        r.read_exact(&mut buf[..]).unwrap(); // unwrap here is ok
+        EU256::from_big_endian(&buf[..]).unwrap()
     }
 
-    fn run(&self, _: &[u8]) -> Result<Vec<u8>, err::Error> {
-        Err(err::Error::Str("Not implemented!".into()))
+    fn get_num(&self, r: &mut impl Read, len: usize) -> (EU4096, Vec<u8>) {
+        let mut buf = vec![0; len];
+        r.read_exact(&mut buf[..]).unwrap();
+        (EU4096::from_big_endian(&buf[..]).unwrap(), buf.to_vec())
+    }
+
+    fn adjusted_length_of_exponent(&self, len: u64, exponent: EU256) -> u64 {
+        let bit_index = if exponent.is_zero() {
+            0
+        } else {
+            u64::from(255 - exponent.leading_zeros())
+        };
+        if len <= 32 {
+            bit_index
+        } else {
+            8 * (len - 32) + bit_index
+        }
+    }
+
+    fn mult_complexity(&self, x: u64) -> u64 {
+        if x <= 64 {
+            x * x
+        } else if x <= 1024 {
+            (x * x) / 4 + 96 * x - 3072
+        } else {
+            (x * x) / 16 + 480 * x - 199_680
+        }
+    }
+
+    // Calculate modexp: left-to-right binary exponentiation to keep multiplicands lower
+    fn alu(&self, mut base: EU4096, exp: Vec<u8>, modulus: EU4096) -> EU4096 {
+        if modulus <= EU4096::one() {
+            return EU4096::zero();
+        }
+        let mut exp = exp.into_iter().skip_while(|d| *d == 0).peekable();
+        if exp.peek().is_none() {
+            return EU4096::one();
+        }
+        if base.is_zero() {
+            return EU4096::zero();
+        }
+        base %= &modulus;
+        if base.is_zero() {
+            return EU4096::zero();
+        }
+        // Left-to-right binary exponentiation (Handbook of Applied Cryptography - Algorithm 14.79).
+        // http://www.cacr.math.uwaterloo.ca/hac/about/chap14.pdf
+        let mut result = EU4096::one();
+        for digit in exp {
+            let mut mask = 1 << (8 - 1);
+            for _ in 0..8 {
+                result = &result * &result % &modulus;
+                if digit & mask > 0 {
+                    result = result * &base % &modulus;
+                }
+                mask >>= 1;
+            }
+        }
+        result
+    }
+}
+
+impl PrecompiledContract for BigModExp {
+    // Returns floor(mult_complexity(max(length_of_MODULUS, length_of_BASE)) * max(ADJUSTED_EXPONENT_LENGTH, 1) / GQUADDIVISOR)
+    fn required_gas(&self, input: &[u8]) -> u64 {
+        let mut reader = input.chain(io::repeat(0));
+        let length_of_base = self.get_len(&mut reader);
+        let length_of_exponent = self.get_len(&mut reader);
+        let length_of_modulus = self.get_len(&mut reader);
+        if length_of_modulus.is_zero() && length_of_base.is_zero() {
+            return 0;
+        }
+        let lim = EU256::from(512u32); // Limit to U4096
+        if length_of_base > lim || length_of_modulus > lim || length_of_exponent > lim {
+            return u64::MAX;
+        }
+        let (length_of_base, length_of_exponent, length_of_modulus) =
+            (length_of_base.0[0], length_of_exponent.0[0], length_of_modulus.0[0]);
+
+        let m = std::cmp::max(length_of_modulus, length_of_base);
+        let mult_c = self.mult_complexity(m);
+
+        let exponent = if length_of_base + 96 >= input.len() as u64 {
+            EU256::zero()
+        } else {
+            let mut buf = [0; 32];
+            let mut reader = input[(96 + length_of_base as usize)..].chain(io::repeat(0));
+            let len = cmp::min(length_of_exponent, 32) as usize;
+            reader.read_exact(&mut buf[(32 - len)..]).unwrap(); // unwrap here is ok
+            EU256::from_big_endian(&buf[..]).unwrap()
+        };
+        let adjusted_length_of_exponent = self.adjusted_length_of_exponent(length_of_exponent, exponent);
+        let (gas, overflow) = mult_c.overflowing_mul(cmp::max(adjusted_length_of_exponent, 1));
+        if overflow {
+            return std::u64::MAX;
+        }
+        gas / G_MOD_EXP_QUADCOEFF_DIV as u64
+    }
+
+    /// Returns (BASE**EXPONENT) % MODULUS
+    fn run(&self, input: &[u8]) -> Result<Vec<u8>, err::Error> {
+        let mut reader = input.chain(io::repeat(0));
+        let length_of_base = self.get_len(&mut reader).0[0];
+        let length_of_exponent = self.get_len(&mut reader).0[0];
+        let length_of_modulus = self.get_len(&mut reader).0[0];
+        if length_of_modulus.is_zero() && length_of_base.is_zero() {
+            return Ok(vec![0; length_of_modulus as usize]);
+        }
+        let (base, _) = self.get_num(&mut reader, length_of_base as usize);
+        let (_, exponent_raw) = self.get_num(&mut reader, length_of_exponent as usize);
+        let (modulus, _) = self.get_num(&mut reader, length_of_modulus as usize);
+        let r = self.alu(base, exponent_raw, modulus);
+        let mut buf = vec![0; 512];
+        r.into_big_endian(&mut buf).unwrap();
+        let a = buf[512 - length_of_modulus as usize..].to_vec();
+        Ok(a)
     }
 }
 
