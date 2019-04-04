@@ -1,9 +1,6 @@
 language: rust
 rust:
   - stable
-script:
-  - RUSTFLAGS='-F warnings' cargo build --verbose --all
-  - RUSTFLAGS='-F warnings' cargo test --verbose --all
 stages:
   - Check
   - Test
@@ -27,4 +24,5 @@ jobs:
     - stage: Test
       name: IntegrationTest
       script:
+        - make testdata
         - RUST_MIN_STACK=134217728 cargo test

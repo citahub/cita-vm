@@ -122,7 +122,7 @@ In short, cita-vm is the fastest EVM. Below are [benchmark](https://github.com/e
 # Tests
 
 ```sh
-$ git submodule update --init
+$ make testdata
 $ RUST_MIN_STACK=134217728 cargo test
 ```
 

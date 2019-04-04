@@ -2,6 +2,9 @@ use std::error;
 use std::fmt;
 use std::io;
 
+use cita_evm as evm;
+use cita_state as state;
+
 #[derive(Debug)]
 pub enum Error {
     Evm(evm::Error),

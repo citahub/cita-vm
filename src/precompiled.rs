@@ -9,11 +9,14 @@
 //!   6. Addition on elliptic curve alt_bn128
 //!   7. Scalar multiplication on elliptic curve alt_bn128
 //!   8. Checking a pairing equation on curve alt_bn128
-use super::err;
+use std::io::Write;
+
+use cita_state as state;
 use ethereum_types::{Address, H256, H512, U256};
 use ripemd160::{Digest, Ripemd160};
 use sha2::Sha256;
-use std::io::Write;
+
+use super::err;
 
 /// Implementation of a pre-compiled contract.
 pub trait PrecompiledContract: Send + Sync {

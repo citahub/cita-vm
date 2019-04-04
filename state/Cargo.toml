@@ -1,8 +1,12 @@
 [package]
-name = "state"
+name = "cita-state"
 version = "0.1.0"
 authors = ["Cryptape Technologies <contact@cryptape.com>"]
 edition = "2018"
+description = "CITA VM"
+license = "Apache-2.0"
+homepage = "https://github.com/cryptape/cita-vm"
+documentation = "https://github.com/cryptape/cita-vm/blob/master/README.md"
 
 [dependencies]
 cita_trie = "0.2"
