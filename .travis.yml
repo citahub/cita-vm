@@ -2,6 +2,7 @@ language: rust
 rust:
   - stable
 script:
+  - make testdata
   - RUSTFLAGS='-F warnings' cargo build --verbose --all
   - RUSTFLAGS='-F warnings' cargo test --verbose --all
 stages:
