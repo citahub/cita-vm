@@ -295,7 +295,7 @@ mod tests {
     #[test]
     fn state_object_code() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let mut db = cita_trie::db::MemoryDB::new();
+        let mut db = cita_trie::db::MemoryDB::new(false);
         a.init_code(vec![0x55, 0x44, 0xffu8]);
         assert_eq!(a.code_state, CodeState::Dirty);
         assert_eq!(a.code_size, 3);
@@ -320,7 +320,7 @@ mod tests {
     #[test]
     fn state_object_storage_1() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let mut db = cita_trie::db::MemoryDB::new();
+        let mut db = cita_trie::db::MemoryDB::new(false);
         a.set_storage(0.into(), 0x1234.into());
         a.commit_storage(&mut db).unwrap();
         assert_eq!(
@@ -332,7 +332,7 @@ mod tests {
     #[test]
     fn state_object_storage_2() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let mut db = cita_trie::db::MemoryDB::new();
+        let mut db = cita_trie::db::MemoryDB::new(false);
         a.set_storage(0.into(), 0x1234.into());
         a.commit_storage(&mut db).unwrap();
         assert_eq!(
@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn state_object_storage_3() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let mut db = cita_trie::db::MemoryDB::new();
+        let mut db = cita_trie::db::MemoryDB::new(false);
         let a_rlp = {
             a.set_storage(0x00u64.into(), 0x1234u64.into());
             a.commit_storage(&mut db).unwrap();
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn state_object_note_code() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let mut db = cita_trie::db::MemoryDB::new();
+        let mut db = cita_trie::db::MemoryDB::new(false);
         let a_rlp = {
             a.init_code(vec![0x55, 0x44, 0xffu8]);
             a.commit_code(&mut db).unwrap();

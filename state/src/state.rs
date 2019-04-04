@@ -382,7 +382,7 @@ mod tests {
     use cita_trie::db::MemoryDB;
 
     fn get_temp_state() -> State<MemoryDB> {
-        let db = MemoryDB::new();
+        let db = MemoryDB::new(false);
         State::new(db).unwrap()
     }
 

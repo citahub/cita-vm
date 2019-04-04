@@ -6,7 +6,7 @@ use std::sync::Arc;
 #[test]
 fn test_solidity_simplestorage() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let db = cita_vm::state::MemoryDB::new();
+    let db = cita_vm::state::MemoryDB::new(false);
     let mut state = cita_vm::state::State::new(db).unwrap();
     let code = "6080604052600436106049576000357c0100000000000000000000000000000\
                 000000000000000000000000000900463ffffffff16806360fe47b114604e57\
@@ -115,7 +115,7 @@ fn test_solidity_simplestorage() {
 #[test]
 fn test_solidity_erc20() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let db = cita_vm::state::MemoryDB::new();
+    let db = cita_vm::state::MemoryDB::new(false);
     let mut state = cita_vm::state::State::new(db).unwrap();
     let address0 = Address::from("0x1000000000000000000000000000000000000000");
     let address1 = Address::from("0x1000000000000000000000000000000000000001");

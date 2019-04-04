@@ -19,7 +19,7 @@ cita_vm = { git = "https://github.com/cryptape/cita-vm" }
 Let us begin with the most basic example. First, we initialize a database in memory:
 
 ```rs
-let db = cita_vm::state::MemoryDB::new();
+let db = cita_vm::state::MemoryDB::new(false);
 ```
 
 And, wrap this db as a `WorldState`
