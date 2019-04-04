@@ -5,15 +5,15 @@ authors = ["Cryptape Technologies <contact@cryptape.com>"]
 edition = "2018"
 
 [dependencies]
-cita_trie = "0.2.0"
-env_logger = "0.6.1"
+cita_trie = "0.2"
+env_logger = "0.6"
 ethereum-types = "0.4"
-hex = "0.3.2"
-log = "0.4.0"
-lru-cache = "0.1.1"
-rlp = "0.3.0"
-sha3 = "0.8.0"
-tiny-keccak = "1.4.2"
+hex = "0.3"
+log = "0.4"
+lru-cache = "0.1"
+rlp = "0.3"
+sha3 = "0.8"
+tiny-keccak = "1.4"
 
 [features]
 default = ["hashlib-keccak"]

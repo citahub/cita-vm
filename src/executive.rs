@@ -13,7 +13,7 @@ use std::sync::Arc;
 /// BlockDataProvider provides functions to get block's hash from chain.
 ///
 /// Block data(only hash) are required to cita-vm from externalize database.
-pub trait BlockDataProvider {
+pub trait BlockDataProvider: Send + Sync {
     /// Function get_block_hash returns the block_hash of the specific block.
     fn get_block_hash(&self, number: &U256) -> H256;
 }
@@ -75,14 +75,14 @@ impl Store {
 
 /// An implemention for evm::DataProvider
 pub struct DataProvider<B> {
-    block_provider: Arc<Box<BlockDataProvider>>,
+    block_provider: Arc<BlockDataProvider>,
     state_provider: Arc<RefCell<State<B>>>,
     store: Arc<RefCell<Store>>,
 }
 
 impl<B: DB> DataProvider<B> {
     /// Create a new instance. It's obvious.
-    pub fn new(b: Arc<Box<BlockDataProvider>>, s: Arc<RefCell<State<B>>>, store: Arc<RefCell<Store>>) -> Self {
+    pub fn new(b: Arc<BlockDataProvider>, s: Arc<RefCell<State<B>>>, store: Arc<RefCell<Store>>) -> Self {
         DataProvider {
             block_provider: b,
             state_provider: s,
@@ -208,7 +208,7 @@ impl Default for Config {
 
 /// Function call_pure enters into the specific contract with no check or checkpoints.
 fn call_pure<B: DB + 'static>(
-    block_provider: Arc<Box<BlockDataProvider>>,
+    block_provider: Arc<BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
@@ -245,7 +245,7 @@ fn call_pure<B: DB + 'static>(
 
 /// Function call enters into the specific contract.
 fn call<B: DB + 'static>(
-    block_provider: Arc<Box<BlockDataProvider>>,
+    block_provider: Arc<BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
@@ -285,7 +285,7 @@ fn call<B: DB + 'static>(
 
 /// Function create creates a new contract.
 fn create<B: DB + 'static>(
-    block_provider: Arc<Box<BlockDataProvider>>,
+    block_provider: Arc<BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
@@ -419,7 +419,7 @@ fn reinterpret_tx<B: DB + 'static>(
 
 /// Execute the transaction from transaction pool
 pub fn exec<B: DB + 'static>(
-    block_provider: Arc<Box<BlockDataProvider>>,
+    block_provider: Arc<BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     evm_context: evm::Context,
     config: Config,
@@ -484,14 +484,12 @@ pub fn exec<B: DB + 'static>(
                 state_provider.borrow_mut().kill_contract(&e)
             }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
-            state_provider.borrow_mut().commit()?;
             Ok(evm::InterpreterResult::Normal(output, gas_left, logs))
         }
         Ok(evm::InterpreterResult::Revert(output, gas_left)) => {
             debug!("exec gas_left={:?}", gas_left);
             clear(state_provider.clone(), store.clone(), &request, gas_left, 0)?;
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
-            state_provider.borrow_mut().commit()?;
             Ok(evm::InterpreterResult::Revert(output, gas_left))
         }
         Ok(evm::InterpreterResult::Create(output, gas_left, logs, addr)) => {
@@ -503,14 +501,12 @@ pub fn exec<B: DB + 'static>(
                 state_provider.borrow_mut().kill_contract(&e)
             }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
-            state_provider.borrow_mut().commit()?;
             Ok(evm::InterpreterResult::Create(output, gas_left, logs, addr))
         }
         Err(e) => {
             // When error, coinbase eats all gas as it's price, yummy.
             clear(state_provider.clone(), store.clone(), &request, 0, 0)?;
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
-            state_provider.borrow_mut().commit()?;
             Err(e)
         }
     }
@@ -525,7 +521,7 @@ pub fn exec<B: DB + 'static>(
 /// This function is similar with `exec`, but all check & checkpoints are removed.
 #[allow(unused_variables)]
 pub fn exec_static<B: DB + 'static>(
-    block_provider: Arc<Box<BlockDataProvider>>,
+    block_provider: Arc<BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     evm_context: evm::Context,
     config: Config,
@@ -542,6 +538,53 @@ pub fn exec_static<B: DB + 'static>(
     store.evm_context = evm_context.clone();
     let store = Arc::new(RefCell::new(store));
     call_pure(block_provider.clone(), state_provider.clone(), store.clone(), &request)
+}
+
+pub struct Executive<B> {
+    pub block_provider: Arc<BlockDataProvider>,
+    pub state_provider: Arc<RefCell<state::State<B>>>,
+    pub config: Config,
+}
+
+impl<B: DB + 'static> Executive<B> {
+    pub fn new(block_provider: Arc<BlockDataProvider>, state_provider: state::State<B>, config: Config) -> Self {
+        Self {
+            block_provider,
+            state_provider: Arc::new(RefCell::new(state_provider)),
+            config,
+        }
+    }
+
+    pub fn exec(&self, evm_context: evm::Context, tx: Transaction) -> Result<evm::InterpreterResult, err::Error> {
+        exec(
+            self.block_provider.clone(),
+            self.state_provider.clone(),
+            evm_context,
+            self.config.clone(),
+            tx,
+        )
+    }
+
+    pub fn exec_static(
+        block_provider: Arc<BlockDataProvider>,
+        state_provider: state::State<B>,
+        evm_context: evm::Context,
+        config: Config,
+        tx: Transaction,
+    ) -> Result<evm::InterpreterResult, err::Error> {
+        exec_static(
+            block_provider,
+            Arc::new(RefCell::new(state_provider)),
+            evm_context,
+            config,
+            tx,
+        )
+    }
+
+    pub fn commit(&self) -> Result<H256, err::Error> {
+        self.state_provider.borrow_mut().commit()?;
+        Ok(self.state_provider.borrow_mut().root)
+    }
 }
 
 impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {

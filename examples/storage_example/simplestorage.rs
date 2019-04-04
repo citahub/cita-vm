@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 fn main() {
     env_logger::init();
-    let db = cita_vm::state::MemoryDB::new();
+    let db = cita_vm::state::MemoryDB::new(false);
     let mut state = cita_vm::state::State::new(db).unwrap();
     let code = "6080604052600436106049576000357c0100000000000000000000000000000\
                 000000000000000000000000000900463ffffffff16806360fe47b114604e57\
@@ -27,8 +27,8 @@ fn main() {
         vec![],
     );
 
-    let block_data_provider: Arc<Box<cita_vm::BlockDataProvider>> =
-        Arc::new(Box::new(cita_vm::BlockDataProviderMock::default()));
+    let block_data_provider: Arc<cita_vm::BlockDataProvider> =
+        Arc::new(cita_vm::BlockDataProviderMock::default());
     let state_data_provider = Arc::new(RefCell::new(state));
     let context = cita_vm::evm::Context::default();
     let config = cita_vm::Config::default();

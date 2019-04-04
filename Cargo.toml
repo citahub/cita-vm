@@ -6,12 +6,12 @@ edition = "2018"
 
 [dependencies]
 byteorder = "1.0"
-cita_trie = "0.2.0"
-env_logger = "0.6.1"
-ethereum-types = "0.4.0"
+cita_trie = "0.2"
+env_logger = "0.6"
+ethereum-types = "0.4"
 hex = "0.3"
-libsecp256k1 = "0.2.2"
-log = "0.4.0"
+libsecp256k1 = "0.2"
+log = "0.4"
 ripemd160 = "0.8"
 rlp = "0.3"
 serde = "1.0"
@@ -19,7 +19,7 @@ serde_derive = "1.0"
 serde_json = "1.0"
 sha2 = "0.8"
 sha3 = "0.8"
-tiny-keccak = "1.4.2"
+tiny-keccak = "1.4"
 
 evm = { path="./evm" }
 state = { path="./state", default-features = false }

@@ -2,7 +2,6 @@ use cita_vm::json_tests::common::*;
 use cita_vm::*;
 use env_logger;
 use state::State;
-use std::cell::RefCell;
 use std::fs;
 use std::io;
 use std::io::Write;
@@ -20,27 +19,25 @@ fn test_json_file(p: &str) {
             io::stderr()
                 .write_all(format!("{}::{}::{}\n", p, name, i).as_bytes())
                 .unwrap();
-            let d = cita_trie::db::MemoryDB::new();
-            let state_provider = Arc::new(RefCell::new(State::new(d).unwrap()));
+            let d = cita_trie::db::MemoryDB::new(false);
+            let mut state_provider = State::new(d).unwrap();
 
             for (address, account) in data.pre.clone().unwrap() {
                 let balance = string_2_u256(account.balance);
                 let code = string_2_bytes(account.code);
                 let nonce = string_2_u256(account.nonce);
                 if code.is_empty() {
-                    state_provider
-                        .borrow_mut()
-                        .new_contract(&address, balance, nonce, vec![]);
+                    state_provider.new_contract(&address, balance, nonce, vec![]);
                 } else {
-                    state_provider.borrow_mut().new_contract(&address, balance, nonce, code);
+                    state_provider.new_contract(&address, balance, nonce, code);
                 }
                 for (k, v) in account.storage {
                     let kk = string_2_h256(k);
                     let vv = string_2_h256(v);
-                    state_provider.borrow_mut().set_storage(&address, kk, vv).unwrap();
+                    state_provider.set_storage(&address, kk, vv).unwrap();
                 }
             }
-            state_provider.borrow_mut().commit().unwrap();
+            state_provider.commit().unwrap();
 
             let idx_gas = &postdata.indexes[&String::from("gas")];
             let idx_value = &postdata.indexes[&String::from("value")];
@@ -72,14 +69,18 @@ fn test_json_file(p: &str) {
             if !data.transaction.to.is_empty() {
                 tx.to = Some(string_2_address(data.transaction.to.clone()));
             }
-            let _ = exec(
-                Arc::new(Box::new(BlockDataProviderMock::default())),
-                state_provider.clone(),
-                evm_context,
-                cfg,
-                tx,
-            );
-            let root = state_provider.borrow_mut().root;
+
+            let exepinst = Executive::new(Arc::new(BlockDataProviderMock::default()), state_provider, cfg);
+            let _ = exepinst.exec(evm_context, tx);
+            let root = exepinst.commit().unwrap();
+            // let _ = exec(
+            //     Arc::new(Box::new(BlockDataProviderMock::default())),
+            //     state_provider.clone(),
+            //     evm_context,
+            //     cfg,
+            //     tx,
+            // );
+            // let root = state_provider.borrow_mut().root;
             assert_eq!(root, string_2_h256(postdata.hash.clone()));
         }
     }

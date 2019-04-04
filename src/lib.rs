@@ -7,6 +7,7 @@ pub mod precompiled;
 pub use err::Error;
 pub use evm;
 pub use executive::{
-    exec, exec_static, BlockDataProvider, BlockDataProviderMock, Config, CreateKind, DataProvider, Store, Transaction,
+    exec, exec_static, BlockDataProvider, BlockDataProviderMock, Config, CreateKind, DataProvider, Executive, Store,
+    Transaction,
 };
 pub use state;

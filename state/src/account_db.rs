@@ -62,7 +62,7 @@ mod test_account_db {
 
     #[test]
     fn test_accdb_get() {
-        let memdb = MemoryDB::new();
+        let memdb = MemoryDB::new(false);
         let mut accdb = AccountDB::new(Address::zero(), memdb);
         accdb.insert(b"test-key", b"test-value").unwrap();
         let v = accdb.get(b"test-key").unwrap().unwrap();
@@ -71,7 +71,7 @@ mod test_account_db {
 
     #[test]
     fn test_accdb_contains() {
-        let memdb = MemoryDB::new();
+        let memdb = MemoryDB::new(false);
         let mut accdb = AccountDB::new(Address::zero(), memdb);
         accdb.insert(b"test", b"test").unwrap();
         let contains = accdb.contains(b"test").unwrap();
@@ -80,7 +80,7 @@ mod test_account_db {
 
     #[test]
     fn test_accdb_remove() {
-        let memdb = MemoryDB::new();
+        let memdb = MemoryDB::new(true);
         let mut accdb = AccountDB::new(Address::zero(), memdb);
         accdb.insert(b"test", b"test").unwrap();
         accdb.remove(b"test").unwrap();
