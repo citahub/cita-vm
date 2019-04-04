@@ -1,6 +1,6 @@
+use cita_evm as evm;
 use cita_vm;
 use cita_vm::json_tests::common::*;
-use cita_evm as evm;
 use evm::extmock;
 use std::fs;
 use std::io;
