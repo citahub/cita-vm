@@ -1,8 +1,6 @@
 language: rust
 rust:
   - stable
-script:
-  - make testdata
 stages:
   - Check
   - Test
@@ -26,4 +24,5 @@ jobs:
     - stage: Test
       name: IntegrationTest
       script:
+        - make testdata
         - RUST_MIN_STACK=134217728 cargo test
