@@ -144,7 +144,7 @@ mod tests {
     use std::fs;
     #[test]
     fn test_json_tests_parse() {
-        let f = fs::File::open("./tests/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json").unwrap();
+        let f = fs::File::open("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json").unwrap();
         let t = Test::load(f).unwrap();
         assert!(t.0.contains_key("addmodNonConst"));
         let v = &t.0["addmodNonConst"];
