@@ -29,8 +29,7 @@ fn test_solidity_simplestorage() {
         vec![],
     );
 
-    let block_data_provider: Arc<Box<cita_vm::BlockDataProvider>> =
-        Arc::new(Box::new(cita_vm::BlockDataProviderMock::default()));
+    let block_data_provider: Arc<cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
     let state_data_provider = Arc::new(RefCell::new(state));
     let context = cita_vm::evm::Context::default();
     let config = cita_vm::Config::default();
@@ -256,8 +255,7 @@ fn test_solidity_erc20() {
                 00000000000000000003424e420000000000000000000000000000000000000000000000000000000000000000\
                 0000000000000000000000000000000000000000000000000000000003424e4200000000000000000000000000\
                 00000000000000000000000000000000";
-    let block_data_provider: Arc<Box<cita_vm::BlockDataProvider>> =
-        Arc::new(Box::new(cita_vm::BlockDataProviderMock::default()));
+    let block_data_provider: Arc<cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
     let state_data_provider = Arc::new(RefCell::new(state));
     let context = cita_vm::evm::Context::default();
     let config = cita_vm::Config::default();

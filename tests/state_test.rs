@@ -70,11 +70,7 @@ fn test_json_file(p: &str) {
                 tx.to = Some(string_2_address(data.transaction.to.clone()));
             }
 
-            let exepinst = Executive::new(
-                Arc::new(Box::new(BlockDataProviderMock::default())),
-                state_provider,
-                cfg,
-            );
+            let exepinst = Executive::new(Arc::new(BlockDataProviderMock::default()), state_provider, cfg);
             let _ = exepinst.exec(evm_context, tx);
             let root = exepinst.commit().unwrap();
             // let _ = exec(
