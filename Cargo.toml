@@ -5,6 +5,11 @@ authors = ["Cryptape Technologies <contact@cryptape.com>"]
 edition = "2018"
 description = "CITA VM"
 license = "Apache-2.0"
+homepage = "https://github.com/cryptape/cita-vm"
+documentation = "https://github.com/cryptape/cita-vm/blob/master/README.md"
+exclude = [
+    "tests/jsondata",
+]
 
 [dependencies]
 byteorder = "1.0"
@@ -23,8 +28,8 @@ sha2 = "0.8"
 sha3 = "0.8"
 tiny-keccak = "1.4"
 
-evm = { path="./evm", version="0.1.0" }
-state = { path="./state", default-features = false, version="0.1.0" }
+cita-evm = { path="./evm", version="0.1" }
+cita-state = { path="./state", default-features = false, version="0.1" }
 
 [dev-dependencies]
 bencher = "0.1"
@@ -41,6 +46,6 @@ members = [
 ]
 
 [features]
-default = ['state/hashlib-keccak']
-hashlib-keccak = ['state/hashlib-keccak']
-hashlib-sha3 = ['state/hashlib-sha3']
+default = ['cita-state/hashlib-keccak']
+hashlib-keccak = ['cita-state/hashlib-keccak']
+hashlib-sha3 = ['cita-state/hashlib-sha3']

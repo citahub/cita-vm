@@ -5,9 +5,9 @@ pub mod json_tests;
 pub mod precompiled;
 
 pub use err::Error;
-pub use evm;
+pub use cita_evm as evm;
 pub use executive::{
     exec, exec_static, BlockDataProvider, BlockDataProviderMock, Config, CreateKind, DataProvider, Executive, Store,
     Transaction,
 };
-pub use state;
+pub use cita_state as state;
