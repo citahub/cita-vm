@@ -919,11 +919,6 @@ impl Interpreter {
                         }
                     });
                     let data = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
-                    if value > self.data_provider.get_balance(&self.params.address) {
-                        self.stack.push(U256::zero());
-                        self.gas += self.gas_tmp;
-                        continue;
-                    }
                     // Exit immediately if value > balance.
                     if value > self.data_provider.get_balance(&self.params.address) {
                         self.gas += self.gas_tmp;
