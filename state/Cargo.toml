@@ -9,7 +9,7 @@ homepage = "https://github.com/cryptape/cita-vm"
 documentation = "https://github.com/cryptape/cita-vm/blob/master/README.md"
 
 [dependencies]
-cita_trie = "0.2"
+cita_trie = "0.3"
 env_logger = "0.6"
 ethereum-types = "0.4"
 hex = "0.3"

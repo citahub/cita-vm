@@ -7,7 +7,7 @@ use cita_vm::state::StateObjectInfo;
 
 #[test]
 fn test_state_misc00() {
-    let db = cita_vm::state::MemoryDB::new(false);
+    let db = Arc::new(cita_vm::state::MemoryDB::new(false));
     let mut state = cita_vm::state::State::new(db.clone()).unwrap();
 
     state.new_contract(

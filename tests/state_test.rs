@@ -19,7 +19,7 @@ fn test_json_file(p: &str) {
             io::stderr()
                 .write_all(format!("{}::{}::{}\n", p, name, i).as_bytes())
                 .unwrap();
-            let d = cita_trie::db::MemoryDB::new(false);
+            let d = Arc::new(cita_trie::db::MemoryDB::new(false));
             let mut state_provider = State::new(d).unwrap();
 
             for (address, account) in data.pre.clone().unwrap() {
