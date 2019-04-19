@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 fn wrapper(bench: &mut Bencher, code: &str, data: &str) {
-    let db = cita_vm::state::MemoryDB::new();
+    let db = Arc::new(cita_vm::state::MemoryDB::new(false));
     let mut state = cita_vm::state::State::new(db).unwrap();
     state.new_contract(
         &Address::from("0xBd770416a3345F91E4B34576cb804a576fa48EB1"),
@@ -18,8 +18,7 @@ fn wrapper(bench: &mut Bencher, code: &str, data: &str) {
         U256::from(1),
         vec![],
     );
-    let block_data_provider: Arc<Box<cita_vm::BlockDataProvider>> =
-        Arc::new(Box::new(cita_vm::BlockDataProviderMock::default()));
+    let block_data_provider = Arc::new(cita_vm::BlockDataProviderMock::default());
     let state_data_provider = Arc::new(RefCell::new(state));
     let context = cita_vm::evm::Context::default();
     let config = cita_vm::Config::default();

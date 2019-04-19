@@ -15,15 +15,6 @@ impl<B: DB> AccountDB<B> {
     }
 }
 
-impl<B: DB> Clone for AccountDB<B> {
-    fn clone(&self) -> Self {
-        AccountDB {
-            address: self.address,
-            db: self.db.clone(),
-        }
-    }
-}
-
 impl<B: DB> DB for AccountDB<B> {
     type Error = Error;
 
