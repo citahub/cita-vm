@@ -4,6 +4,7 @@ use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
 use ethereum_types::{H256, U256};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Single and pure account in the database. Usually, store it according to
 /// the following structure:
@@ -126,7 +127,7 @@ impl StateObject {
     }
 
     /// Read the code from database by it's codehash.
-    pub fn read_code<B: DB>(&mut self, db: &mut B) -> Result<(), Error> {
+    pub fn read_code<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
         if self.code_hash == hashlib::NIL_DATA {
             return Ok(());
         }
@@ -168,7 +169,7 @@ impl StateObject {
     }
 
     /// Get value by key from database.
-    pub fn get_storage_at_backend<B: DB>(&mut self, db: &mut B, key: &H256) -> Result<Option<H256>, Error> {
+    pub fn get_storage_at_backend<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Option<H256>, Error> {
         if self.storage_root == hashlib::RLP_NULL {
             return Ok(None);
         }
@@ -188,7 +189,7 @@ impl StateObject {
     }
 
     /// Get value by key.
-    pub fn get_storage<B: DB>(&mut self, db: &mut B, key: &H256) -> Result<Option<H256>, Error> {
+    pub fn get_storage<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Option<H256>, Error> {
         if let Some(value) = self.get_storage_at_changes(key) {
             return Ok(Some(value));
         }
@@ -198,8 +199,16 @@ impl StateObject {
         Ok(None)
     }
 
+    /// Get storage proof
+    pub fn get_storage_proof<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
+        let trie = PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)
+            .or_else(|e| Err(Error::DB(format!("StateObject::get_storage_proof: {}", e))))?;
+        let proof = trie.get_proof(&key.0)?;
+        Ok(proof)
+    }
+
     /// Flush data in storage cache to database.
-    pub fn commit_storage<B: DB>(&mut self, db: &mut B) -> Result<(), Error> {
+    pub fn commit_storage<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
         let mut trie = if self.storage_root == hashlib::RLP_NULL {
             PatriciaTrie::new(db, hashlib::RLPNodeCodec::default())
         } else {
@@ -217,7 +226,7 @@ impl StateObject {
     }
 
     /// Flush code to database if necessary.
-    pub fn commit_code<B: DB>(&mut self, db: &mut B) -> Result<(), Error> {
+    pub fn commit_code<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
         match (self.code_state == CodeState::Dirty, self.code.is_empty()) {
             (true, true) => {
                 self.code_size = 0;
@@ -295,11 +304,11 @@ mod tests {
     #[test]
     fn state_object_code() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let mut db = cita_trie::db::MemoryDB::new(false);
+        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
         a.init_code(vec![0x55, 0x44, 0xffu8]);
         assert_eq!(a.code_state, CodeState::Dirty);
         assert_eq!(a.code_size, 3);
-        a.commit_code(&mut db).unwrap();
+        a.commit_code(Arc::clone(&db)).unwrap();
         assert_eq!(a.code_state, CodeState::Clean);
         assert_eq!(
             a.code_hash,
@@ -309,7 +318,7 @@ mod tests {
         a.init_code(vec![0x55]);
         assert_eq!(a.code_state, CodeState::Dirty);
         assert_eq!(a.code_size, 1);
-        a.commit_code(&mut db).unwrap();
+        a.commit_code(Arc::clone(&db)).unwrap();
         assert_eq!(
             a.code_hash,
             "37bf2238b11b68cdc8382cece82651b59d3c3988873b6e0f33d79694aa45f1be".into()
@@ -320,9 +329,9 @@ mod tests {
     #[test]
     fn state_object_storage_1() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let mut db = cita_trie::db::MemoryDB::new(false);
+        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
         a.set_storage(0.into(), 0x1234.into());
-        a.commit_storage(&mut db).unwrap();
+        a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
             a.storage_root,
             "c57e1afb758b07f8d2c8f13a3b6e44fa5ff94ab266facc5a4fd3f062426e50b2".into()
@@ -332,21 +341,21 @@ mod tests {
     #[test]
     fn state_object_storage_2() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let mut db = cita_trie::db::MemoryDB::new(false);
+        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
         a.set_storage(0.into(), 0x1234.into());
-        a.commit_storage(&mut db).unwrap();
+        a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
             a.storage_root,
             "c57e1afb758b07f8d2c8f13a3b6e44fa5ff94ab266facc5a4fd3f062426e50b2".into()
         );
         a.set_storage(1.into(), 0x1234.into());
-        a.commit_storage(&mut db).unwrap();
+        a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
             a.storage_root,
             "4e49574efd650366d071855e0a3975123ea9d64cc945e8f5de8c8c517e1b4ca5".into()
         );
         a.set_storage(1.into(), 0.into());
-        a.commit_storage(&mut db).unwrap();
+        a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
             a.storage_root,
             "c57e1afb758b07f8d2c8f13a3b6e44fa5ff94ab266facc5a4fd3f062426e50b2".into()
@@ -356,12 +365,12 @@ mod tests {
     #[test]
     fn state_object_storage_3() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let mut db = cita_trie::db::MemoryDB::new(false);
+        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
         let a_rlp = {
             a.set_storage(0x00u64.into(), 0x1234u64.into());
-            a.commit_storage(&mut db).unwrap();
+            a.commit_storage(Arc::clone(&db)).unwrap();
             a.init_code(vec![]);
-            a.commit_code(&mut db).unwrap();
+            a.commit_code(Arc::clone(&db)).unwrap();
             rlp::encode(&a.account())
         };
         a = StateObject::from_rlp(&a_rlp[..]).unwrap();
@@ -370,23 +379,23 @@ mod tests {
             "c57e1afb758b07f8d2c8f13a3b6e44fa5ff94ab266facc5a4fd3f062426e50b2".into()
         );
         assert_eq!(
-            a.get_storage(&mut db, &0x00u64.into()).unwrap().unwrap(),
+            a.get_storage(Arc::clone(&db), &0x00u64.into()).unwrap().unwrap(),
             0x1234u64.into()
         );
-        assert_eq!(a.get_storage(&mut db, &0x01u64.into()).unwrap(), None);
+        assert_eq!(a.get_storage(Arc::clone(&db), &0x01u64.into()).unwrap(), None);
     }
 
     #[test]
     fn state_object_note_code() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let mut db = cita_trie::db::MemoryDB::new(false);
+        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
         let a_rlp = {
             a.init_code(vec![0x55, 0x44, 0xffu8]);
-            a.commit_code(&mut db).unwrap();
+            a.commit_code(Arc::clone(&db)).unwrap();
             a.rlp()
         };
         a = StateObject::from_rlp(&a_rlp[..]).unwrap();
-        a.read_code(&mut db).unwrap();
+        a.read_code(Arc::clone(&db)).unwrap();
         assert_eq!(a.code, vec![0x55, 0x44, 0xffu8]);
     }
 }

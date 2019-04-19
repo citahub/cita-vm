@@ -10,10 +10,11 @@ use log::debug;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 /// State is the one who managers all accounts and states in Ethereum's system.
 pub struct State<B> {
-    pub db: B,
+    pub db: Arc<B>,
     pub root: H256,
     pub cache: RefCell<HashMap<Address, StateObjectEntry>>,
     /// Checkpoints are used to revert to history.
@@ -22,8 +23,8 @@ pub struct State<B> {
 
 impl<B: DB> State<B> {
     /// Creates empty state for test.
-    pub fn new(mut db: B) -> Result<State<B>, Error> {
-        let mut trie = PatriciaTrie::new(&mut db, hashlib::RLPNodeCodec::default());
+    pub fn new(db: Arc<B>) -> Result<State<B>, Error> {
+        let mut trie = PatriciaTrie::new(Arc::clone(&db), hashlib::RLPNodeCodec::default());
         let root = trie.root()?;
 
         Ok(State {
@@ -35,7 +36,7 @@ impl<B: DB> State<B> {
     }
 
     /// Creates new state with existing state root
-    pub fn from_existing(db: B, root: H256) -> Result<State<B>, Error> {
+    pub fn from_existing(db: Arc<B>, root: H256) -> Result<State<B>, Error> {
         if !db.contains(&root.0[..]).or_else(|e| Err(Error::DB(format!("{}", e))))? {
             return Err(Error::NotFound);
         }
@@ -91,18 +92,18 @@ impl<B: DB> State<B> {
     }
 
     /// Get state object.
-    pub fn get_state_object(&mut self, address: &Address) -> Result<Option<StateObject>, Error> {
+    pub fn get_state_object(&self, address: &Address) -> Result<Option<StateObject>, Error> {
         if let Some(state_object_entry) = self.cache.borrow().get(address) {
             if let Some(state_object) = &state_object_entry.state_object {
                 return Ok(Some((*state_object).clone_dirty()));
             }
         }
-        let trie = PatriciaTrie::from(&mut self.db, hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
         match trie.get(hashlib::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
-                let mut accdb = AccountDB::new(*address, self.db.clone());
-                state_object.read_code(&mut accdb)?;
+                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                state_object.read_code(accdb)?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(Some(state_object))
             }
@@ -118,6 +119,24 @@ impl<B: DB> State<B> {
                 let state_object = self.new_contract(address, U256::zero(), U256::zero(), vec![]);
                 Ok(state_object)
             }
+        }
+    }
+
+    /// Get the merkle proof for a given account.
+    pub fn get_account_proof(&self, address: &Address) -> Result<Vec<Vec<u8>>, Error> {
+        let trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let proof = trie.get_proof(hashlib::summary(&address[..]).as_slice())?;
+        Ok(proof)
+    }
+
+    /// Get the storage proof for given account and key.
+    pub fn get_storage_proof(&self, address: &Address, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
+        match self.get_state_object(address)? {
+            Some(state_object) => {
+                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                state_object.get_storage_proof(accdb, key)
+            }
+            None => Ok(vec![]),
         }
     }
 
@@ -142,9 +161,9 @@ impl<B: DB> State<B> {
             "state.set_storage address={:?} key={:?} value={:?}",
             address, key, value
         );
-        let mut state_object = self.get_state_object_or_default(address)?;
-        let mut accdb = AccountDB::new(*address, self.db.clone());
-        if state_object.get_storage(&mut accdb, &key)? == Some(value) {
+        let state_object = self.get_state_object_or_default(address)?;
+        let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+        if state_object.get_storage(accdb, &key)? == Some(value) {
             return Ok(());
         }
 
@@ -238,14 +257,14 @@ impl<B: DB> State<B> {
         // Firstly, update account storage tree
         for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
             if let Some(ref mut state_object) = entry.state_object {
-                let mut accdb = AccountDB::new(*address, self.db.clone());
-                state_object.commit_storage(&mut accdb)?;
-                state_object.commit_code(&mut accdb)?;
+                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                state_object.commit_storage(Arc::clone(&accdb))?;
+                state_object.commit_code(Arc::clone(&accdb))?;
             }
         }
 
         // Secondly, update the world state tree
-        let mut trie = PatriciaTrie::from(&mut self.db, hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let mut trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
         for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
             entry.status = ObjectStatus::Committed;
             match entry.state_object {
@@ -352,9 +371,9 @@ impl<B: DB> StateObjectInfo for State<B> {
 
     fn get_storage(&mut self, a: &Address, key: &H256) -> Result<H256, Error> {
         match self.get_state_object(a)? {
-            Some(mut state_object) => {
-                let mut accdb = AccountDB::new(*a, self.db.clone());
-                match state_object.get_storage(&mut accdb, key)? {
+            Some(state_object) => {
+                let accdb = Arc::new(AccountDB::new(*a, self.db.clone()));
+                match state_object.get_storage(accdb, key)? {
                     Some(v) => Ok(v),
                     None => Ok(H256::zero()),
                 }
@@ -380,9 +399,10 @@ impl<B: DB> StateObjectInfo for State<B> {
 mod tests {
     use super::*;
     use cita_trie::db::MemoryDB;
+    use std::sync::Arc;
 
     fn get_temp_state() -> State<MemoryDB> {
-        let db = MemoryDB::new(false);
+        let db = Arc::new(MemoryDB::new(false));
         State::new(db).unwrap()
     }
 
@@ -717,5 +737,56 @@ mod tests {
 
         state.commit().unwrap();
         assert_eq!(orig_root, state.root);
+    }
+
+    #[test]
+    fn get_account_proof() {
+        let mut state = get_temp_state();
+        let a: Address = 1000.into();
+        let b: Address = 2000.into();
+        state.new_contract(&a, 5.into(), 0.into(), vec![10u8, 20, 30, 40, 50]);
+        state.commit().unwrap();
+
+        // The state only contains one account, should be a single leaf node, therefore the proof
+        // length is 1
+        let proof1 = state.get_account_proof(&a).unwrap();
+        assert_eq!(proof1.len(), 1);
+
+        // account not in state should also have non-empty proof, the proof is the longest common
+        // prefix node
+        let proof2 = state.get_account_proof(&b).unwrap();
+        assert_eq!(proof2.len(), 1);
+
+        assert_eq!(proof1, proof2);
+    }
+
+    #[test]
+    fn get_storage_proof() {
+        let mut state = get_temp_state();
+        let a: Address = 1000.into();
+        let b: Address = 2000.into();
+        let c: Address = 3000.into();
+        state.new_contract(&a, 5.into(), 0.into(), vec![10u8, 20, 30, 40, 50]);
+        state.set_storage(&a, 10.into(), 10.into()).unwrap();
+        state.new_contract(&b, 5.into(), 0.into(), vec![10u8, 20, 30, 40, 50]);
+        state.commit().unwrap();
+
+        // account not exist
+        let proof = state.get_storage_proof(&c, &10.into()).unwrap();
+        assert_eq!(proof.len(), 0);
+
+        // account who has empty storage trie
+        let proof = state.get_storage_proof(&b, &10.into()).unwrap();
+        assert_eq!(proof.len(), 0);
+
+        // account and storage key exists
+        let proof1 = state.get_storage_proof(&a, &10.into()).unwrap();
+        assert_eq!(proof1.len(), 1);
+
+        // account exists but storage key not exist
+        let proof2 = state.get_storage_proof(&a, &20.into()).unwrap();
+        assert_eq!(proof2.len(), 1);
+
+        assert_eq!(proof1, proof2);
     }
 }

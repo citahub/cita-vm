@@ -15,7 +15,7 @@ pub const RLP_NULL: H256 = H256([
     0x1b, 0x99, 0x6c, 0xad, 0xc0, 0x01, 0x62, 0x2f, 0xb5, 0xe3, 0x63, 0xb4, 0x21,
 ]);
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct RLPNodeCodec {}
 
 impl cita_trie::codec::NodeCodec for RLPNodeCodec {
