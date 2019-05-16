@@ -8,8 +8,8 @@ use cita_trie::trie::{PatriciaTrie, Trie};
 use ethereum_types::{Address, H256, U256};
 use log::debug;
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
+use hashbrown::hash_map::Entry;
 use std::sync::Arc;
 
 /// State is the one who managers all accounts and states in Ethereum's system.

@@ -18,6 +18,7 @@ lru-cache = "0.1"
 rlp = "0.3"
 sha3 = "0.8"
 tiny-keccak = "1.4"
+hashbrown = "0.3"
 
 [features]
 default = ["hashlib-keccak"]

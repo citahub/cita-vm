@@ -27,6 +27,7 @@ serde_json = "1.0"
 sha2 = "0.8"
 sha3 = "0.8"
 tiny-keccak = "1.4"
+hashbrown = "0.3"
 
 cita-evm = { path="./evm", version="0.1" }
 cita-state = { path="./state", default-features = false, version="0.1" }
