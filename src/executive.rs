@@ -1,5 +1,5 @@
+use hashbrown::{HashMap, HashSet};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use cita_evm as evm;

@@ -3,7 +3,8 @@ use super::hashlib;
 use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
 use ethereum_types::{H256, U256};
-use std::collections::HashMap;
+
+use hashbrown::HashMap;
 use std::sync::Arc;
 
 /// Single and pure account in the database. Usually, store it according to

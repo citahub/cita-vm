@@ -6,10 +6,10 @@ use super::object_entry::{ObjectStatus, StateObjectEntry};
 use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
 use ethereum_types::{Address, H256, U256};
+use hashbrown::hash_map::Entry;
+use hashbrown::{HashMap, HashSet};
 use log::debug;
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// State is the one who managers all accounts and states in Ethereum's system.
