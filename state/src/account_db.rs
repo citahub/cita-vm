@@ -25,10 +25,10 @@ impl<B: DB> DB for AccountDB<B> {
             .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
-    fn insert(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+    fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Self::Error> {
         let concatenated = [&self.address.0[..], &key[..]].concat();
         self.db
-            .insert(concatenated.as_slice(), value)
+            .insert(concatenated, value)
             .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
@@ -45,6 +45,10 @@ impl<B: DB> DB for AccountDB<B> {
             .remove(concatenated.as_slice())
             .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
+
+    fn flush(&self) -> Result<(), Self::Error> {
+        self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
+    }
 }
 
 #[cfg(test)]
@@ -56,7 +60,7 @@ mod test_account_db {
     fn test_accdb_get() {
         let memdb = Arc::new(MemoryDB::new(false));
         let accdb = AccountDB::new(Address::zero(), memdb);
-        accdb.insert(b"test-key", b"test-value").unwrap();
+        accdb.insert(b"test-key".to_vec(), b"test-value".to_vec()).unwrap();
         let v = accdb.get(b"test-key").unwrap().unwrap();
         assert_eq!(v, b"test-value")
     }
@@ -65,7 +69,7 @@ mod test_account_db {
     fn test_accdb_contains() {
         let memdb = Arc::new(MemoryDB::new(false));
         let accdb = AccountDB::new(Address::zero(), memdb);
-        accdb.insert(b"test", b"test").unwrap();
+        accdb.insert(b"test".to_vec(), b"test".to_vec()).unwrap();
         let contains = accdb.contains(b"test").unwrap();
         assert_eq!(contains, true)
     }
@@ -74,7 +78,7 @@ mod test_account_db {
     fn test_accdb_remove() {
         let memdb = Arc::new(MemoryDB::new(true));
         let accdb = AccountDB::new(Address::zero(), memdb);
-        accdb.insert(b"test", b"test").unwrap();
+        accdb.insert(b"test".to_vec(), b"test".to_vec()).unwrap();
         accdb.remove(b"test").unwrap();
         let contains = accdb.contains(b"test").unwrap();
         assert_eq!(contains, false)
