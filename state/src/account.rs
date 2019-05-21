@@ -234,7 +234,7 @@ impl StateObject {
                 self.code_state = CodeState::Clean;
             }
             (true, false) => {
-                db.insert(&self.code_hash, &self.code)
+                db.insert(self.code_hash.to_vec(), self.code.clone())
                     .or_else(|e| Err(Error::DB(format!("{}", e))))?;
                 self.code_size = self.code.len();
                 self.code_state = CodeState::Clean;

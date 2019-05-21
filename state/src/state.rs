@@ -280,7 +280,7 @@ impl<B: DB> State<B> {
             }
         }
         self.root = From::from(&trie.root()?[..]);
-        Ok(())
+        self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
     /// Create a recoverable checkpoint of this state. Return the checkpoint index.
