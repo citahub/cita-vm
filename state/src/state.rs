@@ -159,8 +159,7 @@ impl<B: DB> State<B> {
         self.call_with_cached(address, |a| match a {
             Some(data) => {
                 let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
-                let r = data.get_storage_proof(accdb, key);
-                r
+                data.get_storage_proof(accdb, key)
             }
             None => Ok(vec![]),
         })?
