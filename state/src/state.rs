@@ -91,6 +91,31 @@ impl<B: DB> State<B> {
         self.cache.borrow_mut().clear();
     }
 
+    /// Use a callback function to avoid clone data in caches.
+    fn call_with_cached<F, U>(&self, address: &Address, f: F) -> Result<U, Error>
+    where
+        F: Fn(Option<&StateObject>) -> U,
+    {
+        if let Some(state_object_entry) = self.cache.borrow().get(address) {
+            if let Some(state_object) = &state_object_entry.state_object {
+                return Ok(f(Some(state_object)));
+            } else {
+                return Ok(f(None));
+            }
+        }
+        let trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        match trie.get(hashlib::summary(&address[..]).as_slice())? {
+            Some(rlp) => {
+                let mut state_object = StateObject::from_rlp(&rlp)?;
+                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                state_object.read_code(accdb)?;
+                self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
+                Ok(f(Some(&state_object)))
+            }
+            None => Ok(f(None)),
+        }
+    }
+
     /// Get state object.
     pub fn get_state_object(&self, address: &Address) -> Result<Option<StateObject>, Error> {
         if let Some(state_object_entry) = self.cache.borrow().get(address) {
@@ -131,28 +156,28 @@ impl<B: DB> State<B> {
 
     /// Get the storage proof for given account and key.
     pub fn get_storage_proof(&self, address: &Address, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
-        match self.get_state_object(address)? {
-            Some(state_object) => {
+        self.call_with_cached(address, |a| match a {
+            Some(data) => {
                 let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
-                state_object.get_storage_proof(accdb, key)
+                data.get_storage_proof(accdb, key)
             }
             None => Ok(vec![]),
-        }
+        })?
     }
 
     /// Check if an account exists.
     pub fn exist(&mut self, address: &Address) -> Result<bool, Error> {
-        Ok(self.get_state_object(address)?.is_some())
+        self.call_with_cached(address, |a| Ok(a.is_some()))?
     }
 
     /// Check if an account is empty. Empty is defined according to
     /// EIP161 (balance = nonce = code = 0).
     #[allow(clippy::wrong_self_convention)]
     pub fn is_empty(&mut self, address: &Address) -> Result<bool, Error> {
-        match self.get_state_object(address)? {
+        self.call_with_cached(address, |a| match a {
             Some(data) => Ok(data.is_empty()),
             None => Ok(true),
-        }
+        })?
     }
 
     /// Set (key, value) in storage cache.
@@ -361,37 +386,37 @@ pub trait StateObjectInfo {
 }
 
 impl<B: DB> StateObjectInfo for State<B> {
-    fn nonce(&mut self, a: &Address) -> Result<U256, Error> {
-        Ok(self.get_state_object(a)?.map_or(U256::zero(), |e| e.nonce))
+    fn nonce(&mut self, address: &Address) -> Result<U256, Error> {
+        self.call_with_cached(address, |a| Ok(a.map_or(U256::zero(), |e| e.nonce)))?
     }
 
-    fn balance(&mut self, a: &Address) -> Result<U256, Error> {
-        Ok(self.get_state_object(a)?.map_or(U256::zero(), |e| e.balance))
+    fn balance(&mut self, address: &Address) -> Result<U256, Error> {
+        self.call_with_cached(address, |a| Ok(a.map_or(U256::zero(), |e| e.balance)))?
     }
 
-    fn get_storage(&mut self, a: &Address, key: &H256) -> Result<H256, Error> {
-        match self.get_state_object(a)? {
+    fn get_storage(&mut self, address: &Address, key: &H256) -> Result<H256, Error> {
+        self.call_with_cached(address, |a| match a {
             Some(state_object) => {
-                let accdb = Arc::new(AccountDB::new(*a, self.db.clone()));
+                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
                 match state_object.get_storage(accdb, key)? {
                     Some(v) => Ok(v),
                     None => Ok(H256::zero()),
                 }
             }
             None => Ok(H256::zero()),
-        }
+        })?
     }
 
-    fn code(&mut self, a: &Address) -> Result<Vec<u8>, Error> {
-        Ok(self.get_state_object(a)?.map_or(vec![], |e| e.code.clone()))
+    fn code(&mut self, address: &Address) -> Result<Vec<u8>, Error> {
+        self.call_with_cached(address, |a| Ok(a.map_or(vec![], |e| e.code.clone())))?
     }
 
-    fn code_hash(&mut self, a: &Address) -> Result<H256, Error> {
-        Ok(self.get_state_object(a)?.map_or(H256::zero(), |e| e.code_hash))
+    fn code_hash(&mut self, address: &Address) -> Result<H256, Error> {
+        self.call_with_cached(address, |a| Ok(a.map_or(H256::zero(), |e| e.code_hash)))?
     }
 
-    fn code_size(&mut self, a: &Address) -> Result<usize, Error> {
-        Ok(self.get_state_object(a)?.map_or(0, |e| e.code_size))
+    fn code_size(&mut self, address: &Address) -> Result<usize, Error> {
+        self.call_with_cached(address, |a| Ok(a.map_or(0, |e| e.code_size)))?
     }
 }
 
