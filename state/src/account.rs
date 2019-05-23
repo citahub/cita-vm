@@ -216,7 +216,7 @@ impl StateObject {
         } else {
             PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)?
         };
-        if self.storage_changes.len() == 0 {
+        if self.storage_changes.is_empty() {
             return Ok(());
         }
 

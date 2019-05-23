@@ -309,7 +309,7 @@ impl<B: DB> State<B> {
                 match &entry.state_object {
                     Some(state_object) => {
                         let insert_data = insert_data.clone();
-                        let address = address.clone();
+                        let address = *address;
                         let state_object = state_object.clone_dirty();
                         s.spawn(move |_| {
                             insert_data
@@ -320,7 +320,7 @@ impl<B: DB> State<B> {
                     }
                     None => {
                         let remove_data = remove_data.clone();
-                        let address = address.clone();
+                        let address = *address;
                         s.spawn(move |_| {
                             remove_data.write().unwrap().push(hashlib::summary(&address[..]));
                         })
