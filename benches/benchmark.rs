@@ -5,6 +5,10 @@ use std::time::SystemTime;
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use ethereum_types::{Address, U256};
 
+use bencher::{benchmark_group, benchmark_main, Bencher};
+use ethereum_types::{Address, U256};
+use rand::Rng;
+
 fn wrapper(bench: &mut Bencher, code: &str, data: &str) {
     let db = Arc::new(cita_vm::state::MemoryDB::new(false));
     let mut state = cita_vm::state::State::new(db).unwrap();
