@@ -1,11 +1,12 @@
-use super::err::Error;
-use super::hashlib;
+use std::sync::{Arc, RwLock};
+
 use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
 use ethereum_types::{H256, U256};
-
 use hashbrown::HashMap;
-use std::sync::Arc;
+
+use super::err::Error;
+use super::hashlib;
 
 /// Single and pure account in the database. Usually, store it according to
 /// the following structure:
@@ -215,12 +216,36 @@ impl StateObject {
         } else {
             PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)?
         };
-        for (k, v) in self.storage_changes.drain() {
-            if v.is_zero() {
-                trie.remove(&hashlib::encodek(&k))?;
-            } else {
-                trie.insert(&hashlib::encodek(&k), &hashlib::encodev(&U256::from(v)))?;
+        if self.storage_changes.len() == 0 {
+            return Ok(());
+        }
+
+        let remove_data = Arc::new(RwLock::new(vec![]));
+        let insert_data = Arc::new(RwLock::new(vec![]));
+
+        rayon::scope(|s| {
+            for (k, v) in self.storage_changes.drain() {
+                if v.is_zero() {
+                    let remove_data = remove_data.clone();
+                    s.spawn(move |_| {
+                        remove_data.write().unwrap().push(hashlib::encodek(&k));
+                    })
+                } else {
+                    let insert_data = insert_data.clone();
+                    s.spawn(move |_| {
+                        insert_data
+                            .write()
+                            .unwrap()
+                            .push((hashlib::encodek(&k), hashlib::encodev(&U256::from(v))));
+                    })
+                }
             }
+        });
+        for k in remove_data.write().unwrap().drain(..) {
+            trie.remove(&k)?;
+        }
+        for (k, v) in insert_data.write().unwrap().drain(..) {
+            trie.insert(&k, &v)?;
         }
         self.storage_root = trie.root()?.into();
         Ok(())
