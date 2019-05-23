@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
@@ -7,6 +7,7 @@ use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
 use log::debug;
+use rayon::prelude::*;
 
 use super::account::StateObject;
 use super::account_db::AccountDB;
@@ -18,7 +19,7 @@ use super::object_entry::{ObjectStatus, StateObjectEntry};
 pub struct State<B> {
     pub db: Arc<B>,
     pub root: H256,
-    pub cache: Arc<RwLock<HashMap<Address, StateObjectEntry>>>,
+    pub cache: RefCell<HashMap<Address, StateObjectEntry>>,
     /// Checkpoints are used to revert to history.
     pub checkpoints: RefCell<Vec<HashMap<Address, Option<StateObjectEntry>>>>,
 }
@@ -32,7 +33,7 @@ impl<B: DB> State<B> {
         Ok(State {
             db,
             root: From::from(&root[..]),
-            cache: Arc::new(RwLock::new(HashMap::new())),
+            cache: RefCell::new(HashMap::new()),
             checkpoints: RefCell::new(Vec::new()),
         })
     }
@@ -45,7 +46,7 @@ impl<B: DB> State<B> {
         Ok(State {
             db,
             root,
-            cache: Arc::new(RwLock::new(HashMap::new())),
+            cache: RefCell::new(HashMap::new()),
             checkpoints: RefCell::new(Vec::new()),
         })
     }
@@ -73,7 +74,7 @@ impl<B: DB> State<B> {
     /// Remove any touched empty or dust accounts.
     pub fn kill_garbage(&mut self, inused: &HashSet<Address>) {
         for a in inused {
-            if let Some(state_object_entry) = self.cache.read().unwrap().get(a) {
+            if let Some(state_object_entry) = self.cache.borrow().get(a) {
                 if state_object_entry.state_object.is_none() {
                     continue;
                 }
@@ -90,7 +91,7 @@ impl<B: DB> State<B> {
     /// when to call this function.
     pub fn clear(&mut self) {
         assert!(self.checkpoints.borrow().is_empty());
-        self.cache.write().unwrap().clear();
+        self.cache.borrow_mut().clear();
     }
 
     /// Use a callback function to avoid clone data in caches.
@@ -98,7 +99,7 @@ impl<B: DB> State<B> {
     where
         F: Fn(Option<&StateObject>) -> U,
     {
-        if let Some(state_object_entry) = self.cache.read().unwrap().get(address) {
+        if let Some(state_object_entry) = self.cache.borrow().get(address) {
             if let Some(state_object) = &state_object_entry.state_object {
                 return Ok(f(Some(state_object)));
             } else {
@@ -120,7 +121,7 @@ impl<B: DB> State<B> {
 
     /// Get state object.
     pub fn get_state_object(&self, address: &Address) -> Result<Option<StateObject>, Error> {
-        if let Some(state_object_entry) = self.cache.read().unwrap().get(address) {
+        if let Some(state_object_entry) = self.cache.borrow().get(address) {
             if let Some(state_object) = &state_object_entry.state_object {
                 return Ok(Some((*state_object).clone_dirty()));
             }
@@ -195,7 +196,7 @@ impl<B: DB> State<B> {
         }
 
         self.add_checkpoint(address);
-        if let Some(ref mut state_object_entry) = self.cache.write().unwrap().get_mut(address) {
+        if let Some(ref mut state_object_entry) = self.cache.borrow_mut().get_mut(address) {
             match state_object_entry.state_object {
                 Some(ref mut state_object) => {
                     state_object.set_storage(key, value);
@@ -267,8 +268,7 @@ impl<B: DB> State<B> {
         let is_dirty = state_object_entry.is_dirty();
         let old_entry = self
             .cache
-            .write()
-            .unwrap()
+            .borrow_mut()
             .insert(*address, state_object_entry.clone_dirty());
 
         if is_dirty {
@@ -283,13 +283,7 @@ impl<B: DB> State<B> {
         assert!(self.checkpoints.borrow().is_empty());
 
         // Firstly, update account storage tree
-        for (address, entry) in self
-            .cache
-            .write()
-            .unwrap()
-            .iter_mut()
-            .filter(|&(_, ref a)| a.is_dirty())
-        {
+        for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
             if let Some(ref mut state_object) = entry.state_object {
                 let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
                 state_object.commit_storage(Arc::clone(&accdb))?;
@@ -300,40 +294,30 @@ impl<B: DB> State<B> {
         // Secondly, update the world state tree
         let mut trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
 
-        let remove_data = Arc::new(RwLock::new(vec![]));
-        let insert_data = Arc::new(RwLock::new(vec![]));
-        let cache = self.cache.clone();
-        rayon::scope(|s| {
-            for (address, entry) in cache.write().unwrap().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
-                entry.status = ObjectStatus::Committed;
-                match &entry.state_object {
-                    Some(state_object) => {
-                        let insert_data = insert_data.clone();
-                        let address = *address;
-                        let state_object = state_object.clone_dirty();
-                        s.spawn(move |_| {
-                            insert_data
-                                .write()
-                                .unwrap()
-                                .push((hashlib::summary(&address[..]), rlp::encode(&state_object.account())));
-                        })
-                    }
-                    None => {
-                        let remove_data = remove_data.clone();
-                        let address = *address;
-                        s.spawn(move |_| {
-                            remove_data.write().unwrap().push(hashlib::summary(&address[..]));
-                        })
-                    }
+        let addresses: Vec<Address> = self
+            .cache
+            .borrow()
+            .iter()
+            .filter(|&(_, ref a)| a.is_dirty())
+            .map(|(a, _)| *a)
+            .collect();
+        let addresses_hash: Vec<Vec<u8>> = addresses.par_iter().map(|a| hashlib::summary(&a[..])).collect();
+        for (i, (_, entry)) in self
+            .cache
+            .borrow_mut()
+            .iter_mut()
+            .filter(|&(_, ref a)| a.is_dirty())
+            .enumerate()
+        {
+            entry.status = ObjectStatus::Committed;
+            match &entry.state_object {
+                Some(state_object) => {
+                    trie.insert(&addresses_hash[i][..], &rlp::encode(&state_object.account()))?;
+                }
+                None => {
+                    trie.remove(&addresses_hash[i][..])?;
                 }
             }
-        });
-
-        for k in remove_data.write().unwrap().drain(..) {
-            trie.remove(&k)?;
-        }
-        for (k, v) in insert_data.write().unwrap().drain(..) {
-            trie.insert(&k, &v)?;
         }
         self.root = From::from(&trie.root()?[..]);
         self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
@@ -350,13 +334,9 @@ impl<B: DB> State<B> {
 
     fn add_checkpoint(&self, address: &Address) {
         if let Some(ref mut checkpoint) = self.checkpoints.borrow_mut().last_mut() {
-            checkpoint.entry(*address).or_insert_with(|| {
-                self.cache
-                    .read()
-                    .unwrap()
-                    .get(address)
-                    .map(StateObjectEntry::clone_dirty)
-            });
+            checkpoint
+                .entry(*address)
+                .or_insert_with(|| self.cache.borrow().get(address).map(StateObjectEntry::clone_dirty));
         }
     }
 
@@ -383,7 +363,7 @@ impl<B: DB> State<B> {
         if let Some(mut last) = self.checkpoints.borrow_mut().pop() {
             for (k, v) in last.drain() {
                 match v {
-                    Some(v) => match self.cache.write().unwrap().entry(k) {
+                    Some(v) => match self.cache.borrow_mut().entry(k) {
                         Entry::Occupied(mut e) => {
                             // Merge checkpointed changes back into the main account
                             // storage preserving the cache.
@@ -394,7 +374,7 @@ impl<B: DB> State<B> {
                         }
                     },
                     None => {
-                        if let Entry::Occupied(e) = self.cache.write().unwrap().entry(k) {
+                        if let Entry::Occupied(e) = self.cache.borrow_mut().entry(k) {
                             if e.get().is_dirty() {
                                 e.remove();
                             }
