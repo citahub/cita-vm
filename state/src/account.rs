@@ -221,9 +221,6 @@ impl StateObject {
         } else {
             PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)?
         };
-        if self.storage_changes.is_empty() {
-            return Ok(());
-        }
         let results: Vec<(bool, Vec<u8>, Vec<u8>)> = self
             .storage_changes
             .par_iter()
@@ -337,7 +334,10 @@ mod tests {
             a.code_hash,
             "af231e631776a517ca23125370d542873eca1fb4d613ed9b5d5335a46ae5b7eb".into()
         );
-        assert_eq!(db.get(&a.code_hash).unwrap().unwrap(), vec![0x55, 0x44, 0xffu8]);
+
+        let mut k = CODE_PREFIX.as_bytes().to_vec();
+        k.extend(a.code_hash.to_vec());
+        assert_eq!(db.get(&k).unwrap().unwrap(), vec![0x55, 0x44, 0xffu8]);
         a.init_code(vec![0x55]);
         assert_eq!(a.code_state, CodeState::Dirty);
         assert_eq!(a.code_size, 1);
@@ -346,7 +346,10 @@ mod tests {
             a.code_hash,
             "37bf2238b11b68cdc8382cece82651b59d3c3988873b6e0f33d79694aa45f1be".into()
         );
-        assert_eq!(db.get(&a.code_hash).unwrap().unwrap(), vec![0x55]);
+
+        let mut k = CODE_PREFIX.as_bytes().to_vec();
+        k.extend(a.code_hash.to_vec());
+        assert_eq!(db.get(&k).unwrap().unwrap(), vec![0x55]);
     }
 
     #[test]
