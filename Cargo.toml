@@ -34,7 +34,6 @@ cita-state = { path="./state", default-features = false, version="0.1" }
 
 [dev-dependencies]
 bencher = "0.1"
-rand = "0.6"
 
 [[bench]]
 name = "benchmark"

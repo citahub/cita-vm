@@ -190,7 +190,7 @@ impl Interpreter {
         }
     }
 
-    #[allow(clippy::cyclomatic_complexity)]
+    #[allow(clippy::cognitive_complexity)]
     pub fn run(&mut self) -> Result<InterpreterResult, err::Error> {
         let mut pc = 0;
         while let Some(op) = self.get_op(pc)? {
