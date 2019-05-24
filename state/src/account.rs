@@ -136,8 +136,10 @@ impl StateObject {
         if self.code_hash == hashlib::NIL_DATA {
             return Ok(());
         }
+        let mut k = CODE_PREFIX.as_bytes().to_vec();
+        k.extend(self.code_hash.to_vec());
         let c = db
-            .get(&self.code_hash)
+            .get(&k)
             .or_else(|e| Err(Error::DB(format!("{}", e))))?
             .unwrap_or_else(|| vec![]);
         self.code = c;

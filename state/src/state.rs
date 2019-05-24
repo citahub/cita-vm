@@ -110,8 +110,7 @@ impl<B: DB> State<B> {
         match trie.get(hashlib::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
-                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
-                state_object.read_code(accdb)?;
+                state_object.read_code(self.db.clone())?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(f(Some(&state_object)))
             }
@@ -130,8 +129,7 @@ impl<B: DB> State<B> {
         match trie.get(hashlib::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
-                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
-                state_object.read_code(accdb)?;
+                state_object.read_code(self.db.clone())?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(Some(state_object))
             }
