@@ -1,9 +1,10 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
 use ethereum_types::{H256, U256};
 use hashbrown::HashMap;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use super::err::Error;
 use super::hashlib;
@@ -74,6 +75,8 @@ impl From<Account> for StateObject {
         }
     }
 }
+
+const CODE_PREFIX: &str = "C:";
 
 impl StateObject {
     /// Create a new account.
@@ -219,33 +222,23 @@ impl StateObject {
         if self.storage_changes.is_empty() {
             return Ok(());
         }
-
-        let remove_data = Arc::new(RwLock::new(vec![]));
-        let insert_data = Arc::new(RwLock::new(vec![]));
-
-        rayon::scope(|s| {
-            for (k, v) in self.storage_changes.drain() {
+        let results: Vec<(bool, Vec<u8>, Vec<u8>)> = self
+            .storage_changes
+            .par_iter()
+            .map(|(k, v)| {
                 if v.is_zero() {
-                    let remove_data = remove_data.clone();
-                    s.spawn(move |_| {
-                        remove_data.write().unwrap().push(hashlib::encodek(&k));
-                    })
+                    (true, hashlib::encodek(&k), vec![])
                 } else {
-                    let insert_data = insert_data.clone();
-                    s.spawn(move |_| {
-                        insert_data
-                            .write()
-                            .unwrap()
-                            .push((hashlib::encodek(&k), hashlib::encodev(&U256::from(v))));
-                    })
+                    (false, hashlib::encodek(&k), hashlib::encodev(&U256::from(v)))
                 }
+            })
+            .collect();
+        for (delete, k, v) in results {
+            if delete {
+                trie.remove(&k)?;
+            } else {
+                trie.insert(&k, &v)?;
             }
-        });
-        for k in remove_data.write().unwrap().drain(..) {
-            trie.remove(&k)?;
-        }
-        for (k, v) in insert_data.write().unwrap().drain(..) {
-            trie.insert(&k, &v)?;
         }
         self.storage_root = trie.root()?.into();
         Ok(())
@@ -259,7 +252,9 @@ impl StateObject {
                 self.code_state = CodeState::Clean;
             }
             (true, false) => {
-                db.insert(self.code_hash.to_vec(), self.code.clone())
+                let mut k = CODE_PREFIX.as_bytes().to_vec();
+                k.extend(self.code_hash.to_vec());
+                db.insert(k, self.code.clone())
                     .or_else(|e| Err(Error::DB(format!("{}", e))))?;
                 self.code_size = self.code.len();
                 self.code_state = CodeState::Clean;
