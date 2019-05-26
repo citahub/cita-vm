@@ -259,7 +259,7 @@ mod tests {
         let v = &t.0["addmodNonConst"];
         assert_eq!(
             v.env.current_coinbase,
-            Address::from("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
+            Data20::from(Address::from_hex_str("2adc25665018aa1fe0e6bc666dac8fc2697ff9ba").unwrap())
         );
     }
 }

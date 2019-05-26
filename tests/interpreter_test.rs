@@ -1,6 +1,7 @@
 use cita_evm as evm;
 use cita_vm;
 use cita_vm::json_tests::common::*;
+use evm::common::u256_to_u64;
 use evm::extmock;
 use std::fs;
 use std::io;
@@ -14,11 +15,11 @@ fn test_json_file(p: &str) {
         let vm: cita_vm::json_tests::vm_test::Vm = data;
         // Init context
         let mut ctx = evm::Context::default();
-        ctx.coinbase = vm.env.current_coinbase;
+        ctx.coinbase = vm.env.current_coinbase.into();
         ctx.difficulty = string_2_u256(vm.env.current_difficulty);
-        ctx.gas_limit = string_2_u256(vm.env.current_gas_limit).low_u64();
+        ctx.gas_limit = u256_to_u64(string_2_u256(vm.env.current_gas_limit));
         ctx.number = string_2_u256(vm.env.current_number);
-        ctx.timestamp = string_2_u256(vm.env.current_timestamp).low_u64() as u64;
+        ctx.timestamp = u256_to_u64(string_2_u256(vm.env.current_timestamp));
 
         // Init Config
         let mut cfg = evm::InterpreterConf::default();
@@ -29,16 +30,16 @@ fn test_json_file(p: &str) {
 
         // Init params
         let mut params = evm::InterpreterParams::default();
-        params.origin = vm.exec.origin;
-        params.contract.code_address = vm.exec.address;
-        params.address = vm.exec.address;
-        params.sender = vm.exec.caller;
+        params.origin = vm.exec.origin.into();
+        params.contract.code_address = vm.exec.address.clone().into();
+        params.address = vm.exec.address.clone().into();
+        params.sender = vm.exec.caller.into();
         if vm.exec.data.len() > 2 {
             params.input = string_2_bytes(vm.exec.data.clone());
         } else {
             params.input = Vec::new();
         }
-        params.gas_limit = string_2_u256(vm.exec.gas.clone()).low_u64();
+        params.gas_limit = u256_to_u64(string_2_u256(vm.exec.gas.clone()));
         params.gas_price = string_2_u256(vm.exec.gas_price);
         params.value = string_2_u256(vm.exec.value);
         params.contract.code_data = string_2_bytes(vm.exec.code);
@@ -49,10 +50,16 @@ fn test_json_file(p: &str) {
         if let Some(data) = vm.pre {
             for (address, account) in data.into_iter() {
                 for (k, v) in &account.storage {
-                    it.data_provider
-                        .set_storage(&address, string_2_h256(k.clone()), string_2_h256(v.clone()));
-                    it.data_provider
-                        .set_storage_origin(&address, string_2_h256(k.clone()), string_2_h256(v.clone()));
+                    it.data_provider.set_storage(
+                        &address.clone().into(),
+                        string_2_h256(k.clone()),
+                        string_2_h256(v.clone()),
+                    );
+                    it.data_provider.set_storage_origin(
+                        &address.clone().into(),
+                        string_2_h256(k.clone()),
+                        string_2_h256(v.clone()),
+                    );
                 }
             }
         }
@@ -69,7 +76,8 @@ fn test_json_file(p: &str) {
                             for (address, account) in data.into_iter() {
                                 for (k, v) in &account.storage {
                                     assert_eq!(
-                                        it.data_provider.get_storage(&address, &string_2_h256(k.to_string())),
+                                        it.data_provider
+                                            .get_storage(&address.clone().into(), &string_2_h256(k.to_string())),
                                         string_2_h256(v.to_string())
                                     );
                                 }
@@ -81,7 +89,7 @@ fn test_json_file(p: &str) {
                         }
                         // Check gas
                         if let Some(expected_gas) = vm.gas {
-                            assert_eq!(gas, string_2_u256(expected_gas).low_u64())
+                            assert_eq!(gas, u256_to_u64(string_2_u256(expected_gas)))
                         }
                     }
                     _ => {}

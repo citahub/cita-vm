@@ -1,9 +1,9 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use ethereum_types::{Address, U256};
-
 use cita_vm::state::StateObjectInfo;
+use numext_fixed_hash::H160 as Address;
+use numext_fixed_uint::U256;
 
 #[test]
 fn test_state_misc00() {
@@ -11,19 +11,19 @@ fn test_state_misc00() {
     let mut state = cita_vm::state::State::new(db.clone()).unwrap();
 
     state.new_contract(
-        &Address::from("0x2000000000000000000000000000000000000000"),
-        U256::from(100_000),
-        U256::from(1),
+        &Address::from_hex_str("0x2000000000000000000000000000000000000000").unwrap(),
+        U256::from(100_000 as u32),
+        U256::from(1 as u32),
         hex::decode("").unwrap(),
     );
     state.new_contract(
-        &Address::from("0x1000000000000000000000000000000000000000"),
-        U256::from(200_000),
-        U256::from(1),
+        &Address::from_hex_str("0x1000000000000000000000000000000000000000").unwrap(),
+        U256::from(200_000 as u32),
+        U256::from(1 as u32),
         vec![],
     );
     state.commit().unwrap();
-    let root0 = state.root;
+    let root0 = state.root.clone();
 
     let block_data_provider: Arc<cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
     let state_data_provider = Arc::new(RefCell::new(state));
@@ -31,12 +31,12 @@ fn test_state_misc00() {
     let config = cita_vm::Config::default();
 
     let tx = cita_vm::Transaction {
-        from: Address::from("0x1000000000000000000000000000000000000000"),
-        to: Some(Address::from("0x2000000000000000000000000000000000000000")),
-        value: U256::from(5),
-        nonce: U256::from(1),
+        from: Address::from_hex_str("0x1000000000000000000000000000000000000000").unwrap(),
+        to: Some(Address::from_hex_str("0x2000000000000000000000000000000000000000").unwrap()),
+        value: U256::from(5 as u32),
+        nonce: U256::from(1 as u32),
         gas_limit: 80000,
-        gas_price: U256::from(1),
+        gas_price: U256::from(1 as u32),
         input: hex::decode("").unwrap(),
     };
     let _ = cita_vm::exec(
@@ -51,13 +51,13 @@ fn test_state_misc00() {
     assert_eq!(
         state_data_provider
             .borrow_mut()
-            .balance(&Address::from("0x2000000000000000000000000000000000000000"))
+            .balance(&Address::from_hex_str("0x2000000000000000000000000000000000000000").unwrap())
             .unwrap(),
-        U256::from(100_005)
+        U256::from(100_005 as u32)
     );
     let mut ur_state = cita_vm::state::State::from_existing(db, root0).unwrap();
     let b = ur_state
-        .balance(&Address::from("0x2000000000000000000000000000000000000000"))
+        .balance(&Address::from_hex_str("0x2000000000000000000000000000000000000000").unwrap())
         .unwrap();
-    assert_eq!(b, U256::from(100_000));
+    assert_eq!(b, U256::from(100_000 as u32));
 }

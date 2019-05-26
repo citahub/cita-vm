@@ -1,5 +1,6 @@
-use ethereum_types::{Address, H256, U256};
 use log::debug;
+use numext_fixed_hash::{H160 as Address, H256};
+use numext_fixed_uint::U256;
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -17,15 +18,15 @@ fn test_solidity_simplestorage() {
                 99c66a25d59f0aa78f7ebc40748fa1d1fbc335d8d780f284841b30e0365acd9\
                 60029";
     state.new_contract(
-        &Address::from("0xBd770416a3345F91E4B34576cb804a576fa48EB1"),
-        U256::from(10),
-        U256::from(1),
+        &Address::from_hex_str("0xBd770416a3345F91E4B34576cb804a576fa48EB1").unwrap(),
+        U256::from(10 as u32),
+        U256::from(1 as u32),
         hex::decode(code).unwrap(),
     );
     state.new_contract(
-        &Address::from("0x1000000000000000000000000000000000000000"),
+        &Address::from_hex_str("0x1000000000000000000000000000000000000000").unwrap(),
         U256::from(1_000_000_000_000_000u64),
-        U256::from(1),
+        U256::from(1 as u32),
         vec![],
     );
 
@@ -36,12 +37,12 @@ fn test_solidity_simplestorage() {
 
     // SimpleStorage.set(42)
     let tx = cita_vm::Transaction {
-        from: Address::from("0x1000000000000000000000000000000000000000"),
-        to: Some(Address::from("0xBd770416a3345F91E4B34576cb804a576fa48EB1")),
-        value: U256::from(0),
-        nonce: U256::from(1),
+        from: Address::from_hex_str("0x1000000000000000000000000000000000000000").unwrap(),
+        to: Some(Address::from_hex_str("0xBd770416a3345F91E4B34576cb804a576fa48EB1").unwrap()),
+        value: U256::from(0 as u32),
+        nonce: U256::from(1 as u32),
         gas_limit: 80000,
-        gas_price: U256::from(1),
+        gas_price: U256::from(1 as u32),
         input: hex::decode("60fe47b1000000000000000000000000000000000000000000000000000000000000002a").unwrap(),
     };
     let _ = cita_vm::exec(
@@ -55,12 +56,12 @@ fn test_solidity_simplestorage() {
 
     // Send transaction: SimpleStorage.get() => 42
     let tx = cita_vm::Transaction {
-        from: Address::from("0x1000000000000000000000000000000000000000"),
-        to: Some(Address::from("0xBd770416a3345F91E4B34576cb804a576fa48EB1")),
-        value: U256::from(0),
-        nonce: U256::from(2),
+        from: Address::from_hex_str("0x1000000000000000000000000000000000000000").unwrap(),
+        to: Some(Address::from_hex_str("0xBd770416a3345F91E4B34576cb804a576fa48EB1").unwrap()),
+        value: U256::from(0 as u32),
+        nonce: U256::from(2 as u32),
         gas_limit: 80000,
-        gas_price: U256::from(1),
+        gas_price: U256::from(1 as u32),
         input: hex::decode("6d4ce63c").unwrap(),
     };
     let r = cita_vm::exec(
@@ -83,12 +84,12 @@ fn test_solidity_simplestorage() {
 
     // Eth call: SimpleStorage.get() => 42
     let tx = cita_vm::Transaction {
-        from: Address::from("0x1000000000000000000000000000000000000001"), // Omited in most cases.
-        to: Some(Address::from("0xBd770416a3345F91E4B34576cb804a576fa48EB1")), // tx.to shouldn't be none.
-        value: U256::from(0),       // tx.value must be 0. This is due to solidity's check.
-        nonce: U256::from(123_456), // tx.nonce is just omited.
-        gas_limit: 80000,           // Give me a large enougth value plz.
-        gas_price: U256::from(1),   // Omited due to solidity's check.
+        from: Address::from_hex_str("0x1000000000000000000000000000000000000001").unwrap(), // Omited in most cases.
+        to: Some(Address::from_hex_str("0xBd770416a3345F91E4B34576cb804a576fa48EB1").unwrap()), // tx.to shouldn't be none.
+        value: U256::from(0 as u32), // tx.value must be 0. This is due to solidity's check.
+        nonce: U256::from(123_456 as u32), // tx.nonce is just omited.
+        gas_limit: 80000,            // Give me a large enougth value plz.
+        gas_price: U256::from(1 as u32), // Omited due to solidity's check.
         input: hex::decode("6d4ce63c").unwrap(),
     };
     let r = cita_vm::exec_static(
@@ -116,11 +117,21 @@ fn test_solidity_erc20() {
     let _ = env_logger::builder().is_test(true).try_init();
     let db = Arc::new(cita_vm::state::MemoryDB::new(false));
     let mut state = cita_vm::state::State::new(db).unwrap();
-    let address0 = Address::from("0x1000000000000000000000000000000000000000");
-    let address1 = Address::from("0x1000000000000000000000000000000000000001");
+    let address0 = Address::from_hex_str("0x1000000000000000000000000000000000000000").unwrap();
+    let address1 = Address::from_hex_str("0x1000000000000000000000000000000000000001").unwrap();
 
-    state.new_contract(&address0, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
-    state.new_contract(&address1, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
+    state.new_contract(
+        &address0,
+        U256::from(100_000_000_000_000_000u64),
+        U256::from(1 as u32),
+        vec![],
+    );
+    state.new_contract(
+        &address1,
+        U256::from(100_000_000_000_000_000u64),
+        U256::from(1 as u32),
+        vec![],
+    );
 
     // Create a new contract
     let code = "606060405234620000005760405162001617380380620016178339810160405280805190602001909190805182\
@@ -261,12 +272,12 @@ fn test_solidity_erc20() {
     let config = cita_vm::Config::default();
 
     let tx = cita_vm::Transaction {
-        from: Address::from("0x1000000000000000000000000000000000000000"),
+        from: Address::from_hex_str("0x1000000000000000000000000000000000000000").unwrap(),
         to: None,
-        value: U256::from(0),
-        nonce: U256::from(1),
+        value: U256::from(0 as u32),
+        nonce: U256::from(1 as u32),
         gas_limit: 8_000_000,
-        gas_price: U256::from(1),
+        gas_price: U256::from(1 as u32),
         input: hex::decode(code).unwrap(),
     };
     let r = cita_vm::exec(
@@ -285,12 +296,12 @@ fn test_solidity_erc20() {
 
     // Call balanceOf
     let tx = cita_vm::Transaction {
-        from: address0,
-        to: Some(contract),
-        value: U256::from(0),
-        nonce: U256::from(2),
+        from: address0.clone(),
+        to: Some(contract.clone()),
+        value: U256::from(0 as u32),
+        nonce: U256::from(2 as u32),
         gas_limit: 80000,
-        gas_price: U256::from(1),
+        gas_price: U256::from(1 as u32),
         input: hex::decode("70a082310000000000000000000000001000000000000000000000000000000000000000").unwrap(),
     };
     let r = cita_vm::exec(
@@ -311,12 +322,12 @@ fn test_solidity_erc20() {
 
     // Transfer value
     let tx = cita_vm::Transaction {
-        from: address0,
-        to: Some(contract),
-        value: U256::from(0),
-        nonce: U256::from(3),
+        from: address0.clone(),
+        to: Some(contract.clone()),
+        value: U256::from(0 as u32),
+        nonce: U256::from(3 as u32),
         gas_limit: 80000,
-        gas_price: U256::from(1),
+        gas_price: U256::from(1 as u32),
         input: hex::decode(
 "a9059cbb0000000000000000000000001000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000a",
         )
@@ -335,14 +346,14 @@ fn test_solidity_erc20() {
         cita_vm::evm::InterpreterResult::Normal(_, _, logs) => {
             assert_eq!(logs.len(), 1);
             let cita_vm::evm::Log(addr, topics, data) = &logs[0];
-            assert_eq!(addr, &contract);
+            assert_eq!(addr, &contract.clone());
             assert_eq!(
                 topics[1],
-                H256::from("0x0000000000000000000000001000000000000000000000000000000000000000")
+                H256::from_hex_str("0x0000000000000000000000001000000000000000000000000000000000000000").unwrap()
             );
             assert_eq!(
                 topics[2],
-                H256::from("0x0000000000000000000000001000000000000000000000000000000000000001")
+                H256::from_hex_str("0x0000000000000000000000001000000000000000000000000000000000000001").unwrap()
             );
             assert_eq!(
                 data,
@@ -358,10 +369,10 @@ fn test_solidity_erc20() {
     let tx = cita_vm::Transaction {
         from: address0,
         to: Some(contract),
-        value: U256::from(0),
-        nonce: U256::from(4),
+        value: U256::from(0 as u32),
+        nonce: U256::from(4 as u32),
         gas_limit: 80000,
-        gas_price: U256::from(1),
+        gas_price: U256::from(1 as u32),
         input: hex::decode("70a082310000000000000000000000001000000000000000000000000000000000000000").unwrap(),
     };
     let r = cita_vm::exec(

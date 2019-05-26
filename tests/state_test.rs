@@ -1,3 +1,4 @@
+use cita_vm::evm::common;
 use cita_vm::json_tests::common::*;
 use cita_vm::*;
 use env_logger;
@@ -27,14 +28,14 @@ fn test_json_file(p: &str) {
                 let code = string_2_bytes(account.code);
                 let nonce = string_2_u256(account.nonce);
                 if code.is_empty() {
-                    state_provider.new_contract(&address, balance, nonce, vec![]);
+                    state_provider.new_contract(&address.clone().into(), balance, nonce, vec![]);
                 } else {
-                    state_provider.new_contract(&address, balance, nonce, code);
+                    state_provider.new_contract(&address.clone().into(), balance, nonce, code);
                 }
                 for (k, v) in account.storage {
                     let kk = string_2_h256(k);
                     let vv = string_2_h256(v);
-                    state_provider.set_storage(&address, kk, vv).unwrap();
+                    state_provider.set_storage(&address.clone().into(), kk, vv).unwrap();
                 }
             }
             state_provider.commit().unwrap();
@@ -49,20 +50,20 @@ fn test_json_file(p: &str) {
             let str_data = data.transaction.data.clone()[*idx_data].clone();
 
             let evm_context = evm::Context {
-                gas_limit: string_2_u256(str_block_gas.clone()).low_u64(),
-                coinbase: data.env.current_coinbase,
+                gas_limit: common::u256_to_u64(string_2_u256(str_block_gas.clone())),
+                coinbase: data.env.current_coinbase.clone().into(),
                 number: string_2_u256(data.env.current_number.clone()),
-                timestamp: string_2_u256(data.env.current_timestamp.clone()).low_u64(),
+                timestamp: common::u256_to_u64(string_2_u256(data.env.current_timestamp.clone())),
                 difficulty: string_2_u256(data.env.current_difficulty.clone()),
             };
             let mut cfg = Config::default();
-            cfg.block_gas_limit = string_2_u256(data.env.current_gas_limit.clone()).low_u64();
+            cfg.block_gas_limit = common::u256_to_u64(string_2_u256(data.env.current_gas_limit.clone()));
             let mut tx = Transaction {
                 from: secret_2_address(data.transaction.secret_key.as_str()),
                 to: None,
                 value: string_2_u256(str_value),
                 nonce: string_2_u256(data.transaction.nonce.clone()),
-                gas_limit: string_2_u256(str_gas).low_u64(),
+                gas_limit: common::u256_to_u64(string_2_u256(str_gas)),
                 gas_price: string_2_u256(data.transaction.gas_price.clone()),
                 input: string_2_bytes(str_data),
             };
@@ -196,9 +197,9 @@ fn test_state_pass() {
     test_json_file("/tmp/jsondata/GeneralStateTests/stCallCodes/callcallcodecallcode_ABCB_RECURSIVE.json");
     test_json_file("/tmp/jsondata/GeneralStateTests/stCallCodes/callcallcodecall_010.json");
     test_json_file("/tmp/jsondata/GeneralStateTests/stCallCodes/callcallcodecall_010_OOGE.json");
-    test_json_file("/tmp/jsondata/GeneralStateTests/stCallCodes/callcallcodecall_010_OOGMAfter.json");
     test_json_file("/tmp/jsondata/GeneralStateTests/stCallCodes/callcallcodecall_010_OOGMBefore.json");
     test_json_file("/tmp/jsondata/GeneralStateTests/stCallCodes/callcallcodecall_010_SuicideEnd.json");
+    test_json_file("/tmp/jsondata/GeneralStateTests/stCallCodes/callcallcodecall_010_OOGMAfter.json");
     test_json_file("/tmp/jsondata/GeneralStateTests/stCallCodes/callcallcodecall_010_SuicideMiddle.json");
     test_json_file("/tmp/jsondata/GeneralStateTests/stCallCodes/callcallcodecall_ABCB_RECURSIVE.json");
     test_json_file("/tmp/jsondata/GeneralStateTests/stCallCodes/callcallcode_01.json");

@@ -217,7 +217,7 @@ impl Interpreter {
             match op {
                 opcodes::OpCode::EXP => {
                     let expon = self.stack.back(1);
-                    let bytes = ((expon.count_ones() + 7) / 8) as u64;
+                    let bytes = u64::from((expon.count_ones() + 7) / 8);
                     let gas = self.cfg.gas_exp + self.cfg.gas_exp_byte * bytes;
                     self.use_gas(gas)?;
                 }
@@ -958,7 +958,7 @@ impl Interpreter {
                     let mut params = InterpreterParams::default();
                     params.origin = self.params.origin.clone();
                     params.sender = self.params.address.clone();
-                    params.gas_limit = self.gas_tmp.clone();
+                    params.gas_limit = self.gas_tmp;
                     params.gas_price = self.params.gas_price.clone();
                     params.input = Vec::from(data);
                     params.value = value;
@@ -1289,9 +1289,9 @@ mod tests {
                 "CD",
             ),
             (
-                "00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff",
+                "CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff",
                 "0",
-                "00",
+                "0",
             ),
             (
                 "ABCDEF0908070605040302010000000000000000000000000000000000000000",
@@ -1299,82 +1299,61 @@ mod tests {
                 "CD",
             ),
             (
-                "00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff",
+                "CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff",
                 "0",
-                "00",
+                "0",
             ),
             (
-                "00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff",
+                "CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff",
                 "1",
                 "CD",
             ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000102030",
-                "31",
-                "30",
-            ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000102030",
-                "30",
-                "20",
-            ),
+            ("102030", "31", "30"),
+            ("102030", "30", "20"),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "32",
-                "00",
+                "0",
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "4294967295",
-                "00",
+                "0",
             ),
         ];
         for (val, th, expected) in data {
+            println!("val {:?}", val);
+            println!("th {:?}", th);
+            println!("expected {:?}", expected);
             let mut it = default_interpreter();;
             it.stack
-                .push_n(&[U256::from(val), U256::from(th.parse::<u64>().unwrap())]);
+                .push_n(&[U256::from_hex_str(val).unwrap(), U256::from(th.parse::<u64>().unwrap())]);
             it.params.contract.code_data = vec![opcodes::OpCode::BYTE as u8];
             it.run().unwrap();
-            assert_eq!(it.stack.pop(), U256::from(expected));
+            assert_eq!(it.stack.pop(), U256::from_hex_str(expected).unwrap());
         }
     }
 
     #[test]
     fn test_op_shl() {
         let data = vec![
+            ("1", "0", "1"),
+            ("1", "1", "2"),
             (
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "00",
-                "0000000000000000000000000000000000000000000000000000000000000001",
-            ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "01",
-                "0000000000000000000000000000000000000000000000000000000000000002",
-            ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
                 "ff",
                 "8000000000000000000000000000000000000000000000000000000000000000",
             ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "0100",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-            ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "0101",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-            ),
+            ("1", "100", "0"),
+            ("1", "101", "0"),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "00",
+                "0",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "01",
+                "1",
                 "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
             ),
             (
@@ -1384,113 +1363,91 @@ mod tests {
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0100",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "100",
+                "0",
             ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000000000",
-                "01",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-            ),
+            ("0", "1", "0"),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "01",
+                "1",
                 "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
             ),
         ];
         for (x, y, expected) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&[U256::from(x), U256::from(y)]);
+            it.stack
+                .push_n(&[U256::from_hex_str(x).unwrap(), U256::from_hex_str(y).unwrap()]);
             it.params.contract.code_data = vec![opcodes::OpCode::SHL as u8];
             it.run().unwrap();
-            assert_eq!(it.stack.pop(), U256::from(expected));
+            assert_eq!(it.stack.pop(), U256::from_hex_str(expected).unwrap());
         }
     }
 
     #[test]
     fn test_op_shr() {
         let data = vec![
-            (
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "00",
-                "0000000000000000000000000000000000000000000000000000000000000001",
-            ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "01",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-            ),
+            ("1", "0", "1"),
+            ("1", "1", "0"),
             (
                 "8000000000000000000000000000000000000000000000000000000000000000",
-                "01",
+                "1",
                 "4000000000000000000000000000000000000000000000000000000000000000",
             ),
             (
                 "8000000000000000000000000000000000000000000000000000000000000000",
                 "ff",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
             ),
             (
                 "8000000000000000000000000000000000000000000000000000000000000000",
-                "0100",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "100",
+                "0",
             ),
             (
                 "8000000000000000000000000000000000000000000000000000000000000000",
-                "0101",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "101",
+                "0",
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "00",
+                "0",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "01",
+                "1",
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "ff",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0100",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "100",
+                "0",
             ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000000000",
-                "01",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-            ),
+            ("0", "1", "0"),
         ];
         for (x, y, expected) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&[U256::from(x), U256::from(y)]);
+            it.stack
+                .push_n(&[U256::from_hex_str(x).unwrap(), U256::from_hex_str(y).unwrap()]);
             it.params.contract.code_data = vec![opcodes::OpCode::SHR as u8];
             it.run().unwrap();
-            assert_eq!(it.stack.pop(), U256::from(expected));
+            assert_eq!(it.stack.pop(), U256::from_hex_str(expected).unwrap());
         }
     }
 
     #[test]
     fn test_op_sar() {
         let data = vec![
-            (
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "00",
-                "0000000000000000000000000000000000000000000000000000000000000001",
-            ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "01",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-            ),
+            ("1", "0", "1"),
+            ("1", "1", "0"),
             (
                 "8000000000000000000000000000000000000000000000000000000000000000",
-                "01",
+                "1",
                 "c000000000000000000000000000000000000000000000000000000000000000",
             ),
             (
@@ -1500,22 +1457,22 @@ mod tests {
             ),
             (
                 "8000000000000000000000000000000000000000000000000000000000000000",
-                "0100",
+                "100",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             ),
             (
                 "8000000000000000000000000000000000000000000000000000000000000000",
-                "0101",
+                "101",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "00",
+                "0",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "01",
+                "1",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             ),
             (
@@ -1525,192 +1482,183 @@ mod tests {
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0100",
+                "100",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             ),
-            (
-                "0000000000000000000000000000000000000000000000000000000000000000",
-                "01",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-            ),
+            ("0", "1", "0"),
             (
                 "4000000000000000000000000000000000000000000000000000000000000000",
                 "fe",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
             ),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "f8",
-                "000000000000000000000000000000000000000000000000000000000000007f",
+                "7f",
             ),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "fe",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
             ),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "ff",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0100",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "100",
+                "0",
             ),
         ];
         for (x, y, expected) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&[U256::from(x), U256::from(y)]);
+            it.stack
+                .push_n(&[U256::from_hex_str(x).unwrap(), U256::from_hex_str(y).unwrap()]);
             it.params.contract.code_data = vec![opcodes::OpCode::SAR as u8];
             it.run().unwrap();
-            assert_eq!(it.stack.pop(), U256::from(expected));
+            assert_eq!(it.stack.pop(), U256::from_hex_str(expected).unwrap());
         }
     }
 
     #[test]
     fn test_op_sgt() {
         let data = vec![
-            (
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-            ),
+            ("1", "1", "0"),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
             ),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "1",
+                "0",
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
+                "1",
             ),
             (
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
                 "8000000000000000000000000000000000000000000000000000000000000001",
                 "8000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
                 "8000000000000000000000000000000000000000000000000000000000000001",
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
             ),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "8000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
                 "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb",
                 "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
             ),
             (
                 "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd",
                 "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
         ];
         for (x, y, expected) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&[U256::from(x), U256::from(y)]);
+            it.stack
+                .push_n(&[U256::from_hex_str(x).unwrap(), U256::from_hex_str(y).unwrap()]);
             it.params.contract.code_data = vec![opcodes::OpCode::SGT as u8];
             it.run().unwrap();
-            assert_eq!(it.stack.pop(), U256::from(expected));
+            assert_eq!(it.stack.pop(), U256::from_hex_str(expected).unwrap());
         }
     }
 
     #[test]
     fn test_op_slt() {
         let data = vec![
-            (
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-            ),
+            ("1", "1", "0"),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
+                "1",
             ),
             (
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "1",
+                "0",
             ),
             (
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
             ),
             (
                 "8000000000000000000000000000000000000000000000000000000000000001",
                 "8000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
                 "8000000000000000000000000000000000000000000000000000000000000001",
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
                 "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
                 "8000000000000000000000000000000000000000000000000000000000000001",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
             ),
             (
                 "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb",
                 "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd",
-                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0",
             ),
             (
                 "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd",
                 "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb",
-                "0000000000000000000000000000000000000000000000000000000000000001",
+                "1",
             ),
         ];
         for (x, y, expected) in data {
             let mut it = default_interpreter();;
-            it.stack.push_n(&[U256::from(x), U256::from(y)]);
+            it.stack
+                .push_n(&[U256::from_hex_str(x).unwrap(), U256::from_hex_str(y).unwrap()]);
             it.params.contract.code_data = vec![opcodes::OpCode::SLT as u8];
             it.run().unwrap();
-            assert_eq!(it.stack.pop(), U256::from(expected));
+            assert_eq!(it.stack.pop(), U256::from_hex_str(expected).unwrap());
         }
     }
 
@@ -1718,7 +1666,7 @@ mod tests {
     fn test_op_mstore() {
         let mut it = default_interpreter();;
         let v = "abcdef00000000000000abba000000000deaf000000c0de00100000000133700";
-        it.stack.push_n(&[U256::from(v), U256::zero()]);
+        it.stack.push_n(&[U256::from_hex_str(v).unwrap(), U256::zero()]);
         it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
         assert_eq!(it.mem.get(0, 32), common::hex_decode(v).unwrap().as_slice());
@@ -1759,10 +1707,16 @@ mod tests {
             let mut it = default_interpreter();;
             it.cfg.eip1283 = true;
             assert_eq!(it.gas, it.context.gas_limit);
-            it.data_provider
-                .set_storage_origin(&it.params.contract.code_address, H256::zero(), H256::from(origin));
-            it.data_provider
-                .set_storage(&it.params.contract.code_address, H256::zero(), H256::from(origin));
+            it.data_provider.set_storage_origin(
+                &it.params.contract.code_address,
+                H256::zero(),
+                H256::from(U256::from(origin as u32)),
+            );
+            it.data_provider.set_storage(
+                &it.params.contract.code_address,
+                H256::zero(),
+                H256::from(U256::from(origin as u32)),
+            );
             it.params.contract.code_data = common::hex_decode(code).unwrap();
             it.run().unwrap();
             assert_eq!(it.gas, it.context.gas_limit - use_gas);

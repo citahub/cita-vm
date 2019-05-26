@@ -66,7 +66,7 @@ impl ext::DataProvider for DataProviderMock {
 
     fn get_storage(&self, address: &Address, key: &H256) -> H256 {
         self.db.get(address).map_or(H256::zero(), |v| {
-            v.storage.get(key).map_or(H256::zero(), |v| v.to_owned())
+            v.storage.get(key).map_or(H256::zero(), std::borrow::ToOwned::to_owned)
         })
     }
 
@@ -80,7 +80,7 @@ impl ext::DataProvider for DataProviderMock {
 
     fn get_storage_origin(&self, address: &Address, key: &H256) -> H256 {
         self.db_origin.get(address).map_or(H256::zero(), |v| {
-            v.storage.get(key).map_or(H256::zero(), |v| v.to_owned())
+            v.storage.get(key).map_or(H256::zero(), std::borrow::ToOwned::to_owned)
         })
     }
 
