@@ -1,4 +1,7 @@
-use ethereum_types::{Address, H256, U256};
+use numext_fixed_hash::{H160 as Address, H256};
+use numext_fixed_hash_core::prelude::HashConvert;
+use numext_fixed_uint::{U256, U512};
+use numext_fixed_uint_core::prelude::UintConvert;
 use std::u64;
 
 /// The size of word in EVM is 32 bytes.
@@ -22,7 +25,7 @@ pub fn mem_gas_cost(size: u64, memory_gas: u64) -> u64 {
 #[inline]
 pub fn get_sign(value: U256) -> (U256, bool) {
     // The highest bit is 1, indicating that it is negative
-    let sign = (value >> 255) == U256::one();
+    let sign = (value.clone() >> 255) == U256::one();
     (set_sign(value, sign), sign)
 }
 
@@ -30,7 +33,7 @@ pub fn get_sign(value: U256) -> (U256, bool) {
 #[inline]
 pub fn set_sign(value: U256, sign: bool) -> U256 {
     if sign {
-        (!U256::zero() ^ value).overflowing_add(U256::one()).0
+        (!U256::zero() ^ value).overflowing_add(&U256::one()).0
     } else {
         value
     }
@@ -38,12 +41,39 @@ pub fn set_sign(value: U256, sign: bool) -> U256 {
 
 #[inline]
 pub fn u256_to_address(value: &U256) -> Address {
-    Address::from(H256::from(value))
+    H256::from(value).convert_into().0
 }
 
 #[inline]
 pub fn address_to_u256(value: Address) -> U256 {
-    U256::from(&*H256::from(value))
+    let hash: H256 = value.convert_into().0;
+    U256::from_big_endian(hash.as_bytes()).unwrap()
+}
+
+#[inline]
+pub fn address_to_h256(value: Address) -> H256 {
+    value.convert_into().0
+}
+
+#[inline]
+pub fn h256_to_address(value: H256) -> Address {
+    value.convert_into().0
+}
+
+#[inline]
+pub fn u256_to_u64(value: U256) -> u64 {
+    // TODO: use U256 or &U256
+    value.0[0]
+}
+
+#[inline]
+pub fn u256_to_u512(value: U256) -> U512 {
+    value.convert_into().0
+}
+
+#[inline]
+pub fn u512_to_u256(value: U512) -> U256 {
+    value.convert_into().0
 }
 
 #[inline]
@@ -56,8 +86,8 @@ pub fn bool_to_u256(val: bool) -> U256 {
 }
 
 #[inline]
-pub fn u256_min(x: U256, y: U256) -> U256 {
-    if x > y {
+pub fn u256_min<'a>(x: &'a U256, y: &'a U256) -> &'a U256 {
+    if *x > *y {
         y
     } else {
         x
@@ -82,12 +112,13 @@ pub fn rpad(slice: Vec<u8>, n: usize) -> Vec<u8> {
 /// Copy data from source by start and size.
 #[inline]
 pub fn copy_data(source: &[u8], start: U256, size: U256) -> Vec<u8> {
-    let source_len = U256::from(source.len());
-    let s = u256_min(start, source_len);
-    let e = u256_min(s + size, source_len);
+    let source_len = U256::from(source.len() as u32);
+    let s = u256_min(&start, &source_len);
+    let start = s + &size;
+    let e = u256_min(&start, &source_len);
 
-    let data = &source[s.as_usize()..e.as_usize()];
-    rpad(Vec::from(data), size.as_usize())
+    let data = &source[u256_to_u64(s.to_owned()) as usize..u256_to_u64(e.to_owned()) as usize];
+    rpad(Vec::from(data), u256_to_u64(size) as usize)
 }
 
 #[inline]

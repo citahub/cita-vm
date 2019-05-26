@@ -5,9 +5,11 @@ use std::sync::Arc;
 use cita_evm as evm;
 use cita_state as state;
 use cita_trie::db::DB;
-use ethereum_types::{Address, H256, U256};
+use evm::common;
 use evm::InterpreterParams;
 use log::debug;
+use numext_fixed_hash::{H160 as Address, H256};
+use numext_fixed_uint::U256;
 use rlp::RlpStream;
 use state::{State, StateObjectInfo};
 
@@ -39,7 +41,7 @@ impl BlockDataProviderMock {
 /// Impl.
 impl BlockDataProvider for BlockDataProviderMock {
     fn get_block_hash(&self, number: &U256) -> H256 {
-        *self.data.get(number).unwrap_or(&H256::zero())
+        self.data.get(number).unwrap_or(&H256::zero()).to_owned()
     }
 }
 
@@ -98,9 +100,10 @@ impl<B: DB> DataProvider<B> {
 /// Returns new address created from address and nonce.
 pub fn create_address_from_address_and_nonce(address: &Address, nonce: &U256) -> Address {
     let mut stream = RlpStream::new_list(2);
-    stream.append(address);
-    stream.append(nonce);
-    Address::from(H256::from(state::hashlib::summary(stream.as_raw()).as_slice()))
+    stream.append(&address.as_bytes());
+    stream.append(&nonce.to_be_bytes().to_vec());
+    let hash = H256::from_slice(state::hashlib::summary(stream.as_raw()).as_slice()).unwrap();
+    common::h256_to_address(hash)
 }
 
 /// Returns new address created from sender salt and code hash.
@@ -112,7 +115,8 @@ pub fn create_address_from_salt_and_code_hash(address: &Address, salt: H256, cod
     buffer[1..=20].copy_from_slice(&address[..]);
     buffer[(1 + 20)..(1 + 20 + 32)].copy_from_slice(&salt[..]);
     buffer[(1 + 20 + 32)..].copy_from_slice(code_hash);
-    Address::from(H256::from(state::hashlib::summary(&buffer[..]).as_slice()))
+    let hash = H256::from_slice(state::hashlib::summary(&buffer[..]).as_slice()).unwrap();
+    common::h256_to_address(hash)
 }
 
 /// A selector for func create_address_from_address_and_nonce() and
@@ -186,10 +190,10 @@ pub fn clear<B: DB + 'static>(
 ) -> Result<(), err::Error> {
     state_provider
         .borrow_mut()
-        .add_balance(&request.sender, request.gas_price * (gas_left + refund))?;
+        .add_balance(&request.sender, &(request.gas_price.clone() * (gas_left + refund)))?;
     state_provider.borrow_mut().add_balance(
         &store.borrow().evm_context.coinbase,
-        request.gas_price * (request.gas_limit - gas_left - refund),
+        &(request.gas_price.clone() * (request.gas_limit - gas_left - refund)),
     )?;
     Ok(())
 }
@@ -225,11 +229,11 @@ fn call_pure<B: DB + 'static>(
     if !request.disable_transfer_value {
         state_provider
             .borrow_mut()
-            .transfer_balance(&request.sender, &request.receiver, request.value)?;
+            .transfer_balance(&request.sender, &request.receiver, &request.value)?;
     }
     // Execute pre-compiled contracts.
     if precompiled::contains(&request.contract.code_address) {
-        let c = precompiled::get(request.contract.code_address);
+        let c = precompiled::get(request.contract.code_address.clone());
         let gas = c.required_gas(&request.input);
         if request.gas_limit < gas {
             return Err(err::Error::Evm(evm::Error::OutOfGas));
@@ -303,7 +307,7 @@ fn create<B: DB + 'static>(
         }
         CreateKind::FromSaltAndCodeHash => {
             // Generate new address created from sender salt and code hash
-            create_address_from_salt_and_code_hash(&request.sender, request.extra, request.input.clone())
+            create_address_from_salt_and_code_hash(&request.sender, request.extra.clone(), request.input.clone())
         }
     };
     debug!("create address={:?}", address);
@@ -327,12 +331,12 @@ fn create<B: DB + 'static>(
         vec![],
     );
     let mut reqchan = request.clone();
-    reqchan.address = address;
-    reqchan.receiver = address;
+    reqchan.address = address.clone();
+    reqchan.receiver = address.clone();
     reqchan.is_create = false;
     reqchan.input = vec![];
     reqchan.contract = evm::Contract {
-        code_address: address,
+        code_address: address.clone(),
         code_data: request.input.clone(),
     };
     let r = call(block_provider.clone(), state_provider.clone(), store.clone(), &reqchan);
@@ -350,7 +354,7 @@ fn create<B: DB + 'static>(
                 return Err(err::Error::Evm(evm::Error::OutOfGas));
             }
             let gas_left = gas_left - gas_code_deposit;
-            state_provider.borrow_mut().set_code(&address, output.clone())?;
+            state_provider.borrow_mut().set_code(&address.clone(), output.clone())?;
             state_provider.borrow_mut().discard_checkpoint();
             let r = Ok(evm::InterpreterResult::Create(output, gas_left, logs, address));
             debug!("create result={:?}", r);
@@ -398,14 +402,14 @@ fn reinterpret_tx<B: DB + 'static>(
     state_provider: Arc<RefCell<state::State<B>>>,
 ) -> InterpreterParams {
     let mut request = evm::InterpreterParams::default();
-    request.origin = tx.from;
-    request.sender = tx.from;
+    request.origin = tx.from.clone();
+    request.sender = tx.from.clone();
     match tx.to {
         Some(data) => {
-            request.receiver = data;
-            request.address = data;
+            request.receiver = data.clone();
+            request.address = data.clone();
             request.contract = evm::Contract {
-                code_address: data,
+                code_address: data.clone(),
                 code_data: state_provider.borrow_mut().code(&data).unwrap_or_default(),
             };
         }
@@ -446,19 +450,19 @@ pub fn exec<B: DB + 'static>(
         return Err(err::Error::NotEnoughBaseGas);
     }
     // Ensure value
-    let gas_prepay = request.gas_price * request.gas_limit;
-    if state_provider.borrow_mut().balance(&request.sender)? < gas_prepay + request.value {
+    let gas_prepay = request.gas_price.clone() * request.gas_limit;
+    if state_provider.borrow_mut().balance(&request.sender)? < gas_prepay.clone() + request.value.clone() {
         return Err(err::Error::NotEnoughBalance);
     }
     // Pay intrinsic gas
-    state_provider.borrow_mut().sub_balance(&request.sender, gas_prepay)?;
+    state_provider.borrow_mut().sub_balance(&request.sender, &gas_prepay)?;
     // Increament the nonce for the next transaction
     state_provider.borrow_mut().inc_nonce(&request.sender)?;
     // Init the store for the transaction
     let mut store = Store::default();
     store.evm_cfg = get_interpreter_conf();
     store.evm_context = evm_context.clone();
-    store.used(request.receiver);
+    store.used(request.receiver.clone());
     let store = Arc::new(RefCell::new(store));
     // Create a sub request
     let mut reqchan = request.clone();
@@ -587,7 +591,7 @@ impl<B: DB + 'static> Executive<B> {
 
     pub fn commit(&self) -> Result<H256, err::Error> {
         self.state_provider.borrow_mut().commit()?;
-        Ok(self.state_provider.borrow_mut().root)
+        Ok(self.state_provider.borrow_mut().root.clone())
     }
 }
 
@@ -604,7 +608,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
         self.store
             .borrow_mut()
             .refund
-            .entry(*address)
+            .entry(address.to_owned())
             .and_modify(|v| *v += n)
             .or_insert(n);
     }
@@ -614,7 +618,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
         self.store
             .borrow_mut()
             .refund
-            .entry(*address)
+            .entry(address.to_owned())
             .and_modify(|v| *v -= n)
             .or_insert(n);
     }
@@ -657,9 +661,9 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
         self.store
             .borrow_mut()
             .origin
-            .entry(*address)
+            .entry(address.to_owned())
             .or_insert_with(HashMap::new)
-            .entry(key)
+            .entry(key.to_owned())
             .or_insert(a);
         if let Err(e) = self.state_provider.borrow_mut().set_storage(address, key, value) {
             panic!("{}", e);
@@ -670,7 +674,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
         self.store.borrow_mut().used(address.clone());
         match self.store.borrow_mut().origin.get(address) {
             Some(account) => match account.get(key) {
-                Some(val) => *val,
+                Some(val) => val.to_owned(),
                 None => self.get_storage(address, key),
             },
             None => self.get_storage(address, key),
@@ -692,17 +696,17 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
         if address != refund_to {
             self.state_provider
                 .borrow_mut()
-                .transfer_balance(address, refund_to, b)
+                .transfer_balance(address, refund_to, &b)
                 .unwrap();
         } else {
             // Must ensure that the balance of address which is suicide is zero.
-            self.state_provider.borrow_mut().sub_balance(address, b).unwrap();
+            self.state_provider.borrow_mut().sub_balance(address, &b).unwrap();
         }
         true
     }
 
     fn sha3(&self, data: &[u8]) -> H256 {
-        From::from(&state::hashlib::summary(data)[..])
+        H256::from_slice(&state::hashlib::summary(data)[..]).unwrap()
     }
 
     fn is_empty(&self, address: &Address) -> bool {
@@ -716,7 +720,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     ) -> (Result<evm::InterpreterResult, evm::Error>) {
         match opcode {
             evm::OpCode::CALL | evm::OpCode::CALLCODE | evm::OpCode::DELEGATECALL | evm::OpCode::STATICCALL => {
-                self.store.borrow_mut().used(params.address);
+                self.store.borrow_mut().used(params.address.clone());
                 let r = call(
                     self.block_provider.clone(),
                     self.state_provider.clone(),

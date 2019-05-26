@@ -1,7 +1,9 @@
 use super::err;
 use super::interpreter;
 use super::opcodes;
-use ethereum_types::{Address, H256, U256};
+use numext_fixed_hash::H160 as Address;
+use numext_fixed_hash::H256;
+use numext_fixed_uint::U256;
 
 pub trait DataProvider {
     fn get_balance(&self, address: &Address) -> U256;

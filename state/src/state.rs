@@ -5,10 +5,11 @@ use super::hashlib;
 use super::object_entry::{ObjectStatus, StateObjectEntry};
 use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
-use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
 use log::debug;
+use numext_fixed_hash::{H160 as Address, H256};
+use numext_fixed_uint::U256;
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -29,7 +30,7 @@ impl<B: DB> State<B> {
 
         Ok(State {
             db,
-            root: From::from(&root[..]),
+            root: From::from(root),
             cache: RefCell::new(HashMap::new()),
             checkpoints: RefCell::new(Vec::new()),
         })
@@ -102,7 +103,7 @@ impl<B: DB> State<B> {
         match trie.get(hashlib::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
-                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                let accdb = Arc::new(AccountDB::new(address.to_owned(), self.db.clone()));
                 state_object.read_code(accdb)?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(Some(state_object))
@@ -133,7 +134,7 @@ impl<B: DB> State<B> {
     pub fn get_storage_proof(&self, address: &Address, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
         match self.get_state_object(address)? {
             Some(state_object) => {
-                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                let accdb = Arc::new(AccountDB::new(address.to_owned(), self.db.clone()));
                 state_object.get_storage_proof(accdb, key)
             }
             None => Ok(vec![]),
@@ -162,8 +163,8 @@ impl<B: DB> State<B> {
             address, key, value
         );
         let state_object = self.get_state_object_or_default(address)?;
-        let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
-        if state_object.get_storage(accdb, &key)? == Some(value) {
+        let accdb = Arc::new(AccountDB::new(address.to_owned(), self.db.clone()));
+        if state_object.get_storage(accdb, &key)? == Some(value.clone()) {
             return Ok(());
         }
 
@@ -190,13 +191,13 @@ impl<B: DB> State<B> {
     }
 
     /// Add balance by incr for an account.
-    pub fn add_balance(&mut self, address: &Address, incr: U256) -> Result<(), Error> {
+    pub fn add_balance(&mut self, address: &Address, incr: &U256) -> Result<(), Error> {
         debug!("state.add_balance a={:?} incr={:?}", address, incr);
         if incr.is_zero() {
             return Ok(());
         }
         let mut state_object = self.get_state_object_or_default(address)?;
-        if state_object.balance.overflowing_add(incr).1 {
+        if state_object.balance.overflowing_add(&incr).1 {
             return Err(Error::BalanceError);
         }
         state_object.add_balance(incr);
@@ -205,7 +206,7 @@ impl<B: DB> State<B> {
     }
 
     /// Sub balance by decr for an account.
-    pub fn sub_balance(&mut self, a: &Address, decr: U256) -> Result<(), Error> {
+    pub fn sub_balance(&mut self, a: &Address, decr: &U256) -> Result<(), Error> {
         debug!("state.sub_balance a={:?} decr={:?}", a, decr);
         if decr.is_zero() {
             return Ok(());
@@ -220,7 +221,7 @@ impl<B: DB> State<B> {
     }
 
     /// Transfer balance from `from` to `to` by `by`.
-    pub fn transfer_balance(&mut self, from: &Address, to: &Address, by: U256) -> Result<(), Error> {
+    pub fn transfer_balance(&mut self, from: &Address, to: &Address, by: &U256) -> Result<(), Error> {
         self.sub_balance(from, by)?;
         self.add_balance(to, by)?;
         Ok(())
@@ -241,11 +242,11 @@ impl<B: DB> State<B> {
         let old_entry = self
             .cache
             .borrow_mut()
-            .insert(*address, state_object_entry.clone_dirty());
+            .insert(address.to_owned(), state_object_entry.clone_dirty());
 
         if is_dirty {
             if let Some(checkpoint) = self.checkpoints.borrow_mut().last_mut() {
-                checkpoint.entry(*address).or_insert(old_entry);
+                checkpoint.entry(address.to_owned()).or_insert(old_entry);
             }
         }
     }
@@ -257,7 +258,7 @@ impl<B: DB> State<B> {
         // Firstly, update account storage tree
         for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
             if let Some(ref mut state_object) = entry.state_object {
-                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                let accdb = Arc::new(AccountDB::new(address.to_owned(), self.db.clone()));
                 state_object.commit_storage(Arc::clone(&accdb))?;
                 state_object.commit_code(Arc::clone(&accdb))?;
             }
@@ -279,7 +280,7 @@ impl<B: DB> State<B> {
                 }
             }
         }
-        self.root = From::from(&trie.root()?[..]);
+        self.root = From::from(&trie.root()?);
         self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
@@ -295,7 +296,7 @@ impl<B: DB> State<B> {
     fn add_checkpoint(&self, address: &Address) {
         if let Some(ref mut checkpoint) = self.checkpoints.borrow_mut().last_mut() {
             checkpoint
-                .entry(*address)
+                .entry(address.to_owned())
                 .or_insert_with(|| self.cache.borrow().get(address).map(StateObjectEntry::clone_dirty));
         }
     }
@@ -372,7 +373,7 @@ impl<B: DB> StateObjectInfo for State<B> {
     fn get_storage(&mut self, a: &Address, key: &H256) -> Result<H256, Error> {
         match self.get_state_object(a)? {
             Some(state_object) => {
-                let accdb = Arc::new(AccountDB::new(*a, self.db.clone()));
+                let accdb = Arc::new(AccountDB::new(a.to_owned(), self.db.clone()));
                 match state_object.get_storage(accdb, key)? {
                     Some(v) => Ok(v),
                     None => Ok(H256::zero()),

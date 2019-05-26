@@ -1,6 +1,9 @@
-use ethereum_types::Address;
+use numext_fixed_hash::H160 as Address;
+use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_derive::Deserialize;
 use serde_json::Error;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::io::Read;
 
@@ -10,7 +13,7 @@ pub struct CallCreates {}
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Env {
     #[serde(rename = "currentCoinbase")]
-    pub current_coinbase: Address,
+    pub current_coinbase: Data20,
 
     #[serde(rename = "currentDifficulty")]
     pub current_difficulty: String,
@@ -28,10 +31,10 @@ pub struct Env {
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Exec {
     #[serde(rename = "address")]
-    pub address: Address,
+    pub address: Data20,
 
     #[serde(rename = "caller")]
-    pub caller: Address,
+    pub caller: Data20,
 
     #[serde(rename = "code")]
     pub code: String,
@@ -46,7 +49,7 @@ pub struct Exec {
     pub gas_price: String,
 
     #[serde(rename = "origin")]
-    pub origin: Address,
+    pub origin: Data20,
 
     #[serde(rename = "value")]
     pub value: String,
@@ -61,11 +64,11 @@ pub struct Account {
 }
 
 #[derive(Debug, PartialEq, Deserialize, Clone)]
-pub struct State(pub BTreeMap<Address, Account>);
+pub struct State(pub BTreeMap<Data20, Account>);
 
 impl IntoIterator for State {
-    type Item = <BTreeMap<Address, Account> as IntoIterator>::Item;
-    type IntoIter = <BTreeMap<Address, Account> as IntoIterator>::IntoIter;
+    type Item = <BTreeMap<Data20, Account> as IntoIterator>::Item;
+    type IntoIter = <BTreeMap<Data20, Account> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -97,6 +100,106 @@ pub struct Vm {
 
     #[serde(rename = "pre")]
     pub pre: Option<State>,
+}
+
+/// Fixed length bytes (wrapper structure around H160).
+#[derive(Debug, PartialEq, Eq, Default, Hash, Clone)]
+pub struct Data20(Address);
+struct Data20Visitor;
+
+impl Data20 {
+    pub fn new(data: Address) -> Self {
+        Self(data)
+    }
+}
+
+impl Serialize for Data20 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&hex::encode(self.0.as_bytes()))
+    }
+}
+
+impl<'de> Deserialize<'de> for Data20 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(Data20Visitor)
+    }
+}
+
+impl<'de> Visitor<'de> for Data20Visitor {
+    type Value = Data20;
+
+    fn expecting(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        formatter.write_str(stringify!(Data20))
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        if value.len() == 2 + 20usize * 2 && (&value[0..2] == "0x" || &value[0..2] == "0X") {
+            let data = Address::from_hex_str(&value[2..]).map_err(|_| {
+                if value.len() > 12 {
+                    E::custom(format!(
+                        "invalid hexadecimal string: [{}..(omit {})..{}]",
+                        &value[..6],
+                        value.len() - 12,
+                        &value[value.len() - 6..value.len()]
+                    ))
+                } else {
+                    E::custom(format!("invalid hexadecimal string: [{}]", value))
+                }
+            })?;
+            Ok(Data20::new(data))
+        } else {
+            if value.len() > 12 {
+                Err(E::custom(format!(
+                    "invalid format: [{}..(omit {})..{}]",
+                    &value[..6],
+                    value.len() - 12,
+                    &value[value.len() - 6..value.len()]
+                )))
+            } else {
+                Err(E::custom(format!("invalid format: [{}]", value)))
+            }
+        }
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        self.visit_str(value.as_ref())
+    }
+}
+
+impl From<Address> for Data20 {
+    fn from(data: Address) -> Data20 {
+        Data20::new(data)
+    }
+}
+
+impl Into<Address> for Data20 {
+    fn into(self) -> Address {
+        self.0
+    }
+}
+
+impl Ord for Data20 {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl PartialOrd for Data20 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(&Data20(other.0.clone())))
+    }
 }
 
 #[derive(Debug, PartialEq, Deserialize)]

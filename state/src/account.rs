@@ -2,7 +2,8 @@ use super::err::Error;
 use super::hashlib;
 use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
-use ethereum_types::{H256, U256};
+use numext_fixed_hash::H256;
+use numext_fixed_uint::U256;
 
 use hashbrown::HashMap;
 use std::sync::Arc;
@@ -22,21 +23,41 @@ pub struct Account {
 impl rlp::Encodable for Account {
     fn rlp_append(&self, s: &mut rlp::RlpStream) {
         s.begin_list(4)
-            .append(&self.nonce)
-            .append(&self.balance)
-            .append(&self.storage_root)
-            .append(&self.code_hash);
+            .append(&self.nonce.to_be_bytes().to_vec())
+            .append(&self.balance.to_be_bytes().to_vec())
+            .append(&self.storage_root.as_bytes())
+            .append(&self.code_hash.as_bytes());
     }
 }
 
 /// Free to use rlp::decode().
 impl rlp::Decodable for Account {
     fn decode(data: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
+        let nonce = data.at(0).map(|rlp| {
+            rlp.decoder()
+                .decode_value(|v| U256::from_big_endian(v).or(Err(rlp::DecoderError::RlpExpectedToBeData)))
+        })??;
+
+        let balance = data.at(1).map(|rlp| {
+            rlp.decoder()
+                .decode_value(|v| U256::from_big_endian(v).or(Err(rlp::DecoderError::RlpExpectedToBeData)))
+        })??;
+
+        let storage_root = data.at(2).map(|rlp| {
+            rlp.decoder()
+                .decode_value(|v| H256::from_slice(&v).or(Err(rlp::DecoderError::RlpExpectedToBeData)))
+        })??;
+
+        let code_hash = data.at(3).map(|rlp| {
+            rlp.decoder()
+                .decode_value(|v| H256::from_slice(&v).or(Err(rlp::DecoderError::RlpExpectedToBeData)))
+        })??;
+
         Ok(Account {
-            nonce: data.val_at(0)?,
-            balance: data.val_at(1)?,
-            storage_root: data.val_at(2)?,
-            code_hash: data.val_at(3)?,
+            nonce,
+            balance,
+            storage_root,
+            code_hash,
         })
     }
 }
@@ -101,10 +122,10 @@ impl StateObject {
     /// Get the account from state object.
     pub fn account(&self) -> Account {
         Account {
-            balance: self.balance,
-            nonce: self.nonce,
-            storage_root: self.storage_root,
-            code_hash: self.code_hash,
+            balance: self.balance.clone(),
+            nonce: self.nonce.clone(),
+            storage_root: self.storage_root.clone(),
+            code_hash: self.code_hash.clone(),
         }
     }
 
@@ -122,7 +143,7 @@ impl StateObject {
     /// Init the code by given data.
     pub fn init_code(&mut self, code: Vec<u8>) {
         self.code = code;
-        self.code_hash = From::from(&hashlib::summary(&self.code)[..]);
+        self.code_hash = H256::from_slice(&hashlib::summary(&self.code)[..]).unwrap_or_default();
         self.code_size = self.code.len();
         self.code_state = CodeState::Dirty;
     }
@@ -133,7 +154,7 @@ impl StateObject {
             return Ok(());
         }
         let c = db
-            .get(&self.code_hash)
+            .get(&self.code_hash.as_bytes())
             .or_else(|e| Err(Error::DB(format!("{}", e))))?
             .unwrap_or_else(|| vec![]);
         self.code = c;
@@ -149,7 +170,7 @@ impl StateObject {
 
     /// Add balance.
     /// Note: overflowing is not allowed.
-    pub fn add_balance(&mut self, x: U256) {
+    pub fn add_balance(&mut self, x: &U256) {
         let (a, b) = self.balance.overflowing_add(x);
         // overflow is not allowed at state_object.
         assert_eq!(b, false);
@@ -158,7 +179,7 @@ impl StateObject {
 
     /// Sub balance.
     /// Note: overflowing is not allowed.
-    pub fn sub_balance(&mut self, x: U256) {
+    pub fn sub_balance(&mut self, x: &U256) {
         let (a, b) = self.balance.overflowing_sub(x);
         assert_eq!(b, false);
         self.balance = a;
@@ -176,8 +197,8 @@ impl StateObject {
         }
         let trie = PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)
             .or_else(|e| Err(Error::DB(format!("{}", e))))?;
-        if let Some(b) = trie.get(&hashlib::encodek(key))? {
-            let u256_k: U256 = From::from(&hashlib::decodev(&b)?[..]);
+        if let Some(b) = trie.get(&hashlib::encodek(key.as_bytes()))? {
+            let u256_k: U256 = U256::from_big_endian(&hashlib::decodev(&b)?[..]).unwrap_or_default();
             let h256_k: H256 = u256_k.into();
             return Ok(Some(h256_k));
         }
@@ -186,7 +207,7 @@ impl StateObject {
 
     /// Get value by key from storage cache.
     pub fn get_storage_at_changes(&self, key: &H256) -> Option<H256> {
-        self.storage_changes.get(key).and_then(|e| Some(*e))
+        self.storage_changes.get(key).and_then(|e| Some((*e).clone()))
     }
 
     /// Get value by key.
@@ -217,9 +238,12 @@ impl StateObject {
         };
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
-                trie.remove(&hashlib::encodek(&k))?;
+                trie.remove(&hashlib::encodek(&k.as_bytes()))?;
             } else {
-                trie.insert(&hashlib::encodek(&k), &hashlib::encodev(&U256::from(v)))?;
+                trie.insert(
+                    &hashlib::encodek(&k.as_bytes()),
+                    &hashlib::encodev(&U256::from(v).to_be_bytes().to_vec()),
+                )?;
             }
         }
         self.storage_root = trie.root()?.into();
@@ -247,11 +271,11 @@ impl StateObject {
     /// Clone without storage changes.
     pub fn clone_clean(&self) -> StateObject {
         StateObject {
-            balance: self.balance,
-            nonce: self.nonce,
-            storage_root: self.storage_root,
+            balance: self.balance.clone(),
+            nonce: self.nonce.clone(),
+            storage_root: self.storage_root.clone(),
             code: self.code.clone(),
-            code_hash: self.code_hash,
+            code_hash: self.code_hash.clone(),
             code_size: self.code_size,
             code_state: self.code_state,
             storage_changes: HashMap::new(),

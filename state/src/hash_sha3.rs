@@ -2,7 +2,7 @@
 //! which use sha3 instead of keccak.
 use super::err;
 pub use cita_trie::codec::RLPNodeCodec;
-use ethereum_types::H256;
+use numext_fixed_hash::H256;
 use sha3::Digest;
 
 pub const NIL_DATA: H256 = H256([

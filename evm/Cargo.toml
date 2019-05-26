@@ -10,7 +10,11 @@ documentation = "https://github.com/cryptape/cita-vm/blob/master/README.md"
 
 [dependencies]
 env_logger = "0.6"
-ethereum-types = "0.4"
 hex = "0.3"
 keccak-hash = "0.1"
 log = "0.4"
+numext-fixed-uint = "0.1.4"
+numext-fixed-hash = "0.1.4"
+numext-fixed-hash-core = "0.1.4"
+numext-fixed-uint-core = "0.1.4"
+

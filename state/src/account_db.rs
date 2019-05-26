@@ -1,6 +1,6 @@
 use super::err::Error;
 use cita_trie::db::DB;
-use ethereum_types::Address;
+use numext_fixed_hash::H160 as Address;
 use std::sync::Arc;
 
 #[derive(Debug)]

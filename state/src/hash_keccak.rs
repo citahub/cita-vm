@@ -1,7 +1,7 @@
 //! Package hash_keccak is a function set for implementing Ethereum's state.
 use super::err;
 use cita_trie::codec::DataType;
-use ethereum_types::H256;
+use numext_fixed_hash::H256;
 use rlp::{Prototype, Rlp, RlpStream};
 use tiny_keccak;
 

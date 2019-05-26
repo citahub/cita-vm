@@ -2,8 +2,10 @@ use super::err;
 use super::ext;
 use super::interpreter;
 use super::opcodes;
-use ethereum_types::{Address, H256, U256};
 use keccak_hash;
+use numext_fixed_hash::H160 as Address;
+use numext_fixed_hash::H256;
+use numext_fixed_uint::U256;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Default)]
@@ -23,15 +25,21 @@ pub struct DataProviderMock {
 
 impl ext::DataProvider for DataProviderMock {
     fn get_balance(&self, address: &Address) -> U256 {
-        self.db.get(address).map_or(U256::zero(), |v| v.balance)
+        self.db.get(address).map_or(U256::zero(), |v| v.balance.clone())
     }
 
     fn add_refund(&mut self, address: &Address, n: u64) {
-        self.refund.entry(*address).and_modify(|v| *v += n).or_insert(n);
+        self.refund
+            .entry(address.to_owned())
+            .and_modify(|v| *v += n)
+            .or_insert(n);
     }
 
     fn sub_refund(&mut self, address: &Address, n: u64) {
-        self.refund.entry(*address).and_modify(|v| *v -= n).or_insert(n);
+        self.refund
+            .entry(address.to_owned())
+            .and_modify(|v| *v -= n)
+            .or_insert(n);
     }
 
     fn get_refund(&self, address: &Address) -> u64 {
@@ -57,28 +65,28 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn get_storage(&self, address: &Address, key: &H256) -> H256 {
-        self.db
-            .get(address)
-            .map_or(H256::zero(), |v| v.storage.get(key).map_or(H256::zero(), |&v| v))
+        self.db.get(address).map_or(H256::zero(), |v| {
+            v.storage.get(key).map_or(H256::zero(), |v| v.to_owned())
+        })
     }
 
     fn set_storage(&mut self, address: &Address, key: H256, value: H256) {
         self.db
-            .entry(*address)
+            .entry(address.to_owned())
             .or_insert_with(Account::default)
             .storage
             .insert(key, value);
     }
 
     fn get_storage_origin(&self, address: &Address, key: &H256) -> H256 {
-        self.db_origin
-            .get(address)
-            .map_or(H256::zero(), |v| v.storage.get(key).map_or(H256::zero(), |&v| v))
+        self.db_origin.get(address).map_or(H256::zero(), |v| {
+            v.storage.get(key).map_or(H256::zero(), |v| v.to_owned())
+        })
     }
 
     fn set_storage_origin(&mut self, address: &Address, key: H256, value: H256) {
         self.db_origin
-            .entry(*address)
+            .entry(address.to_owned())
             .or_insert_with(Account::default)
             .storage
             .insert(key, value);
@@ -90,7 +98,8 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn sha3(&self, data: &[u8]) -> H256 {
-        keccak_hash::keccak(data)
+        let data: [u8; 32] = From::from(keccak_hash::keccak(data));
+        H256::from_slice(&data).unwrap()
     }
 
     fn is_empty(&self, address: &Address) -> bool {

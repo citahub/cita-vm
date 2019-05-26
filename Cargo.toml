@@ -15,7 +15,6 @@ exclude = [
 byteorder = "1.0"
 cita_trie = "0.4"
 env_logger = "0.6"
-ethereum-types = "0.4"
 hex = "0.3"
 libsecp256k1 = "0.2"
 log = "0.4"
@@ -28,6 +27,10 @@ sha2 = "0.8"
 sha3 = "0.8"
 tiny-keccak = "1.4"
 hashbrown = "0.3"
+numext-fixed-uint = "0.1.4"
+numext-fixed-hash = "0.1.4"
+numext-fixed-hash-core = "0.1.4"
+numext-fixed-uint-core = "0.1.4"
 
 cita-evm = { path="./evm", version="0.1" }
 cita-state = { path="./state", default-features = false, version="0.1" }

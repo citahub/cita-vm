@@ -11,10 +11,13 @@
 //!   8. Checking a pairing equation on curve alt_bn128
 use std::io::Write;
 
+use cita_evm as evm;
 use cita_state as state;
-use ethereum_types::{Address, H256, H512, U256};
 use ripemd160::{Digest, Ripemd160};
 use sha2::Sha256;
+
+use numext_fixed_hash::{H160 as Address, H256, H512};
+use numext_fixed_uint::U256;
 
 use super::err;
 
@@ -29,7 +32,8 @@ pub trait PrecompiledContract: Send + Sync {
 
 /// Function get returns a pre-compiled contract by given address.
 pub fn get(address: Address) -> Box<PrecompiledContract> {
-    match U256::from(H256::from(address)).low_u64() {
+    let v = evm::common::address_to_u256(address);
+    match evm::common::u256_to_u64(v) {
         0x01 => Box::new(EcRecover {}) as Box<PrecompiledContract>,
         0x02 => Box::new(SHA256Hash {}) as Box<PrecompiledContract>,
         0x03 => Box::new(RIPEMD160Hash {}) as Box<PrecompiledContract>,
@@ -44,8 +48,8 @@ pub fn get(address: Address) -> Box<PrecompiledContract> {
 
 /// Check if an address is pre-compiled contract.
 pub fn contains(address: &Address) -> bool {
-    let i = U256::from(H256::from(address));
-    i <= U256::from(8) && !i.is_zero()
+    let i = evm::common::address_to_u256((*address).clone());
+    i <= U256::from(8 as u32) && !i.is_zero()
 }
 
 const G_ECRECOVER: u64 = 3000; // Elliptic curve sender recovery gas price
@@ -64,10 +68,10 @@ const G_BN256_PARING_PER_POINT: u64 = 80000; // Per-point price for an elliptic 
 /// Check if each component of the signature is in range.
 fn is_signature_valid(r: &H256, s: &H256, v: u8) -> bool {
     v <= 1
-        && *r < H256::from("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
-        && *r >= H256::from(1)
-        && *s < H256::from("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
-        && *s >= H256::from(1)
+        && *r < H256::from_hex_str("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141").unwrap()
+        && *r >= H256::from(U256::from(1 as u32))
+        && *s < H256::from_hex_str("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141").unwrap()
+        && *s >= H256::from(U256::from(1 as u32))
 }
 
 /// Recover public from signed messages.
@@ -77,7 +81,7 @@ fn recover(input: &[u8], hash: &[u8], bit: u8) -> Result<H512, secp256k1::Error>
     let recovery_id = secp256k1::RecoveryId::parse(bit)?;
     let pub_key = secp256k1::recover(&message, &signature, &recovery_id)?;
     let pub_key_ser = pub_key.serialize();
-    Ok(H512::from(&pub_key_ser[1..65]))
+    Ok(H512::from_slice(&pub_key_ser[1..65]).unwrap_or_default())
 }
 
 /// ECRECOVER implemented as a native contract.
@@ -94,13 +98,13 @@ impl PrecompiledContract for EcRecover {
         let mut input = [0; 128];
         input[..len].copy_from_slice(&i[..len]);
 
-        let hash = H256::from(&input[0..32]);
-        let v = H256::from(&input[32..64]);
-        let r = H256::from(&input[64..96]);
-        let s = H256::from(&input[96..128]);
+        let hash = H256::from_slice(&input[0..32]).unwrap();
+        let v = H256::from_slice(&input[32..64]).unwrap();
+        let r = H256::from_slice(&input[64..96]).unwrap();
+        let s = H256::from_slice(&input[96..128]).unwrap();
 
-        let bit = match v[31] {
-            27 | 28 if v.0[..31] == [0; 31] => v[31] - 27,
+        let bit = match v.byte(31).unwrap() {
+            27 | 28 if v.0[..31] == [0; 31] => v.byte(31).unwrap() - 27,
             _ => {
                 return Ok(vec![]);
             }
@@ -109,7 +113,7 @@ impl PrecompiledContract for EcRecover {
             return Ok(vec![]);
         }
         let mut output: Vec<u8> = Vec::new();
-        if let Ok(public) = recover(&input, &hash, bit) {
+        if let Ok(public) = recover(&input, &hash.as_bytes(), bit) {
             let data = state::hashlib::summary(&public.0);
             output.write_all(&[0; 12])?;
             output.write_all(&data[12..data.len()])?;

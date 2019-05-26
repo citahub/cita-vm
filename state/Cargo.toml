@@ -11,7 +11,6 @@ documentation = "https://github.com/cryptape/cita-vm/blob/master/README.md"
 [dependencies]
 cita_trie = "0.4"
 env_logger = "0.6"
-ethereum-types = "0.4"
 hex = "0.3"
 log = "0.4"
 lru-cache = "0.1"
@@ -19,6 +18,8 @@ rlp = "0.3"
 sha3 = "0.8"
 tiny-keccak = "1.4"
 hashbrown = "0.3"
+numext-fixed-uint = "0.1.4"
+numext-fixed-hash = "0.1.4"
 
 [features]
 default = ["hashlib-keccak"]

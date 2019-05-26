@@ -3,7 +3,7 @@ pub struct Stack<T> {
     data: Vec<T>,
 }
 
-impl<T: Clone + Copy> Stack<T> {
+impl<T: Clone> Stack<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Stack {
             data: Vec::with_capacity(capacity),
@@ -42,7 +42,7 @@ impl<T: Clone + Copy> Stack<T> {
     }
 
     pub fn back(&self, n: usize) -> T {
-        self.data[self.data.len() - n - 1]
+        self.data[self.data.len() - n - 1].clone()
     }
 
     pub fn peek(&self) -> T {
