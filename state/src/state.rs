@@ -7,7 +7,6 @@ use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
 use log::debug;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use super::account::StateObject;
 use super::account_db::AccountDB;
@@ -285,35 +284,20 @@ impl<B: DB> State<B> {
             if let Some(ref mut state_object) = entry.state_object {
                 let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
                 state_object.commit_storage(Arc::clone(&accdb))?;
-                state_object.commit_code(Arc::clone(&self.db))?;
+                state_object.commit_code(Arc::clone(&accdb))?;
             }
         }
 
         // Secondly, update the world state tree
         let mut trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
-
-        let addresses: Vec<Address> = self
-            .cache
-            .borrow()
-            .iter()
-            .filter(|&(_, ref a)| a.is_dirty())
-            .map(|(a, _)| *a)
-            .collect();
-        let addresses_hash: Vec<Vec<u8>> = addresses.par_iter().map(|a| hashlib::summary(&a[..])).collect();
-        for (i, (_, entry)) in self
-            .cache
-            .borrow_mut()
-            .iter_mut()
-            .filter(|&(_, ref a)| a.is_dirty())
-            .enumerate()
-        {
+        for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
             entry.status = ObjectStatus::Committed;
-            match &entry.state_object {
-                Some(state_object) => {
-                    trie.insert(addresses_hash[i].clone(), rlp::encode(&state_object.account()))?;
+            match entry.state_object {
+                Some(ref mut state_object) => {
+                    trie.insert(hashlib::summary(&address[..]), rlp::encode(&state_object.account()))?;
                 }
                 None => {
-                    trie.remove(&addresses_hash[i][..])?;
+                    trie.remove(hashlib::summary(&address[..]).as_slice())?;
                 }
             }
         }

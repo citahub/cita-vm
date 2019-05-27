@@ -4,7 +4,6 @@ use cita_trie::db::DB;
 use cita_trie::trie::{PatriciaTrie, Trie};
 use ethereum_types::{H256, U256};
 use hashbrown::HashMap;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use super::err::Error;
 use super::hashlib;
@@ -220,22 +219,11 @@ impl StateObject {
         } else {
             PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)?
         };
-        let results: Vec<(bool, Vec<u8>, Vec<u8>)> = self
-            .storage_changes
-            .par_iter()
-            .map(|(k, v)| {
-                if v.is_zero() {
-                    (true, hashlib::encodek(&k), vec![])
-                } else {
-                    (false, hashlib::encodek(&k), hashlib::encodev(&U256::from(v)))
-                }
-            })
-            .collect();
-        for (delete, k, v) in results {
-            if delete {
-                trie.remove(&k)?;
+        for (k, v) in self.storage_changes.drain() {
+            if v.is_zero() {
+                trie.remove(&hashlib::encodek(&k))?;
             } else {
-                trie.insert(k, v)?;
+                trie.insert(hashlib::encodek(&k), hashlib::encodev(&U256::from(v)))?;
             }
         }
         self.storage_root = H256::from(&(trie.root()?)[..]);
