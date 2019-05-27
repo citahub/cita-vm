@@ -27,7 +27,7 @@ pub struct State<B> {
 impl<B: DB> State<B> {
     /// Creates empty state for test.
     pub fn new(db: Arc<B>) -> Result<State<B>, Error> {
-        let mut trie = PatriciaTrie::new(Arc::clone(&db), hashlib::RLPNodeCodec::default());
+        let mut trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::new(Arc::clone(&db));
         let root = trie.root()?;
 
         Ok(State {
@@ -106,7 +106,7 @@ impl<B: DB> State<B> {
                 return Ok(f(None));
             }
         }
-        let trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
         match trie.get(hashlib::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
@@ -125,7 +125,7 @@ impl<B: DB> State<B> {
                 return Ok(Some((*state_object).clone_dirty()));
             }
         }
-        let trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
         match trie.get(hashlib::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
@@ -150,7 +150,7 @@ impl<B: DB> State<B> {
 
     /// Get the merkle proof for a given account.
     pub fn get_account_proof(&self, address: &Address) -> Result<Vec<Vec<u8>>, Error> {
-        let trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
         let proof = trie.get_proof(hashlib::summary(&address[..]).as_slice())?;
         Ok(proof)
     }
@@ -290,7 +290,7 @@ impl<B: DB> State<B> {
         }
 
         // Secondly, update the world state tree
-        let mut trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let mut trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
 
         let addresses: Vec<Address> = self
             .cache
@@ -310,7 +310,7 @@ impl<B: DB> State<B> {
             entry.status = ObjectStatus::Committed;
             match &entry.state_object {
                 Some(state_object) => {
-                    trie.insert(&addresses_hash[i][..], &rlp::encode(&state_object.account()))?;
+                    trie.insert(addresses_hash[i].clone(), rlp::encode(&state_object.account()))?;
                 }
                 None => {
                     trie.remove(&addresses_hash[i][..])?;

@@ -180,8 +180,7 @@ impl StateObject {
         if self.storage_root == hashlib::RLP_NULL {
             return Ok(None);
         }
-        let trie = PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)
-            .or_else(|e| Err(Error::DB(format!("{}", e))))?;
+        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)?;
         if let Some(b) = trie.get(&hashlib::encodek(key))? {
             let u256_k: U256 = From::from(&hashlib::decodev(&b)?[..]);
             let h256_k: H256 = u256_k.into();
@@ -208,7 +207,7 @@ impl StateObject {
 
     /// Get storage proof
     pub fn get_storage_proof<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
-        let trie = PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)
+        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)
             .or_else(|e| Err(Error::DB(format!("StateObject::get_storage_proof: {}", e))))?;
         let proof = trie.get_proof(&key.0)?;
         Ok(proof)
@@ -217,9 +216,9 @@ impl StateObject {
     /// Flush data in storage cache to database.
     pub fn commit_storage<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
         let mut trie = if self.storage_root == hashlib::RLP_NULL {
-            PatriciaTrie::new(db, hashlib::RLPNodeCodec::default())
+            PatriciaTrie::<_, cita_trie::Keccak256Hash>::new(db)
         } else {
-            PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)?
+            PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)?
         };
         let results: Vec<(bool, Vec<u8>, Vec<u8>)> = self
             .storage_changes
@@ -236,10 +235,10 @@ impl StateObject {
             if delete {
                 trie.remove(&k)?;
             } else {
-                trie.insert(&k, &v)?;
+                trie.insert(k, v)?;
             }
         }
-        self.storage_root = trie.root()?.into();
+        self.storage_root = H256::from(&(trie.root()?)[..]);
         Ok(())
     }
 

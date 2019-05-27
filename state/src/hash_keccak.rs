@@ -1,5 +1,4 @@
 //! Package hash_keccak is a function set for implementing Ethereum's state.
-use cita_trie::codec::DataType;
 use ethereum_types::H256;
 use rlp::{Prototype, Rlp, RlpStream};
 use tiny_keccak;
@@ -19,74 +18,74 @@ pub const RLP_NULL: H256 = H256([
 #[derive(Default, Debug, Clone)]
 pub struct RLPNodeCodec {}
 
-impl cita_trie::codec::NodeCodec for RLPNodeCodec {
-    type Error = cita_trie::errors::RLPCodecError;
+// impl cita_trie::codec::NodeCodec for RLPNodeCodec {
+//     type Error = cita_trie::errors::RLPCodecError;
 
-    const HASH_LENGTH: usize = 32;
+//     const HASH_LENGTH: usize = 32;
 
-    type Hash = [u8; 32];
+//     type Hash = [u8; 32];
 
-    fn decode<F, T>(&self, data: &[u8], f: F) -> Result<T, Self::Error>
-    where
-        F: Fn(DataType) -> Result<T, Self::Error>,
-    {
-        let r = Rlp::new(data);
-        match r.prototype()? {
-            Prototype::Data(0) => Ok(f(DataType::Empty)?),
-            Prototype::List(2) => {
-                let key = r.at(0)?.data()?;
-                let value = r.at(1)?.data()?;
+//     fn decode<F, T>(&self, data: &[u8], f: F) -> Result<T, Self::Error>
+//     where
+//         F: Fn(DataType) -> Result<T, Self::Error>,
+//     {
+//         let r = Rlp::new(data);
+//         match r.prototype()? {
+//             Prototype::Data(0) => Ok(f(DataType::Empty)?),
+//             Prototype::List(2) => {
+//                 let key = r.at(0)?.data()?;
+//                 let value = r.at(1)?.data()?;
 
-                Ok(f(DataType::Pair(&key, &value))?)
-            }
-            Prototype::List(17) => {
-                let mut values = vec![];
-                for i in 0..17 {
-                    values.push(r.at(i)?.as_raw().to_vec());
-                }
-                Ok(f(DataType::Values(&values))?)
-            }
-            _ => Ok(f(DataType::Hash(r.data()?))?),
-        }
-    }
+//                 Ok(f(DataType::Pair(&key, &value))?)
+//             }
+//             Prototype::List(17) => {
+//                 let mut values = vec![];
+//                 for i in 0..17 {
+//                     values.push(r.at(i)?.as_raw().to_vec());
+//                 }
+//                 Ok(f(DataType::Values(&values))?)
+//             }
+//             _ => Ok(f(DataType::Hash(r.data()?))?),
+//         }
+//     }
 
-    fn encode_empty(&self) -> Vec<u8> {
-        let mut stream = RlpStream::new();
-        stream.append_empty_data();
-        stream.out()
-    }
+//     fn encode_empty(&self) -> Vec<u8> {
+//         let mut stream = RlpStream::new();
+//         stream.append_empty_data();
+//         stream.out()
+//     }
 
-    fn encode_pair(&self, key: &[u8], value: &[u8]) -> Vec<u8> {
-        let mut stream = RlpStream::new_list(2);
-        stream.append_raw(key, 1);
-        stream.append_raw(value, 1);
-        stream.out()
-    }
+//     fn encode_pair(&self, key: &[u8], value: &[u8]) -> Vec<u8> {
+//         let mut stream = RlpStream::new_list(2);
+//         stream.append_raw(key, 1);
+//         stream.append_raw(value, 1);
+//         stream.out()
+//     }
 
-    fn encode_values(&self, values: &[Vec<u8>]) -> Vec<u8> {
-        let mut stream = RlpStream::new_list(values.len());
-        for data in values {
-            stream.append_raw(data, 1);
-        }
-        stream.out()
-    }
+//     fn encode_values(&self, values: &[Vec<u8>]) -> Vec<u8> {
+//         let mut stream = RlpStream::new_list(values.len());
+//         for data in values {
+//             stream.append_raw(data, 1);
+//         }
+//         stream.out()
+//     }
 
-    fn encode_raw(&self, raw: &[u8]) -> Vec<u8> {
-        let mut stream = RlpStream::default();
-        stream.append(&raw);
-        stream.out()
-    }
+//     fn encode_raw(&self, raw: &[u8]) -> Vec<u8> {
+//         let mut stream = RlpStream::default();
+//         stream.append(&raw);
+//         stream.out()
+//     }
 
-    fn decode_hash(&self, data: &[u8], is_hash: bool) -> Self::Hash {
-        let mut out = [0u8; Self::HASH_LENGTH];
-        if is_hash {
-            out.copy_from_slice(data);
-        } else {
-            out.copy_from_slice(&tiny_keccak::keccak256(data)[..]);
-        }
-        out
-    }
-}
+//     fn decode_hash(&self, data: &[u8], is_hash: bool) -> Self::Hash {
+//         let mut out = [0u8; Self::HASH_LENGTH];
+//         if is_hash {
+//             out.copy_from_slice(data);
+//         } else {
+//             out.copy_from_slice(&tiny_keccak::keccak256(data)[..]);
+//         }
+//         out
+//     }
+// }
 
 pub fn summary(data: &[u8]) -> Vec<u8> {
     tiny_keccak::keccak256(data).to_vec()

@@ -13,7 +13,7 @@ exclude = [
 
 [dependencies]
 byteorder = "1.0"
-cita_trie = "0.4"
+cita_trie = { path = "/src/cita-trie" }
 env_logger = "0.6"
 ethereum-types = "0.4"
 hex = "0.3"
