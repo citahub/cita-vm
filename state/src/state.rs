@@ -284,7 +284,7 @@ impl<B: DB> State<B> {
             if let Some(ref mut state_object) = entry.state_object {
                 let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
                 state_object.commit_storage(Arc::clone(&accdb))?;
-                state_object.commit_code(Arc::clone(&accdb))?;
+                state_object.commit_code(self.db.clone())?;
             }
         }
 
