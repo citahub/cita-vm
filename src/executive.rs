@@ -1,12 +1,12 @@
-use hashbrown::{HashMap, HashSet};
 use std::cell::RefCell;
 use std::sync::Arc;
 
 use cita_evm as evm;
 use cita_state as state;
-use cita_trie::db::DB;
+use cita_trie::DB;
 use ethereum_types::{Address, H256, U256};
 use evm::InterpreterParams;
+use hashbrown::{HashMap, HashSet};
 use log::debug;
 use rlp::RlpStream;
 use state::{State, StateObjectInfo};

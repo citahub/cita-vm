@@ -1,4 +1,4 @@
-use cita_trie::db::DB;
+use cita_trie::DB;
 use ethereum_types::Address;
 use std::sync::Arc;
 
@@ -55,7 +55,7 @@ impl<B: DB> DB for AccountDB<B> {
 #[cfg(test)]
 mod test_account_db {
     use super::*;
-    use cita_trie::db::MemoryDB;
+    use cita_trie::MemoryDB;
 
     #[test]
     fn test_accdb_get() {

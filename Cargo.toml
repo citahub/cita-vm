@@ -1,6 +1,6 @@
 [package]
 name = "cita-vm"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Cryptape Technologies <contact@cryptape.com>"]
 edition = "2018"
 description = "CITA VM"
@@ -13,7 +13,7 @@ exclude = [
 
 [dependencies]
 byteorder = "1.0"
-cita_trie = { path = "/src/cita-trie" }
+cita_trie = "1.0"
 env_logger = "0.6"
 ethereum-types = "0.4"
 hex = "0.3"

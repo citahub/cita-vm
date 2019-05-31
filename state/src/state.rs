@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use cita_trie::db::DB;
-use cita_trie::trie::{PatriciaTrie, Trie};
+use cita_trie::DB;
+use cita_trie::{PatriciaTrie, Trie};
 use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
@@ -420,7 +420,7 @@ impl<B: DB> StateObjectInfo for State<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cita_trie::db::MemoryDB;
+    use cita_trie::MemoryDB;
     use std::sync::Arc;
 
     fn get_temp_state() -> State<MemoryDB> {

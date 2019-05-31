@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use cita_trie::db::DB;
-use cita_trie::trie::{PatriciaTrie, Trie};
+use cita_trie::{PatriciaTrie, Trie, DB};
 use ethereum_types::{H256, U256};
 use hashbrown::HashMap;
 
@@ -311,7 +310,7 @@ mod tests {
     #[test]
     fn state_object_code() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
+        let db = Arc::new(cita_trie::MemoryDB::new(false));
         a.init_code(vec![0x55, 0x44, 0xffu8]);
         assert_eq!(a.code_state, CodeState::Dirty);
         assert_eq!(a.code_size, 3);
@@ -342,7 +341,7 @@ mod tests {
     #[test]
     fn state_object_storage_1() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
+        let db = Arc::new(cita_trie::MemoryDB::new(false));
         a.set_storage(0.into(), 0x1234.into());
         a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
@@ -354,7 +353,7 @@ mod tests {
     #[test]
     fn state_object_storage_2() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
+        let db = Arc::new(cita_trie::MemoryDB::new(false));
         a.set_storage(0.into(), 0x1234.into());
         a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
@@ -378,7 +377,7 @@ mod tests {
     #[test]
     fn state_object_storage_3() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
+        let db = Arc::new(cita_trie::MemoryDB::new(false));
         let a_rlp = {
             a.set_storage(0x00u64.into(), 0x1234u64.into());
             a.commit_storage(Arc::clone(&db)).unwrap();
@@ -401,7 +400,7 @@ mod tests {
     #[test]
     fn state_object_note_code() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
+        let db = Arc::new(cita_trie::MemoryDB::new(false));
         let a_rlp = {
             a.init_code(vec![0x55, 0x44, 0xffu8]);
             a.commit_code(Arc::clone(&db)).unwrap();

@@ -20,8 +20,8 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl From<cita_trie::errors::TrieError> for Error {
-    fn from(error: cita_trie::errors::TrieError) -> Self {
+impl From<cita_trie::TrieError> for Error {
+    fn from(error: cita_trie::TrieError) -> Self {
         Error::Trie(format!("{}", error))
     }
 }
