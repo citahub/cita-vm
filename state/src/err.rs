@@ -20,8 +20,8 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl<C: cita_trie::codec::NodeCodec, B: cita_trie::db::DB> From<cita_trie::errors::TrieError<C, B>> for Error {
-    fn from(error: cita_trie::errors::TrieError<C, B>) -> Self {
+impl From<cita_trie::TrieError> for Error {
+    fn from(error: cita_trie::TrieError) -> Self {
         Error::Trie(format!("{}", error))
     }
 }

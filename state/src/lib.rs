@@ -13,6 +13,6 @@ mod state;
 pub use crate::state::{State, StateObjectInfo};
 pub use account::{Account, CodeState, StateObject};
 pub use account_db::AccountDB;
-pub use cita_trie::db::MemoryDB;
+pub use cita_trie::MemoryDB;
 pub use err::Error;
 pub use object_entry::{ObjectStatus, StateObjectEntry};

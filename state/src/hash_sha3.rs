@@ -1,9 +1,9 @@
 //! Package hash_sha3 is a function set for implementing Ethereum's state
 //! which use sha3 instead of keccak.
-use super::err;
-pub use cita_trie::codec::RLPNodeCodec;
 use ethereum_types::H256;
 use sha3::Digest;
+
+use super::err;
 
 pub const NIL_DATA: H256 = H256([
     0xa7, 0xff, 0xc6, 0xf8, 0xbf, 0x1e, 0xd7, 0x66, 0x51, 0xc1, 0x47, 0x56, 0xa0, 0x61, 0xd6, 0x62, 0xf5, 0x80, 0xff,

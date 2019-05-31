@@ -1,11 +1,11 @@
+use std::sync::Arc;
+
+use cita_trie::{PatriciaTrie, Trie, DB};
+use ethereum_types::{H256, U256};
+use hashbrown::HashMap;
+
 use super::err::Error;
 use super::hashlib;
-use cita_trie::db::DB;
-use cita_trie::trie::{PatriciaTrie, Trie};
-use ethereum_types::{H256, U256};
-
-use hashbrown::HashMap;
-use std::sync::Arc;
 
 /// Single and pure account in the database. Usually, store it according to
 /// the following structure:
@@ -74,6 +74,8 @@ impl From<Account> for StateObject {
     }
 }
 
+const CODE_PREFIX: &str = "C:";
+
 impl StateObject {
     /// Create a new account.
     /// Note: If contract account generated, make sure you use `init_code` on
@@ -132,8 +134,10 @@ impl StateObject {
         if self.code_hash == hashlib::NIL_DATA {
             return Ok(());
         }
+        let mut k = CODE_PREFIX.as_bytes().to_vec();
+        k.extend(self.code_hash.to_vec());
         let c = db
-            .get(&self.code_hash)
+            .get(&k)
             .or_else(|e| Err(Error::DB(format!("{}", e))))?
             .unwrap_or_else(|| vec![]);
         self.code = c;
@@ -174,8 +178,7 @@ impl StateObject {
         if self.storage_root == hashlib::RLP_NULL {
             return Ok(None);
         }
-        let trie = PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)
-            .or_else(|e| Err(Error::DB(format!("{}", e))))?;
+        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)?;
         if let Some(b) = trie.get(&hashlib::encodek(key))? {
             let u256_k: U256 = From::from(&hashlib::decodev(&b)?[..]);
             let h256_k: H256 = u256_k.into();
@@ -202,7 +205,7 @@ impl StateObject {
 
     /// Get storage proof
     pub fn get_storage_proof<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
-        let trie = PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)
+        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)
             .or_else(|e| Err(Error::DB(format!("StateObject::get_storage_proof: {}", e))))?;
         let proof = trie.get_proof(&key.0)?;
         Ok(proof)
@@ -211,18 +214,18 @@ impl StateObject {
     /// Flush data in storage cache to database.
     pub fn commit_storage<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
         let mut trie = if self.storage_root == hashlib::RLP_NULL {
-            PatriciaTrie::new(db, hashlib::RLPNodeCodec::default())
+            PatriciaTrie::<_, cita_trie::Keccak256Hash>::new(db)
         } else {
-            PatriciaTrie::from(db, hashlib::RLPNodeCodec::default(), &self.storage_root.0)?
+            PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)?
         };
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
                 trie.remove(&hashlib::encodek(&k))?;
             } else {
-                trie.insert(&hashlib::encodek(&k), &hashlib::encodev(&U256::from(v)))?;
+                trie.insert(hashlib::encodek(&k), hashlib::encodev(&U256::from(v)))?;
             }
         }
-        self.storage_root = trie.root()?.into();
+        self.storage_root = H256::from(&(trie.root()?)[..]);
         Ok(())
     }
 
@@ -234,7 +237,9 @@ impl StateObject {
                 self.code_state = CodeState::Clean;
             }
             (true, false) => {
-                db.insert(self.code_hash.to_vec(), self.code.clone())
+                let mut k = CODE_PREFIX.as_bytes().to_vec();
+                k.extend(self.code_hash.to_vec());
+                db.insert(k, self.code.clone())
                     .or_else(|e| Err(Error::DB(format!("{}", e))))?;
                 self.code_size = self.code.len();
                 self.code_state = CodeState::Clean;
@@ -305,7 +310,7 @@ mod tests {
     #[test]
     fn state_object_code() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
+        let db = Arc::new(cita_trie::MemoryDB::new(false));
         a.init_code(vec![0x55, 0x44, 0xffu8]);
         assert_eq!(a.code_state, CodeState::Dirty);
         assert_eq!(a.code_size, 3);
@@ -315,7 +320,10 @@ mod tests {
             a.code_hash,
             "af231e631776a517ca23125370d542873eca1fb4d613ed9b5d5335a46ae5b7eb".into()
         );
-        assert_eq!(db.get(&a.code_hash).unwrap().unwrap(), vec![0x55, 0x44, 0xffu8]);
+
+        let mut k = CODE_PREFIX.as_bytes().to_vec();
+        k.extend(a.code_hash.to_vec());
+        assert_eq!(db.get(&k).unwrap().unwrap(), vec![0x55, 0x44, 0xffu8]);
         a.init_code(vec![0x55]);
         assert_eq!(a.code_state, CodeState::Dirty);
         assert_eq!(a.code_size, 1);
@@ -324,13 +332,16 @@ mod tests {
             a.code_hash,
             "37bf2238b11b68cdc8382cece82651b59d3c3988873b6e0f33d79694aa45f1be".into()
         );
-        assert_eq!(db.get(&a.code_hash).unwrap().unwrap(), vec![0x55]);
+
+        let mut k = CODE_PREFIX.as_bytes().to_vec();
+        k.extend(a.code_hash.to_vec());
+        assert_eq!(db.get(&k).unwrap().unwrap(), vec![0x55]);
     }
 
     #[test]
     fn state_object_storage_1() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
+        let db = Arc::new(cita_trie::MemoryDB::new(false));
         a.set_storage(0.into(), 0x1234.into());
         a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
@@ -342,7 +353,7 @@ mod tests {
     #[test]
     fn state_object_storage_2() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
+        let db = Arc::new(cita_trie::MemoryDB::new(false));
         a.set_storage(0.into(), 0x1234.into());
         a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
@@ -366,7 +377,7 @@ mod tests {
     #[test]
     fn state_object_storage_3() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
+        let db = Arc::new(cita_trie::MemoryDB::new(false));
         let a_rlp = {
             a.set_storage(0x00u64.into(), 0x1234u64.into());
             a.commit_storage(Arc::clone(&db)).unwrap();
@@ -389,7 +400,7 @@ mod tests {
     #[test]
     fn state_object_note_code() {
         let mut a = StateObject::new(69u8.into(), 0.into());
-        let db = Arc::new(cita_trie::db::MemoryDB::new(false));
+        let db = Arc::new(cita_trie::MemoryDB::new(false));
         let a_rlp = {
             a.init_code(vec![0x55, 0x44, 0xffu8]);
             a.commit_code(Arc::clone(&db)).unwrap();

@@ -1,7 +1,8 @@
-use super::err::Error;
-use cita_trie::db::DB;
+use cita_trie::DB;
 use ethereum_types::Address;
 use std::sync::Arc;
+
+use super::err::Error;
 
 #[derive(Debug)]
 pub struct AccountDB<B: DB> {
@@ -54,7 +55,7 @@ impl<B: DB> DB for AccountDB<B> {
 #[cfg(test)]
 mod test_account_db {
     use super::*;
-    use cita_trie::db::MemoryDB;
+    use cita_trie::MemoryDB;
 
     #[test]
     fn test_accdb_get() {

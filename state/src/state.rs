@@ -1,16 +1,18 @@
+use std::cell::RefCell;
+use std::sync::Arc;
+
+use cita_trie::DB;
+use cita_trie::{PatriciaTrie, Trie};
+use ethereum_types::{Address, H256, U256};
+use hashbrown::hash_map::Entry;
+use hashbrown::{HashMap, HashSet};
+use log::debug;
+
 use super::account::StateObject;
 use super::account_db::AccountDB;
 use super::err::Error;
 use super::hashlib;
 use super::object_entry::{ObjectStatus, StateObjectEntry};
-use cita_trie::db::DB;
-use cita_trie::trie::{PatriciaTrie, Trie};
-use ethereum_types::{Address, H256, U256};
-use hashbrown::hash_map::Entry;
-use hashbrown::{HashMap, HashSet};
-use log::debug;
-use std::cell::RefCell;
-use std::sync::Arc;
 
 /// State is the one who managers all accounts and states in Ethereum's system.
 pub struct State<B> {
@@ -24,7 +26,7 @@ pub struct State<B> {
 impl<B: DB> State<B> {
     /// Creates empty state for test.
     pub fn new(db: Arc<B>) -> Result<State<B>, Error> {
-        let mut trie = PatriciaTrie::new(Arc::clone(&db), hashlib::RLPNodeCodec::default());
+        let mut trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::new(Arc::clone(&db));
         let root = trie.root()?;
 
         Ok(State {
@@ -103,12 +105,11 @@ impl<B: DB> State<B> {
                 return Ok(f(None));
             }
         }
-        let trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
         match trie.get(hashlib::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
-                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
-                state_object.read_code(accdb)?;
+                state_object.read_code(self.db.clone())?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(f(Some(&state_object)))
             }
@@ -123,12 +124,11 @@ impl<B: DB> State<B> {
                 return Ok(Some((*state_object).clone_dirty()));
             }
         }
-        let trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
         match trie.get(hashlib::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
-                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
-                state_object.read_code(accdb)?;
+                state_object.read_code(self.db.clone())?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(Some(state_object))
             }
@@ -149,7 +149,7 @@ impl<B: DB> State<B> {
 
     /// Get the merkle proof for a given account.
     pub fn get_account_proof(&self, address: &Address) -> Result<Vec<Vec<u8>>, Error> {
-        let trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
         let proof = trie.get_proof(hashlib::summary(&address[..]).as_slice())?;
         Ok(proof)
     }
@@ -284,20 +284,17 @@ impl<B: DB> State<B> {
             if let Some(ref mut state_object) = entry.state_object {
                 let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
                 state_object.commit_storage(Arc::clone(&accdb))?;
-                state_object.commit_code(Arc::clone(&accdb))?;
+                state_object.commit_code(self.db.clone())?;
             }
         }
 
         // Secondly, update the world state tree
-        let mut trie = PatriciaTrie::from(Arc::clone(&self.db), hashlib::RLPNodeCodec::default(), &self.root.0)?;
+        let mut trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
         for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
             entry.status = ObjectStatus::Committed;
             match entry.state_object {
                 Some(ref mut state_object) => {
-                    trie.insert(
-                        hashlib::summary(&address[..]).as_slice(),
-                        &rlp::encode(&state_object.account()),
-                    )?;
+                    trie.insert(hashlib::summary(&address[..]), rlp::encode(&state_object.account()))?;
                 }
                 None => {
                     trie.remove(hashlib::summary(&address[..]).as_slice())?;
@@ -348,7 +345,7 @@ impl<B: DB> State<B> {
         if let Some(mut last) = self.checkpoints.borrow_mut().pop() {
             for (k, v) in last.drain() {
                 match v {
-                    Some(v) => match self.cache.get_mut().entry(k) {
+                    Some(v) => match self.cache.borrow_mut().entry(k) {
                         Entry::Occupied(mut e) => {
                             // Merge checkpointed changes back into the main account
                             // storage preserving the cache.
@@ -359,7 +356,7 @@ impl<B: DB> State<B> {
                         }
                     },
                     None => {
-                        if let Entry::Occupied(e) = self.cache.get_mut().entry(k) {
+                        if let Entry::Occupied(e) = self.cache.borrow_mut().entry(k) {
                             if e.get().is_dirty() {
                                 e.remove();
                             }
@@ -423,7 +420,7 @@ impl<B: DB> StateObjectInfo for State<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cita_trie::db::MemoryDB;
+    use cita_trie::MemoryDB;
     use std::sync::Arc;
 
     fn get_temp_state() -> State<MemoryDB> {
