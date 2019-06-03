@@ -6,14 +6,14 @@ use cita_trie::{PatriciaTrie, Trie};
 use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
-use log::debug;
 
 use super::account::StateObject;
 use super::account_db::AccountDB;
 use super::err::Error;
 use super::hashlib;
 use super::object_entry::{ObjectStatus, StateObjectEntry};
-
+use log::debug;
+use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
 /// State is the one who managers all accounts and states in Ethereum's system.
 pub struct State<B> {
     pub db: Arc<B>,
@@ -280,27 +280,47 @@ impl<B: DB> State<B> {
         assert!(self.checkpoints.borrow().is_empty());
 
         // Firstly, update account storage tree
-        for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
-            if let Some(ref mut state_object) = entry.state_object {
-                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
-                state_object.commit_storage(Arc::clone(&accdb))?;
-                state_object.commit_code(self.db.clone())?;
-            }
-        }
+        let db = Arc::clone(&self.db);
+        self.cache
+            .borrow_mut()
+            .par_iter_mut()
+            .map(|(address, entry)| {
+                if !entry.is_dirty() {
+                    return Ok(());
+                }
+
+                if let Some(ref mut state_object) = entry.state_object {
+                    let accdb = Arc::new(AccountDB::new(*address, Arc::clone(&db)));
+                    state_object.commit_storage(Arc::clone(&accdb))?;
+                    state_object.commit_code(Arc::clone(&db))?;
+                }
+                Ok(())
+            })
+            .collect::<Result<(), Error>>()?;
 
         // Secondly, update the world state tree
         let mut trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
-        for (address, entry) in self.cache.borrow_mut().iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
-            entry.status = ObjectStatus::Committed;
-            match entry.state_object {
-                Some(ref mut state_object) => {
-                    trie.insert(hashlib::summary(&address[..]), rlp::encode(&state_object.account()))?;
+        let key_values = self
+            .cache
+            .borrow_mut()
+            .par_iter_mut()
+            .filter(|&(_, ref a)| a.is_dirty())
+            .map(|(address, entry)| {
+                entry.status = ObjectStatus::Committed;
+
+                match entry.state_object {
+                    Some(ref mut state_object) => {
+                        (hashlib::summary(&address[..]), rlp::encode(&state_object.account()))
+                    }
+                    None => (hashlib::summary(&address[..]), vec![]),
                 }
-                None => {
-                    trie.remove(hashlib::summary(&address[..]).as_slice())?;
-                }
-            }
+            })
+            .collect::<Vec<(Vec<u8>, Vec<u8>)>>();
+
+        for (key, value) in key_values.into_iter() {
+            trie.insert(key, value)?;
         }
+
         self.root = From::from(&trie.root()?[..]);
         self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
     }
