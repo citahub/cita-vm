@@ -18,9 +18,8 @@ lru-cache = "0.1"
 rlp = "0.3"
 sha3 = "0.8"
 tiny-keccak = "1.4"
-hashbrown = "0.3"
-# hashbrown = { version = "0.3", features = ["rayon"] }
-# rayon = "1.0"
+hashbrown = { version = "0.3", features = ["rayon"] }
+rayon = "1.0"
 
 [features]
 default = ["hashlib-keccak"]
