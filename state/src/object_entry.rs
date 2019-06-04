@@ -7,7 +7,7 @@ pub enum ObjectStatus {
     Committed,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StateObjectEntry {
     /// State object entry. `None` if account known to be non-existant.
     pub state_object: Option<StateObject>,
