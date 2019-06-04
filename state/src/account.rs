@@ -47,7 +47,7 @@ pub enum CodeState {
     Dirty,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StateObject {
     pub balance: U256,
     pub nonce: U256,
@@ -56,7 +56,7 @@ pub struct StateObject {
     pub code: Vec<u8>,
     pub code_size: usize,
     pub code_state: CodeState,
-    storage_changes: HashMap<H256, H256>,
+    pub storage_changes: HashMap<H256, H256>,
 }
 
 impl From<Account> for StateObject {
