@@ -9,9 +9,25 @@ pub fn clean_0x(s: &str) -> &str {
     }
 }
 
+fn clean_0(s: &str) -> &str {
+    let chars: Vec<char> = s.chars().collect();
+    let mut index = 0;
+    if chars[index] != '0' {
+        return s;
+    }
+    for (i, c) in chars.iter().enumerate() {
+        index = i;
+        if *c != '0' {
+            break;
+        }
+    }
+    &s[index..s.len()]
+}
+
 pub fn string_2_u256(value: String) -> U256 {
     let v = Box::leak(value.into_boxed_str());
     let v = clean_0x(v);
+    let v = clean_0(v);
     U256::from_hex_str(v).unwrap()
 }
 

@@ -62,7 +62,6 @@ pub fn h256_to_address(value: H256) -> Address {
 
 #[inline]
 pub fn u256_to_u64(value: U256) -> u64 {
-    // TODO: use U256 or &U256
     value.0[0]
 }
 
