@@ -143,6 +143,7 @@ impl Test {
 mod tests {
     use super::*;
     use std::fs;
+
     #[test]
     fn test_json_tests_parse() {
         let f = fs::File::open("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json").unwrap();

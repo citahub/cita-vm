@@ -4,7 +4,6 @@ testdata:
 ci:
 	cargo fmt --all -- --check
 	cargo clippy --all --tests --all-targets -- -D warnings
-	cd evm && cargo test && cd ..
 	cargo test
 
 .PHONY: testdata ci

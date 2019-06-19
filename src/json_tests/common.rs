@@ -1,12 +1,6 @@
 use ethereum_types::{Address, Public, H256, U256};
 
-pub fn clean_0x(s: &str) -> &str {
-    if s.starts_with("0x") {
-        &s[2..]
-    } else {
-        s
-    }
-}
+use crate::common::clean_0x;
 
 pub fn string_2_u256(value: String) -> U256 {
     let v = Box::leak(value.into_boxed_str());
