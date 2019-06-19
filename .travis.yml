@@ -17,12 +17,7 @@ jobs:
         - rustup component add clippy
         - RUSTFLAGS='-F warnings' cargo clippy --all --tests --all-targets
     - stage: Test
-      name: UnitTest
-      script:
-        - cd evm && cargo test && cd ..
-        - cd state && cargo test && cd ..
-    - stage: Test
-      name: IntegrationTest
+      name: Test
       script:
         - make testdata
-        - RUST_MIN_STACK=134217728 cargo test
+        - cargo test
