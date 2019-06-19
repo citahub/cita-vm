@@ -122,7 +122,7 @@ fn test_state_work() {
 #[rustfmt::skip]
 #[test]
 fn test_state_pass() {
-    thread::Builder::new().stack_size(134217728).spawn(move || {
+    thread::Builder::new().stack_size(134_217_728).spawn(move || {
         test_json_file("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json");
         test_json_file("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addNonConst.json");
         test_json_file("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/andNonConst.json");
