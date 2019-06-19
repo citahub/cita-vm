@@ -1,19 +1,19 @@
-use std::cell::RefCell;
-use std::sync::Arc;
-
 use cita_trie::DB;
 use cita_trie::{PatriciaTrie, Trie};
 use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
+use log::debug;
+use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
+use std::cell::RefCell;
+use std::sync::Arc;
 
 use super::account::StateObject;
 use super::account_db::AccountDB;
 use super::err::Error;
 use super::hash_keccak;
 use super::object_entry::{ObjectStatus, StateObjectEntry};
-use log::debug;
-use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
+
 /// State is the one who managers all accounts and states in Ethereum's system.
 pub struct State<B> {
     pub db: Arc<B>,

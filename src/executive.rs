@@ -1,18 +1,15 @@
-use std::cell::RefCell;
-use std::sync::Arc;
-
+use super::err;
+use super::precompiled;
+use super::state::{self, State, StateObjectInfo};
 use cita_evm as evm;
-use cita_state as state;
 use cita_trie::DB;
 use ethereum_types::{Address, H256, U256};
 use evm::InterpreterParams;
 use hashbrown::{HashMap, HashSet};
 use log::debug;
 use rlp::RlpStream;
-use state::{State, StateObjectInfo};
-
-use super::err;
-use super::precompiled;
+use std::cell::RefCell;
+use std::sync::Arc;
 
 /// BlockDataProvider provides functions to get block's hash from chain.
 ///
