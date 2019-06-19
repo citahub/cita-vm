@@ -9,14 +9,12 @@
 //!   6. Addition on elliptic curve alt_bn128
 //!   7. Scalar multiplication on elliptic curve alt_bn128
 //!   8. Checking a pairing equation on curve alt_bn128
-use std::io::Write;
-
+use super::err;
+use crate::common;
 use ethereum_types::{Address, H256, H512, U256};
 use ripemd160::{Digest, Ripemd160};
 use sha2::Sha256;
-
-use super::err;
-use super::state;
+use std::io::Write;
 
 /// Implementation of a pre-compiled contract.
 pub trait PrecompiledContract: Send + Sync {
@@ -110,7 +108,7 @@ impl PrecompiledContract for EcRecover {
         }
         let mut output: Vec<u8> = Vec::new();
         if let Ok(public) = recover(&input, &hash, bit) {
-            let data = state::hash_keccak::summary(&public.0);
+            let data = common::hash::summary(&public.0);
             output.write_all(&[0; 12])?;
             output.write_all(&data[12..data.len()])?;
         }

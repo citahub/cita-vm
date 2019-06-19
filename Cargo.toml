@@ -39,5 +39,4 @@ harness = false
 [workspace]
 members = [
     "evm",
-    "ewasm",
 ]

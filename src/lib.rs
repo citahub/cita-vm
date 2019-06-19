@@ -1,3 +1,4 @@
+mod common;
 mod err;
 mod executive;
 pub mod json_tests;
