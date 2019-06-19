@@ -17,7 +17,6 @@ pub enum Error {
     ExccedMaxBlockGasLimit,
     ExccedMaxCallDepth,
     CreateInStaticCall,
-
     Trie(String),
     RLP(rlp::DecoderError),
     DB(String),
@@ -41,7 +40,6 @@ impl fmt::Display for Error {
             Error::ExccedMaxBlockGasLimit => return write!(f, "ExccedMaxBlockGasLimit"),
             Error::ExccedMaxCallDepth => return write!(f, "ExccedMaxCallDepth"),
             Error::CreateInStaticCall => return write!(f, "CreateInStaticCall"),
-
             Error::Trie(e) => return write!(f, "state trie: {}", e),
             Error::RLP(e) => return write!(f, "state rlp: {}", e),
             Error::DB(e) => return write!(f, "state db: {}", e),

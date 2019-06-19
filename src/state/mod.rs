@@ -1,8 +1,9 @@
-mod account;
 mod account_db;
+mod account;
 mod object_entry;
 #[allow(clippy::module_inception)]
 mod state;
+
 pub use account::{Account, CodeState, StateObject};
 pub use account_db::AccountDB;
 pub use cita_trie::MemoryDB;
