@@ -10,9 +10,9 @@ use log::debug;
 use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::common;
-use crate::err::Error;
 use crate::state::account::StateObject;
 use crate::state::account_db::AccountDB;
+use crate::state::err::Error;
 use crate::state::object_entry::{ObjectStatus, StateObjectEntry};
 
 /// State is the one who managers all accounts and states in Ethereum's system.

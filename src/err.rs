@@ -2,12 +2,14 @@ use std::error;
 use std::fmt;
 use std::io;
 
+use crate::state::Error as StateError;
 use cita_evm as evm;
 
 #[derive(Debug)]
 pub enum Error {
     Evm(evm::Error),
     Secp256k1(secp256k1::Error),
+    State(StateError),
     IO(io::Error),
     Str(String),
     NotEnoughBaseGas,
@@ -18,11 +20,6 @@ pub enum Error {
     ExccedMaxBlockGasLimit,
     ExccedMaxCallDepth,
     CreateInStaticCall,
-    Trie(String),
-    RLP(rlp::DecoderError),
-    DB(String),
-    NotFound,
-    BalanceError,
 }
 
 impl error::Error for Error {}
@@ -31,6 +28,7 @@ impl fmt::Display for Error {
         match self {
             Error::Evm(e) => return write!(f, "{}", e),
             Error::Secp256k1(e) => return write!(f, "{:?}", e),
+            Error::State(e) => return write!(f, "{}", e),
             Error::IO(e) => return write!(f, "{:?}", e),
             Error::Str(e) => return write!(f, "{:?}", e),
             Error::NotEnoughBaseGas => return write!(f, "NotEnoughBaseGas"),
@@ -41,11 +39,6 @@ impl fmt::Display for Error {
             Error::ExccedMaxBlockGasLimit => return write!(f, "ExccedMaxBlockGasLimit"),
             Error::ExccedMaxCallDepth => return write!(f, "ExccedMaxCallDepth"),
             Error::CreateInStaticCall => return write!(f, "CreateInStaticCall"),
-            Error::Trie(e) => return write!(f, "state trie: {}", e),
-            Error::RLP(e) => return write!(f, "state rlp: {}", e),
-            Error::DB(e) => return write!(f, "state db: {}", e),
-            Error::NotFound => return write!(f, "state: not found"),
-            Error::BalanceError => return write!(f, "state: balance error"),
         };
     }
 }
@@ -53,6 +46,12 @@ impl fmt::Display for Error {
 impl From<evm::Error> for Error {
     fn from(error: evm::Error) -> Self {
         Error::Evm(error)
+    }
+}
+
+impl From<StateError> for Error {
+    fn from(error: StateError) -> Self {
+        Error::State(error)
     }
 }
 
@@ -65,17 +64,5 @@ impl From<secp256k1::Error> for Error {
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
         Error::IO(error)
-    }
-}
-
-impl From<cita_trie::TrieError> for Error {
-    fn from(error: cita_trie::TrieError) -> Self {
-        Error::Trie(format!("{}", error))
-    }
-}
-
-impl From<rlp::DecoderError> for Error {
-    fn from(error: rlp::DecoderError) -> Self {
-        Error::RLP(error)
     }
 }

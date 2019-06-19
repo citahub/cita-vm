@@ -5,7 +5,7 @@ use ethereum_types::{H256, U256};
 use hashbrown::HashMap;
 
 use crate::common;
-use crate::err::Error;
+use crate::state::err::Error;
 
 /// Single and pure account in the database. Usually, store it according to
 /// the following structure:
