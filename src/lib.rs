@@ -3,7 +3,7 @@ mod err;
 mod executive;
 pub mod json_tests;
 #[allow(dead_code)]
-pub mod precompiled;
+pub mod native;
 pub mod state;
 
 pub use cita_evm as evm;

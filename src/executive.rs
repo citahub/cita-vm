@@ -1,7 +1,6 @@
-use super::err;
-use super::precompiled;
-use super::state::{self, State, StateObjectInfo};
-use crate::common;
+use std::cell::RefCell;
+use std::sync::Arc;
+
 use cita_evm as evm;
 use cita_trie::DB;
 use ethereum_types::{Address, H256, U256};
@@ -9,8 +8,11 @@ use evm::InterpreterParams;
 use hashbrown::{HashMap, HashSet};
 use log::debug;
 use rlp::RlpStream;
-use std::cell::RefCell;
-use std::sync::Arc;
+
+use crate::common;
+use crate::err;
+use crate::native;
+use crate::state::{self, State, StateObjectInfo};
 
 /// BlockDataProvider provides functions to get block's hash from chain.
 ///
@@ -226,8 +228,8 @@ fn call_pure<B: DB + 'static>(
             .transfer_balance(&request.sender, &request.receiver, request.value)?;
     }
     // Execute pre-compiled contracts.
-    if precompiled::contains(&request.contract.code_address) {
-        let c = precompiled::get(request.contract.code_address);
+    if native::contains(&request.contract.code_address) {
+        let c = native::get(request.contract.code_address);
         let gas = c.required_gas(&request.input);
         if request.gas_limit < gas {
             return Err(err::Error::Evm(evm::Error::OutOfGas));

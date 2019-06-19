@@ -1,7 +1,8 @@
+use std::sync::Arc;
+
 use cita_trie::{PatriciaTrie, Trie, DB};
 use ethereum_types::{H256, U256};
 use hashbrown::HashMap;
-use std::sync::Arc;
 
 use crate::common;
 use crate::err::Error;

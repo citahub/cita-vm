@@ -1,8 +1,9 @@
+use std::collections::BTreeMap;
+use std::io::Read;
+
 use ethereum_types::Address;
 use serde_derive::Deserialize;
 use serde_json::Error;
-use std::collections::BTreeMap;
-use std::io::Read;
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Env {
