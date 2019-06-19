@@ -27,16 +27,9 @@ sha3 = "0.8"
 rayon = "1.0"
 tiny-keccak = "1.4"
 
-cita-evm = { path="./evm", version="0.1" }
-
 [dev-dependencies]
 bencher = "0.1"
 
 [[bench]]
 name = "benchmark"
 harness = false
-
-[workspace]
-members = [
-    "evm",
-]

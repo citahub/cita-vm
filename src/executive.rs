@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use cita_evm as evm;
 use cita_trie::DB;
 use ethereum_types::{Address, H256, U256};
 use evm::InterpreterParams;
@@ -11,6 +10,7 @@ use rlp::RlpStream;
 
 use crate::common;
 use crate::err;
+use crate::evm;
 use crate::native;
 use crate::state::{self, State, StateObjectInfo};
 

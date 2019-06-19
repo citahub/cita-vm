@@ -1,4 +1,4 @@
-use super::common;
+use crate::evm::common;
 
 #[derive(Default)]
 pub struct Memory {

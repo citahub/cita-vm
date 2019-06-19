@@ -1,5 +1,6 @@
-use ethereum_types::{Address, H256, U256};
 use std::u64;
+
+use ethereum_types::{Address, H256, U256};
 
 /// The size of word in EVM is 32 bytes.
 #[inline]
@@ -90,20 +91,10 @@ pub fn copy_data(source: &[u8], start: U256, size: U256) -> Vec<u8> {
     rpad(Vec::from(data), size.as_usize())
 }
 
-#[inline]
-pub fn hex_decode(s: &str) -> Result<Vec<u8>, hex::FromHexError> {
-    let s = if s.starts_with("0x") { &s[2..] } else { s };
-    hex::decode(s)
-}
-
-#[inline]
-pub fn hex_encode(s: Vec<u8>) -> String {
-    hex::encode(s)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn test_memory_gas_cost() {
         assert_eq!(mem_gas_cost(32, 3), 3);

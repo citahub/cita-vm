@@ -2,8 +2,8 @@ use std::error;
 use std::fmt;
 use std::io;
 
+use crate::evm;
 use crate::state::Error as StateError;
-use cita_evm as evm;
 
 #[derive(Debug)]
 pub enum Error {

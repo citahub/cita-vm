@@ -1,10 +1,11 @@
-use cita_evm as evm;
-use cita_vm;
-use cita_vm::json_tests::common::*;
-use evm::extmock;
 use std::fs;
 use std::io;
 use std::io::Write;
+
+use cita_vm;
+use cita_vm::evm;
+use cita_vm::evm::extmock;
+use cita_vm::json_tests::common::*;
 
 fn test_json_file(p: &str) {
     let f = fs::File::open(p).unwrap();
