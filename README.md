@@ -6,7 +6,7 @@ Fast EVM implementation for CITA. Tuned for high performance, up to 5x faster th
 
 ```
 [dependencies]
-cita_vm = { git = "https://github.com/cryptape/cita-vm" }
+cita-vm = "0.1.6"
 ```
 
 - [Example](#Example)
