@@ -10,7 +10,7 @@ use hashbrown::{HashMap, HashSet};
 use super::account::StateObject;
 use super::account_db::AccountDB;
 use super::err::Error;
-use super::hashlib;
+use super::hash_keccak;
 use super::object_entry::{ObjectStatus, StateObjectEntry};
 use log::debug;
 use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
@@ -106,7 +106,7 @@ impl<B: DB> State<B> {
             }
         }
         let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
-        match trie.get(hashlib::summary(&address[..]).as_slice())? {
+        match trie.get(hash_keccak::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
@@ -125,7 +125,7 @@ impl<B: DB> State<B> {
             }
         }
         let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
-        match trie.get(hashlib::summary(&address[..]).as_slice())? {
+        match trie.get(hash_keccak::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
@@ -150,7 +150,7 @@ impl<B: DB> State<B> {
     /// Get the merkle proof for a given account.
     pub fn get_account_proof(&self, address: &Address) -> Result<Vec<Vec<u8>>, Error> {
         let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
-        let proof = trie.get_proof(hashlib::summary(&address[..]).as_slice())?;
+        let proof = trie.get_proof(hash_keccak::summary(&address[..]).as_slice())?;
         Ok(proof)
     }
 
@@ -310,9 +310,9 @@ impl<B: DB> State<B> {
 
                 match entry.state_object {
                     Some(ref mut state_object) => {
-                        (hashlib::summary(&address[..]), rlp::encode(&state_object.account()))
+                        (hash_keccak::summary(&address[..]), rlp::encode(&state_object.account()))
                     }
-                    None => (hashlib::summary(&address[..]), vec![]),
+                    None => (hash_keccak::summary(&address[..]), vec![]),
                 }
             })
             .collect::<Vec<(Vec<u8>, Vec<u8>)>>();

@@ -5,7 +5,7 @@ use ethereum_types::{H256, U256};
 use hashbrown::HashMap;
 
 use super::err::Error;
-use super::hashlib;
+use super::hash_keccak;
 
 /// Single and pure account in the database. Usually, store it according to
 /// the following structure:
@@ -84,8 +84,8 @@ impl StateObject {
         StateObject {
             balance,
             nonce,
-            storage_root: hashlib::RLP_NULL,
-            code_hash: hashlib::NIL_DATA,
+            storage_root: hash_keccak::RLP_NULL,
+            code_hash: hash_keccak::NIL_DATA,
             code: vec![],
             code_size: 0,
             code_state: CodeState::Clean,
@@ -118,20 +118,20 @@ impl StateObject {
     /// Function is_empty returns whether the given account is empty. Empty
     /// is defined according to EIP161 (balance = nonce = code = 0).
     pub fn is_empty(&self) -> bool {
-        self.balance.is_zero() && self.nonce.is_zero() && self.code_hash == hashlib::NIL_DATA
+        self.balance.is_zero() && self.nonce.is_zero() && self.code_hash == hash_keccak::NIL_DATA
     }
 
     /// Init the code by given data.
     pub fn init_code(&mut self, code: Vec<u8>) {
         self.code = code;
-        self.code_hash = From::from(&hashlib::summary(&self.code)[..]);
+        self.code_hash = From::from(&hash_keccak::summary(&self.code)[..]);
         self.code_size = self.code.len();
         self.code_state = CodeState::Dirty;
     }
 
     /// Read the code from database by it's codehash.
     pub fn read_code<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
-        if self.code_hash == hashlib::NIL_DATA {
+        if self.code_hash == hash_keccak::NIL_DATA {
             return Ok(());
         }
         let mut k = CODE_PREFIX.as_bytes().to_vec();
@@ -175,12 +175,12 @@ impl StateObject {
 
     /// Get value by key from database.
     pub fn get_storage_at_backend<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Option<H256>, Error> {
-        if self.storage_root == hashlib::RLP_NULL {
+        if self.storage_root == hash_keccak::RLP_NULL {
             return Ok(None);
         }
         let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)?;
-        if let Some(b) = trie.get(&hashlib::encodek(key))? {
-            let u256_k: U256 = From::from(&hashlib::decodev(&b)?[..]);
+        if let Some(b) = trie.get(&hash_keccak::encodek(key))? {
+            let u256_k: U256 = From::from(&hash_keccak::decodev(&b)?[..]);
             let h256_k: H256 = u256_k.into();
             return Ok(Some(h256_k));
         }
@@ -213,16 +213,16 @@ impl StateObject {
 
     /// Flush data in storage cache to database.
     pub fn commit_storage<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
-        let mut trie = if self.storage_root == hashlib::RLP_NULL {
+        let mut trie = if self.storage_root == hash_keccak::RLP_NULL {
             PatriciaTrie::<_, cita_trie::Keccak256Hash>::new(db)
         } else {
             PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)?
         };
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
-                trie.remove(&hashlib::encodek(&k))?;
+                trie.remove(&hash_keccak::encodek(&k))?;
             } else {
-                trie.insert(hashlib::encodek(&k), hashlib::encodev(&U256::from(v)))?;
+                trie.insert(hash_keccak::encodek(&k), hash_keccak::encodev(&U256::from(v)))?;
             }
         }
         self.storage_root = H256::from(&(trie.root()?)[..]);
@@ -292,8 +292,8 @@ mod tests {
         let o = StateObject::new(69u8.into(), 0u8.into());
         assert_eq!(o.balance, 69u8.into());
         assert_eq!(o.nonce, 0u8.into());
-        assert_eq!(o.code_hash, hashlib::NIL_DATA);
-        assert_eq!(o.storage_root, hashlib::RLP_NULL);
+        assert_eq!(o.code_hash, hash_keccak::NIL_DATA);
+        assert_eq!(o.storage_root, hash_keccak::RLP_NULL);
         assert_eq!(hex::encode(rlp::encode(&o.account())), "f8448045a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
     }
 

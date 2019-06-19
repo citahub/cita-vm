@@ -110,7 +110,7 @@ impl PrecompiledContract for EcRecover {
         }
         let mut output: Vec<u8> = Vec::new();
         if let Ok(public) = recover(&input, &hash, bit) {
-            let data = state::hashlib::summary(&public.0);
+            let data = state::hash_keccak::summary(&public.0);
             output.write_all(&[0; 12])?;
             output.write_all(&data[12..data.len()])?;
         }

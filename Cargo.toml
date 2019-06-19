@@ -45,8 +45,3 @@ members = [
     "ewasm",
     "state"
 ]
-
-[features]
-default = ['cita-state/hashlib-keccak']
-hashlib-keccak = ['cita-state/hashlib-keccak']
-hashlib-sha3 = ['cita-state/hashlib-sha3']
