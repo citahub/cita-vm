@@ -1727,7 +1727,7 @@ mod tests {
             ("600060005560016000556000600055", 10218, 19800, 1),
         ];
         for (code, use_gas, refund, origin) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.cfg.eip1283 = true;
             assert_eq!(it.gas, it.context.gas_limit);
             it.data_provider
