@@ -1,10 +1,12 @@
-use super::err;
-use super::ext;
-use super::interpreter;
-use super::opcodes;
-use ethereum_types::{Address, H256, U256};
-use keccak_hash;
 use std::collections::BTreeMap;
+
+use ethereum_types::{Address, H256, U256};
+
+use crate::common;
+use crate::evm::err;
+use crate::evm::ext;
+use crate::evm::interpreter;
+use crate::evm::opcodes;
 
 #[derive(Clone, Default)]
 pub struct Account {
@@ -90,7 +92,7 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn sha3(&self, data: &[u8]) -> H256 {
-        keccak_hash::keccak(data)
+        H256::from(&common::hash::summary(data)[..])
     }
 
     fn is_empty(&self, address: &Address) -> bool {

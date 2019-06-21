@@ -1,12 +1,14 @@
-use super::common;
-use super::err;
-use super::ext;
-use super::memory;
-use super::opcodes;
-use super::stack;
+use std::cmp;
+
 use ethereum_types::{Address, H256, U256, U512};
 use log::debug;
-use std::cmp;
+
+use crate::evm::common;
+use crate::evm::err;
+use crate::evm::ext;
+use crate::evm::memory;
+use crate::evm::opcodes;
+use crate::evm::stack;
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
@@ -1690,13 +1692,13 @@ mod tests {
         it.stack.push_n(&[U256::from(v), U256::zero()]);
         it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
-        assert_eq!(it.mem.get(0, 32), common::hex_decode(v).unwrap().as_slice());
+        assert_eq!(it.mem.get(0, 32), hex::decode(v).unwrap().as_slice());
         it.stack.push_n(&[U256::one(), U256::zero()]);
         it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
         it.run().unwrap();
         assert_eq!(
             it.mem.get(0, 32),
-            common::hex_decode("0000000000000000000000000000000000000000000000000000000000000001")
+            hex::decode("0000000000000000000000000000000000000000000000000000000000000001")
                 .unwrap()
                 .as_slice()
         );
@@ -1706,33 +1708,33 @@ mod tests {
     fn test_op_sstore_eip_1283() {
         // From https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1283.md#test-cases
         let data = vec![
-            ("0x60006000556000600055", 412, 0, 0),
-            ("0x60006000556001600055", 20212, 0, 0),
-            ("0x60016000556000600055", 20212, 19800, 0),
-            ("0x60016000556002600055", 20212, 0, 0),
-            ("0x60016000556001600055", 20212, 0, 0),
-            ("0x60006000556000600055", 5212, 15000, 1),
-            ("0x60006000556001600055", 5212, 4800, 1),
-            ("0x60006000556002600055", 5212, 0, 1),
-            ("0x60026000556000600055", 5212, 15000, 1),
-            ("0x60026000556003600055", 5212, 0, 1),
-            ("0x60026000556001600055", 5212, 4800, 1),
-            ("0x60026000556002600055", 5212, 0, 1),
-            ("0x60016000556000600055", 5212, 15000, 1),
-            ("0x60016000556002600055", 5212, 0, 1),
-            ("0x60016000556001600055", 412, 0, 1),
-            ("0x600160005560006000556001600055", 40218, 19800, 0),
-            ("0x600060005560016000556000600055", 10218, 19800, 1),
+            ("60006000556000600055", 412, 0, 0),
+            ("60006000556001600055", 20212, 0, 0),
+            ("60016000556000600055", 20212, 19800, 0),
+            ("60016000556002600055", 20212, 0, 0),
+            ("60016000556001600055", 20212, 0, 0),
+            ("60006000556000600055", 5212, 15000, 1),
+            ("60006000556001600055", 5212, 4800, 1),
+            ("60006000556002600055", 5212, 0, 1),
+            ("60026000556000600055", 5212, 15000, 1),
+            ("60026000556003600055", 5212, 0, 1),
+            ("60026000556001600055", 5212, 4800, 1),
+            ("60026000556002600055", 5212, 0, 1),
+            ("60016000556000600055", 5212, 15000, 1),
+            ("60016000556002600055", 5212, 0, 1),
+            ("60016000556001600055", 412, 0, 1),
+            ("600160005560006000556001600055", 40218, 19800, 0),
+            ("600060005560016000556000600055", 10218, 19800, 1),
         ];
         for (code, use_gas, refund, origin) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.cfg.eip1283 = true;
             assert_eq!(it.gas, it.context.gas_limit);
             it.data_provider
                 .set_storage_origin(&it.params.contract.code_address, H256::zero(), H256::from(origin));
             it.data_provider
                 .set_storage(&it.params.contract.code_address, H256::zero(), H256::from(origin));
-            it.params.contract.code_data = common::hex_decode(code).unwrap();
+            it.params.contract.code_data = hex::decode(code).unwrap();
             it.run().unwrap();
             assert_eq!(it.gas, it.context.gas_limit - use_gas);
             assert_eq!(it.data_provider.get_refund(&Address::zero()), refund);
@@ -1742,7 +1744,7 @@ mod tests {
     #[test]
     fn test_op_invalid() {
         let mut it = default_interpreter();;
-        it.params.contract.code_data = common::hex_decode("0xfb").unwrap();
+        it.params.contract.code_data = hex::decode("fb").unwrap();
         let r = it.run();
         assert!(r.is_err());
         assert_eq!(r.err(), Some(err::Error::InvalidOpcode))

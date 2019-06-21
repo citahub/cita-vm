@@ -1,8 +1,9 @@
+use std::collections::BTreeMap;
+use std::io::Read;
+
 use ethereum_types::Address;
 use serde_derive::Deserialize;
 use serde_json::Error;
-use std::collections::BTreeMap;
-use std::io::Read;
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct CallCreates {}
@@ -124,6 +125,7 @@ impl Test {
 mod tests {
     use super::*;
     use std::fs;
+
     #[test]
     fn test_json_tests_parse() {
         let f = fs::File::open("/tmp/jsondata/VMTests/vmArithmeticTest/add0.json").unwrap();

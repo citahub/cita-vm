@@ -1,18 +1,18 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use cita_evm as evm;
-use cita_state as state;
 use cita_trie::DB;
 use ethereum_types::{Address, H256, U256};
 use evm::InterpreterParams;
 use hashbrown::{HashMap, HashSet};
 use log::debug;
 use rlp::RlpStream;
-use state::{State, StateObjectInfo};
 
-use super::err;
-use super::precompiled;
+use crate::common;
+use crate::err;
+use crate::evm;
+use crate::native;
+use crate::state::{self, State, StateObjectInfo};
 
 /// BlockDataProvider provides functions to get block's hash from chain.
 ///
@@ -100,19 +100,19 @@ pub fn create_address_from_address_and_nonce(address: &Address, nonce: &U256) ->
     let mut stream = RlpStream::new_list(2);
     stream.append(address);
     stream.append(nonce);
-    Address::from(H256::from(state::hashlib::summary(stream.as_raw()).as_slice()))
+    Address::from(H256::from(common::hash::summary(stream.as_raw()).as_slice()))
 }
 
 /// Returns new address created from sender salt and code hash.
 /// See: EIP 1014.
 pub fn create_address_from_salt_and_code_hash(address: &Address, salt: H256, code: Vec<u8>) -> Address {
-    let code_hash = &state::hashlib::summary(&code[..])[..];
+    let code_hash = &common::hash::summary(&code[..])[..];
     let mut buffer = [0u8; 1 + 20 + 32 + 32];
     buffer[0] = 0xff;
     buffer[1..=20].copy_from_slice(&address[..]);
     buffer[(1 + 20)..(1 + 20 + 32)].copy_from_slice(&salt[..]);
     buffer[(1 + 20 + 32)..].copy_from_slice(code_hash);
-    Address::from(H256::from(state::hashlib::summary(&buffer[..]).as_slice()))
+    Address::from(H256::from(common::hash::summary(&buffer[..]).as_slice()))
 }
 
 /// A selector for func create_address_from_address_and_nonce() and
@@ -228,8 +228,8 @@ fn call_pure<B: DB + 'static>(
             .transfer_balance(&request.sender, &request.receiver, request.value)?;
     }
     // Execute pre-compiled contracts.
-    if precompiled::contains(&request.contract.code_address) {
-        let c = precompiled::get(request.contract.code_address);
+    if native::contains(&request.contract.code_address) {
+        let c = native::get(request.contract.code_address);
         let gas = c.required_gas(&request.input);
         if request.gas_limit < gas {
             return Err(err::Error::Evm(evm::Error::OutOfGas));
@@ -702,7 +702,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     }
 
     fn sha3(&self, data: &[u8]) -> H256 {
-        From::from(&state::hashlib::summary(data)[..])
+        From::from(&common::hash::summary(data)[..])
     }
 
     fn is_empty(&self, address: &Address) -> bool {

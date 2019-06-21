@@ -1,8 +1,9 @@
-use cita_trie::DB;
-use ethereum_types::Address;
 use std::sync::Arc;
 
-use super::err::Error;
+use cita_trie::DB;
+use ethereum_types::Address;
+
+use crate::state::err::Error;
 
 #[derive(Debug)]
 pub struct AccountDB<B: DB> {

@@ -6,14 +6,15 @@ use cita_trie::{PatriciaTrie, Trie};
 use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
-
-use super::account::StateObject;
-use super::account_db::AccountDB;
-use super::err::Error;
-use super::hashlib;
-use super::object_entry::{ObjectStatus, StateObjectEntry};
 use log::debug;
 use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
+
+use crate::common;
+use crate::state::account::StateObject;
+use crate::state::account_db::AccountDB;
+use crate::state::err::Error;
+use crate::state::object_entry::{ObjectStatus, StateObjectEntry};
+
 /// State is the one who managers all accounts and states in Ethereum's system.
 pub struct State<B> {
     pub db: Arc<B>,
@@ -106,7 +107,7 @@ impl<B: DB> State<B> {
             }
         }
         let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
-        match trie.get(hashlib::summary(&address[..]).as_slice())? {
+        match trie.get(common::hash::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
@@ -125,7 +126,7 @@ impl<B: DB> State<B> {
             }
         }
         let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
-        match trie.get(hashlib::summary(&address[..]).as_slice())? {
+        match trie.get(common::hash::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
@@ -150,7 +151,7 @@ impl<B: DB> State<B> {
     /// Get the merkle proof for a given account.
     pub fn get_account_proof(&self, address: &Address) -> Result<Vec<Vec<u8>>, Error> {
         let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(Arc::clone(&self.db), &self.root.0)?;
-        let proof = trie.get_proof(hashlib::summary(&address[..]).as_slice())?;
+        let proof = trie.get_proof(common::hash::summary(&address[..]).as_slice())?;
         Ok(proof)
     }
 
@@ -309,10 +310,11 @@ impl<B: DB> State<B> {
                 entry.status = ObjectStatus::Committed;
 
                 match entry.state_object {
-                    Some(ref mut state_object) => {
-                        (hashlib::summary(&address[..]), rlp::encode(&state_object.account()))
-                    }
-                    None => (hashlib::summary(&address[..]), vec![]),
+                    Some(ref mut state_object) => (
+                        common::hash::summary(&address[..]),
+                        rlp::encode(&state_object.account()),
+                    ),
+                    None => (common::hash::summary(&address[..]), vec![]),
                 }
             })
             .collect::<Vec<(Vec<u8>, Vec<u8>)>>();
@@ -762,14 +764,14 @@ mod tests {
         state.new_contract(&b, 30.into(), 0.into(), vec![]);
         state.set_storage(&a, 10.into(), 15.into()).unwrap();
         assert_eq!(state.balance(&b).unwrap(), 30.into());
-        assert_eq!(state.code(&b).unwrap(), vec![]);
+        assert!(state.code(&b).unwrap().is_empty());
 
         state.revert_checkpoint(); // revert c2
         assert_eq!(state.balance(&a).unwrap(), 8.into());
         assert_eq!(state.get_storage(&a, &10.into()).unwrap(), 10.into());
         assert_eq!(state.get_storage(&a, &20.into()).unwrap(), 20.into());
         assert_eq!(state.balance(&b).unwrap(), 0.into());
-        assert_eq!(state.code(&b).unwrap(), vec![]);
+        assert!(state.code(&b).unwrap().is_empty());
         assert_eq!(state.exist(&b).unwrap(), false);
 
         state.revert_checkpoint(); // revert c1

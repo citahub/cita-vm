@@ -1,21 +1,19 @@
 [package]
 name = "cita-vm"
-version = "0.1.5"
+version = "0.2.0"
 authors = ["Cryptape Technologies <contact@cryptape.com>"]
 edition = "2018"
 description = "CITA VM"
 license = "Apache-2.0"
 homepage = "https://github.com/cryptape/cita-vm"
 documentation = "https://github.com/cryptape/cita-vm/blob/master/README.md"
-exclude = [
-    "tests/jsondata",
-]
 
 [dependencies]
 byteorder = "1.0"
 cita_trie = "1.0"
 env_logger = "0.6"
 ethereum-types = "0.4"
+hashbrown = { version = "0.3", features = ["rayon"] }
 hex = "0.3"
 libsecp256k1 = "0.2"
 log = "0.4"
@@ -26,11 +24,8 @@ serde_derive = "1.0"
 serde_json = "1.0"
 sha2 = "0.8"
 sha3 = "0.8"
+rayon = "1.0"
 tiny-keccak = "1.4"
-hashbrown = "0.3"
-
-cita-evm = { path="./evm", version="0.1" }
-cita-state = { path="./state", default-features = false, version="0.1" }
 
 [dev-dependencies]
 bencher = "0.1"
@@ -38,15 +33,3 @@ bencher = "0.1"
 [[bench]]
 name = "benchmark"
 harness = false
-
-[workspace]
-members = [
-    "evm",
-    "ewasm",
-    "state"
-]
-
-[features]
-default = ['cita-state/hashlib-keccak']
-hashlib-keccak = ['cita-state/hashlib-keccak']
-hashlib-sha3 = ['cita-state/hashlib-sha3']

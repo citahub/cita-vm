@@ -4,8 +4,6 @@ testdata:
 ci:
 	cargo fmt --all -- --check
 	cargo clippy --all --tests --all-targets -- -D warnings
-	cd evm && cargo test && cd ..
-	cd state && cargo test && cd ..
-	RUST_MIN_STACK=134217728 cargo test
+	cargo test
 
 .PHONY: testdata ci

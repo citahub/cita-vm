@@ -1,8 +1,9 @@
+use std::collections::BTreeMap;
+use std::io::Read;
+
 use ethereum_types::Address;
 use serde_derive::Deserialize;
 use serde_json::Error;
-use std::collections::BTreeMap;
-use std::io::Read;
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Env {
@@ -142,6 +143,7 @@ impl Test {
 mod tests {
     use super::*;
     use std::fs;
+
     #[test]
     fn test_json_tests_parse() {
         let f = fs::File::open("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json").unwrap();

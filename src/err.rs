@@ -2,14 +2,14 @@ use std::error;
 use std::fmt;
 use std::io;
 
-use cita_evm as evm;
-use cita_state as state;
+use crate::evm;
+use crate::state::Error as StateError;
 
 #[derive(Debug)]
 pub enum Error {
     Evm(evm::Error),
-    State(state::Error),
     Secp256k1(secp256k1::Error),
+    State(StateError),
     IO(io::Error),
     Str(String),
     NotEnoughBaseGas,
@@ -27,8 +27,8 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::Evm(e) => return write!(f, "{}", e),
-            Error::State(e) => return write!(f, "{}", e),
             Error::Secp256k1(e) => return write!(f, "{:?}", e),
+            Error::State(e) => return write!(f, "{}", e),
             Error::IO(e) => return write!(f, "{:?}", e),
             Error::Str(e) => return write!(f, "{:?}", e),
             Error::NotEnoughBaseGas => return write!(f, "NotEnoughBaseGas"),
@@ -49,8 +49,8 @@ impl From<evm::Error> for Error {
     }
 }
 
-impl From<state::Error> for Error {
-    fn from(error: state::Error) -> Self {
+impl From<StateError> for Error {
+    fn from(error: StateError) -> Self {
         Error::State(error)
     }
 }

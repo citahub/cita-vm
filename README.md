@@ -19,7 +19,7 @@ cita-vm = "0.1.6"
 Let us begin with the most basic example. First, we initialize a database in memory:
 
 ```rs
-let db = cita_vm::state::MemoryDB::new(false);
+let db = Arc::new(cita_vm::state::MemoryDB::new(false));
 ```
 
 And, wrap this db as a `WorldState`
@@ -109,7 +109,11 @@ let r = cita_vm::exec(
 println!("return={:?}", r); // 42 is outputed
 ```
 
-Full code could be found [here](./examples/storage_example/simplestorage.rs).
+Full code could be found [here](./examples/simplestorage.rs). You could run it by
+
+```
+$ cargo run --example simplestorage
+```
 
 # Performance comparison with parity and geth
 
@@ -123,7 +127,7 @@ In short, cita-vm is the fastest EVM. Below are [benchmark](https://github.com/e
 
 ```sh
 $ make testdata
-$ RUST_MIN_STACK=134217728 cargo test
+$ cargo test
 ```
 
 # Licences

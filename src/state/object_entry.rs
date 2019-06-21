@@ -1,4 +1,4 @@
-use super::account::StateObject;
+use crate::state::account::StateObject;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub enum ObjectStatus {

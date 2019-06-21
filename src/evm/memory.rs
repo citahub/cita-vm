@@ -1,4 +1,4 @@
-use super::common;
+use crate::evm::common;
 
 #[derive(Default)]
 pub struct Memory {
@@ -39,6 +39,7 @@ impl Memory {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn test_memory_set_get() {
         let mut mem = Memory::default();
