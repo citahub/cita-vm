@@ -10,7 +10,9 @@ documentation = "https://github.com/cryptape/cita-vm/blob/master/README.md"
 
 [dependencies]
 byteorder = "1.0"
+bytes = "0.4"
 cita_trie = "2.0"
+ckb-vm =  { git = "https://github.com/nervosnetwork/ckb-vm" }
 env_logger = "0.6"
 ethereum-types = "0.4"
 hashbrown = { version = "0.3", features = ["rayon"] }

@@ -16,7 +16,7 @@ use ripemd160::{Digest, Ripemd160};
 use sha2::Sha256;
 
 use crate::common;
-use crate::err;
+use crate::evm::err::Error;
 
 /// Implementation of a pre-compiled contract.
 pub trait PrecompiledContract: Send + Sync {
@@ -24,7 +24,7 @@ pub trait PrecompiledContract: Send + Sync {
     fn required_gas(&self, input: &[u8]) -> u64;
 
     /// Get the output from the pre-compiled contract.
-    fn run(&self, input: &[u8]) -> Result<Vec<u8>, err::Error>;
+    fn run(&self, input: &[u8]) -> Result<Vec<u8>, Error>;
 }
 
 /// Function get returns a pre-compiled contract by given address.
@@ -55,7 +55,7 @@ const G_RIPEMD160_BASE: u64 = 600; // Base price for a RIPEMD160 operation
 const G_RIPEMD160_PER_WORD: u64 = 120; // Per-word price for a RIPEMD160 operation
 const G_IDENTITY_BASE: u64 = 15; // Base price for a data copy operation
 const G_IDENTITY_PER_WORD: u64 = 3; // Per-work price for a data copy operation
-const G_MOD_EXP_QUADCOEFF_DIV: u64 = 20; // Divisor for the quadratic particle of the big int modular exponentiation
+                                    // const G_MOD_EXP_QUADCOEFF_DIV: u64 = 20; // Divisor for the quadratic particle of the big int modular exponentiation
 const G_BN256_ADD: u64 = 500; // Gas needed for an elliptic curve addition
 const G_BN256_SCALAR_MUL: u64 = 40000; // Gas needed for an elliptic curve scalar multiplication
 const G_BN256_PARING_BASE: u64 = 100_000; // Base price for an elliptic curve pairing check
@@ -88,7 +88,7 @@ impl PrecompiledContract for EcRecover {
         G_ECRECOVER
     }
 
-    fn run(&self, i: &[u8]) -> Result<Vec<u8>, err::Error> {
+    fn run(&self, i: &[u8]) -> Result<Vec<u8>, Error> {
         let len = std::cmp::min(i.len(), 128);
 
         let mut input = [0; 128];
@@ -111,8 +111,8 @@ impl PrecompiledContract for EcRecover {
         let mut output: Vec<u8> = Vec::new();
         if let Ok(public) = recover(&input, &hash, bit) {
             let data = common::hash::summary(&public.0);
-            output.write_all(&[0; 12])?;
-            output.write_all(&data[12..data.len()])?;
+            output.write_all(&[0; 12]).unwrap();
+            output.write_all(&data[12..data.len()]).unwrap();
         }
         Ok(output)
     }
@@ -128,7 +128,7 @@ impl PrecompiledContract for SHA256Hash {
         (i.len() as u64 + 31) / 32 * G_SHA256_PER_WORD + G_SHA256_BASE
     }
 
-    fn run(&self, i: &[u8]) -> Result<Vec<u8>, err::Error> {
+    fn run(&self, i: &[u8]) -> Result<Vec<u8>, Error> {
         let mut hasher = Sha256::new();
         hasher.input(i);
         let result = hasher.result();
@@ -148,7 +148,7 @@ impl PrecompiledContract for RIPEMD160Hash {
         (i.len() as u64 + 31) / 32 * G_RIPEMD160_PER_WORD + G_RIPEMD160_BASE
     }
 
-    fn run(&self, i: &[u8]) -> Result<Vec<u8>, err::Error> {
+    fn run(&self, i: &[u8]) -> Result<Vec<u8>, Error> {
         let mut hasher = Ripemd160::new();
         hasher.input(i);
         let result = hasher.result();
@@ -168,7 +168,7 @@ impl PrecompiledContract for DataCopy {
         (i.len() as u64 + 31) / 32 * G_IDENTITY_PER_WORD + G_IDENTITY_BASE
     }
 
-    fn run(&self, i: &[u8]) -> Result<Vec<u8>, err::Error> {
+    fn run(&self, i: &[u8]) -> Result<Vec<u8>, Error> {
         Ok(i.into())
     }
 }
@@ -181,8 +181,8 @@ impl PrecompiledContract for BigModExp {
         0
     }
 
-    fn run(&self, _: &[u8]) -> Result<Vec<u8>, err::Error> {
-        Err(err::Error::Str("Not implemented!".into()))
+    fn run(&self, _: &[u8]) -> Result<Vec<u8>, Error> {
+        Err(Error::CallError)
     }
 }
 
@@ -194,8 +194,8 @@ impl PrecompiledContract for Bn256Add {
         G_BN256_ADD
     }
 
-    fn run(&self, _: &[u8]) -> Result<Vec<u8>, err::Error> {
-        Err(err::Error::Str("Not implemented!".into()))
+    fn run(&self, _: &[u8]) -> Result<Vec<u8>, Error> {
+        Err(Error::CallError)
     }
 }
 
@@ -207,8 +207,8 @@ impl PrecompiledContract for Bn256ScalarMul {
         G_BN256_SCALAR_MUL
     }
 
-    fn run(&self, _: &[u8]) -> Result<Vec<u8>, err::Error> {
-        Err(err::Error::Str("Not implemented!".into()))
+    fn run(&self, _: &[u8]) -> Result<Vec<u8>, Error> {
+        Err(Error::CallError)
     }
 }
 
@@ -220,7 +220,7 @@ impl PrecompiledContract for Bn256Pairing {
         G_BN256_PARING_BASE + (i.len() as u64 / 192 * G_BN256_PARING_PER_POINT)
     }
 
-    fn run(&self, _: &[u8]) -> Result<Vec<u8>, err::Error> {
-        Err(err::Error::Str("Not implemented!".into()))
+    fn run(&self, _: &[u8]) -> Result<Vec<u8>, Error> {
+        Err(Error::CallError)
     }
 }
