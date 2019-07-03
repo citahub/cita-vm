@@ -5,6 +5,7 @@ use ethereum_types::{H256, U256};
 use hashbrown::HashMap;
 
 use crate::common;
+use crate::common::hash;
 use crate::state::err::Error;
 
 /// Single and pure account in the database. Usually, store it according to
@@ -178,7 +179,7 @@ impl StateObject {
         if self.storage_root == common::hash::RLP_NULL {
             return Ok(None);
         }
-        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)?;
+        let trie = PatriciaTrie::from(db, Arc::new(hash::get_hasher()), &self.storage_root.0)?;
         if let Some(b) = trie.get(&common::hash::summary(key))? {
             let u256_k: U256 = rlp::decode(&b)?;
             let h256_k: H256 = u256_k.into();
@@ -205,7 +206,7 @@ impl StateObject {
 
     /// Get storage proof
     pub fn get_storage_proof<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
-        let trie = PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)
+        let trie = PatriciaTrie::from(db, Arc::new(hash::get_hasher()), &self.storage_root.0)
             .or_else(|e| Err(Error::DB(format!("StateObject::get_storage_proof: {}", e))))?;
         let proof = trie.get_proof(&key.0)?;
         Ok(proof)
@@ -214,9 +215,9 @@ impl StateObject {
     /// Flush data in storage cache to database.
     pub fn commit_storage<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
         let mut trie = if self.storage_root == common::hash::RLP_NULL {
-            PatriciaTrie::<_, cita_trie::Keccak256Hash>::new(db)
+            PatriciaTrie::new(db, Arc::new(hash::get_hasher()))
         } else {
-            PatriciaTrie::<_, cita_trie::Keccak256Hash>::from(db, &self.storage_root.0)?
+            PatriciaTrie::from(db, Arc::new(hash::get_hasher()), &self.storage_root.0)?
         };
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
