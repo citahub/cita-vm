@@ -1,6 +1,7 @@
 use ethereum_types::{Address, Public, H256, U256};
 
 use crate::common::clean_0x;
+use crate::common::hash;
 
 pub fn string_2_u256(value: String) -> U256 {
     let v = Box::leak(value.into_boxed_str());
@@ -36,7 +37,7 @@ pub fn string_2_address(value: String) -> Address {
 }
 
 pub fn public_2_address(public: &Public) -> Address {
-    let hash = tiny_keccak::keccak256(&public.0);
+    let hash = hash::summary(&public.0);
     let mut result = Address::default();
     result.copy_from_slice(&hash[12..]);
     result
