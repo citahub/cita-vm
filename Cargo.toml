@@ -14,7 +14,7 @@ cita_trie = "2.0"
 env_logger = "0.6"
 ethereum-types = "0.4"
 hashbrown = { version = "0.3", features = ["rayon"] }
-hasher = { version="0.1", features = ["hash-keccak"] }
+hasher = { version="0.1" }
 hex = "0.3"
 libsecp256k1 = "0.2"
 log = "0.4"
@@ -33,3 +33,9 @@ bencher = "0.1"
 [[bench]]
 name = "benchmark"
 harness = false
+
+[features]
+default = ["hash-keccak"]
+hash-keccak = ["hasher/hash-keccak"]
+hash-blake2b = ["hasher/hash-blake2b"]
+hash-sm3 = ["hasher/hash-sm3"]
