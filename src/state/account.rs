@@ -17,6 +17,7 @@ pub struct Account {
     pub nonce: U256,
     pub storage_root: H256,
     pub code_hash: H256,
+    pub abi_hash: H256,
 }
 
 /// Free to use rlp::encode().
@@ -26,7 +27,8 @@ impl rlp::Encodable for Account {
             .append(&self.nonce)
             .append(&self.balance)
             .append(&self.storage_root)
-            .append(&self.code_hash);
+            .append(&self.code_hash)
+            .append(&self.abi_hash);
     }
 }
 
@@ -38,6 +40,7 @@ impl rlp::Decodable for Account {
             balance: data.val_at(1)?,
             storage_root: data.val_at(2)?,
             code_hash: data.val_at(3)?,
+            abi_hash: data.val_at(4)?,
         })
     }
 }
@@ -57,6 +60,10 @@ pub struct StateObject {
     pub code: Vec<u8>,
     pub code_size: usize,
     pub code_state: CodeState,
+    pub abi_hash: H256,
+    pub abi: Vec<u8>,
+    pub abi_size: usize,
+    pub abi_state: CodeState,
     pub storage_changes: HashMap<H256, H256>,
 }
 
@@ -70,12 +77,17 @@ impl From<Account> for StateObject {
             code: vec![],
             code_size: 0,
             code_state: CodeState::Clean,
+            abi_hash: account.abi_hash,
+            abi: vec![],
+            abi_size: 0,
+            abi_state: CodeState::Clean,
             storage_changes: HashMap::new(),
         }
     }
 }
 
 const CODE_PREFIX: &str = "C:";
+const ABI_PREFIX: &str = "ABI:";
 
 impl StateObject {
     /// Create a new account.
@@ -90,6 +102,10 @@ impl StateObject {
             code: vec![],
             code_size: 0,
             code_state: CodeState::Clean,
+            abi_hash: common::hash::NIL_DATA,
+            abi: vec![],
+            abi_size: 0,
+            abi_state: CodeState::Clean,
             storage_changes: HashMap::new(),
         }
     }
@@ -108,6 +124,7 @@ impl StateObject {
             nonce: self.nonce,
             storage_root: self.storage_root,
             code_hash: self.code_hash,
+            abi_hash: self.abi_hash,
         }
     }
 
@@ -130,6 +147,14 @@ impl StateObject {
         self.code_state = CodeState::Dirty;
     }
 
+    /// Init the abi by given data.
+    pub fn init_abi(&mut self, abi: Vec<u8>) {
+        self.abi = abi;
+        self.abi_hash = From::from(&common::hash::summary(&self.abi)[..]);
+        self.abi_size = self.abi.len();
+        self.abi_state = CodeState::Dirty;
+    }
+
     /// Read the code from database by it's codehash.
     pub fn read_code<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
         if self.code_hash == common::hash::NIL_DATA {
@@ -144,6 +169,23 @@ impl StateObject {
         self.code = c;
         self.code_size = self.code.len();
         self.code_state = CodeState::Clean;
+        Ok(())
+    }
+
+    /// Read the abi from database by it's abihash.
+    pub fn read_abi<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
+        if self.abi_hash == common::hash::NIL_DATA {
+            return Ok(());
+        }
+        let mut k = ABI_PREFIX.as_bytes().to_vec();
+        k.extend(self.abi_hash.to_vec());
+        let c = db
+            .get(&k)
+            .or_else(|e| Err(Error::DB(format!("{}", e))))?
+            .unwrap_or_else(|| vec![]);
+        self.abi = c;
+        self.abi_size = self.abi.len();
+        self.abi_state = CodeState::Clean;
         Ok(())
     }
 
@@ -250,6 +292,26 @@ impl StateObject {
         Ok(())
     }
 
+    /// Flush abi to database if necessary.
+    pub fn commit_abi<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
+        match (self.abi_state == CodeState::Dirty, self.abi.is_empty()) {
+            (true, true) => {
+                self.abi_size = 0;
+                self.abi_state = CodeState::Clean;
+            }
+            (true, false) => {
+                let mut k = ABI_PREFIX.as_bytes().to_vec();
+                k.extend(self.abi_hash.to_vec());
+                db.insert(k, self.abi.clone())
+                    .or_else(|e| Err(Error::DB(format!("{}", e))))?;
+                self.abi_size = self.abi.len();
+                self.abi_state = CodeState::Clean;
+            }
+            (false, _) => {}
+        }
+        Ok(())
+    }
+
     /// Clone without storage changes.
     pub fn clone_clean(&self) -> StateObject {
         StateObject {
@@ -260,6 +322,10 @@ impl StateObject {
             code_hash: self.code_hash,
             code_size: self.code_size,
             code_state: self.code_state,
+            abi: self.abi.clone(),
+            abi_hash: self.abi_hash,
+            abi_size: self.abi_size,
+            abi_state: self.abi_state,
             storage_changes: HashMap::new(),
         }
     }
@@ -280,6 +346,10 @@ impl StateObject {
         self.code_state = other.code_state;
         self.code = other.code;
         self.code_size = other.code_size;
+        self.abi_hash = other.abi_hash;
+        self.abi_state = other.abi_state;
+        self.abi = other.abi;
+        self.abi_size = other.abi_size;
         self.storage_changes = other.storage_changes;
     }
 }
@@ -294,8 +364,9 @@ mod tests {
         assert_eq!(o.balance, 69u8.into());
         assert_eq!(o.nonce, 0u8.into());
         assert_eq!(o.code_hash, common::hash::NIL_DATA);
+        assert_eq!(o.abi_hash, common::hash::NIL_DATA);
         assert_eq!(o.storage_root, common::hash::RLP_NULL);
-        assert_eq!(hex::encode(rlp::encode(&o.account())), "f8448045a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
+        assert_eq!(hex::encode(rlp::encode(&o.account())), "f8448045a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
     }
 
     #[test]

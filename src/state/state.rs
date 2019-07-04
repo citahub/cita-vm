@@ -112,6 +112,7 @@ impl<B: DB> State<B> {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
+                state_object.read_abi(self.db.clone())?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(f(Some(&state_object)))
             }
@@ -131,6 +132,7 @@ impl<B: DB> State<B> {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
+                state_object.read_abi(self.db.clone())?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(Some(state_object))
             }
@@ -216,6 +218,15 @@ impl<B: DB> State<B> {
         Ok(())
     }
 
+    /// Set abi for an account.
+    pub fn set_abi(&mut self, address: &Address, abi: Vec<u8>) -> Result<(), Error> {
+        debug!("state.set_abi address={:?} abi={:?}", address, abi);
+        let mut state_object = self.get_state_object_or_default(address)?;
+        state_object.init_abi(abi);
+        self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
+        Ok(())
+    }
+
     /// Add balance by incr for an account.
     pub fn add_balance(&mut self, address: &Address, incr: U256) -> Result<(), Error> {
         debug!("state.add_balance a={:?} incr={:?}", address, incr);
@@ -295,6 +306,7 @@ impl<B: DB> State<B> {
                     let accdb = Arc::new(AccountDB::new(*address, Arc::clone(&db)));
                     state_object.commit_storage(Arc::clone(&accdb))?;
                     state_object.commit_code(Arc::clone(&db))?;
+                    state_object.commit_abi(Arc::clone(&db))?;
                 }
                 Ok(())
             })
@@ -403,6 +415,12 @@ pub trait StateObjectInfo {
     fn code_hash(&mut self, a: &Address) -> Result<H256, Error>;
 
     fn code_size(&mut self, a: &Address) -> Result<usize, Error>;
+
+    fn abi(&mut self, a: &Address) -> Result<Vec<u8>, Error>;
+
+    fn abi_hash(&mut self, a: &Address) -> Result<H256, Error>;
+
+    fn abi_size(&mut self, a: &Address) -> Result<usize, Error>;
 }
 
 impl<B: DB> StateObjectInfo for State<B> {
@@ -437,6 +455,18 @@ impl<B: DB> StateObjectInfo for State<B> {
 
     fn code_size(&mut self, address: &Address) -> Result<usize, Error> {
         self.call_with_cached(address, |a| Ok(a.map_or(0, |e| e.code_size)))?
+    }
+
+    fn abi(&mut self, address: &Address) -> Result<Vec<u8>, Error> {
+        self.call_with_cached(address, |a| Ok(a.map_or(vec![], |e| e.abi.clone())))?
+    }
+
+    fn abi_hash(&mut self, address: &Address) -> Result<H256, Error> {
+        self.call_with_cached(address, |a| Ok(a.map_or(H256::zero(), |e| e.abi_hash)))?
+    }
+
+    fn abi_size(&mut self, address: &Address) -> Result<usize, Error> {
+        self.call_with_cached(address, |a| Ok(a.map_or(0, |e| e.abi_size)))?
     }
 }
 
@@ -480,6 +510,37 @@ mod tests {
             "0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239".into()
         );
         assert_eq!(state.code_size(&a).unwrap(), 3);
+    }
+
+    #[test]
+    fn test_abi_from_database() {
+        let a = Address::zero();
+        let (root, db) = {
+            let mut state = get_temp_state();
+            state.set_abi(&a, vec![1, 2, 3]).unwrap();
+            assert_eq!(state.abi(&a).unwrap(), vec![1, 2, 3]);
+            assert_eq!(
+                state.abi_hash(&a).unwrap(),
+                "0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239".into()
+            );
+            assert_eq!(state.abi_size(&a).unwrap(), 3);
+            state.commit().unwrap();
+            assert_eq!(state.abi(&a).unwrap(), vec![1, 2, 3]);
+            assert_eq!(
+                state.abi_hash(&a).unwrap(),
+                "0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239".into()
+            );
+            assert_eq!(state.abi_size(&a).unwrap(), 3);
+            (state.root, state.db)
+        };
+
+        let mut state = State::from_existing(db, root).unwrap();
+        assert_eq!(state.abi(&a).unwrap(), vec![1, 2, 3]);
+        assert_eq!(
+            state.abi_hash(&a).unwrap(),
+            "0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239".into()
+        );
+        assert_eq!(state.abi_size(&a).unwrap(), 3);
     }
 
     #[test]
@@ -617,7 +678,7 @@ mod tests {
         state.commit().unwrap();
         assert_eq!(
             state.root,
-            "0ce23f3c809de377b008a4a3ee94a0834aac8bec1f86e28ffe4fdb5a15b0c785".into()
+            "3289114a6a9abfd07c8333cfd165aa5c034a19ae3af504348c4d2688ea1d46bb".into()
         );
     }
 
