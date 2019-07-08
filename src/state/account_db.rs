@@ -1,19 +1,21 @@
 use std::sync::Arc;
 
 use cita_trie::DB;
-use ethereum_types::Address;
+use ethereum_types::{Address,H256};
+use crate::common::hash::{self,NIL_DATA,RLP_NULL};
 
 use crate::state::err::Error;
 
 #[derive(Debug)]
 pub struct AccountDB<B: DB> {
-    address: Address,
+    /// address means address's hash
+    address: H256,
     db: Arc<B>,
 }
 
 impl<B: DB> AccountDB<B> {
     pub fn new(address: Address, db: Arc<B>) -> Self {
-        AccountDB { address, db }
+        AccountDB { hash::summary(&address.0).as_slice(), db }
     }
 }
 
@@ -21,6 +23,9 @@ impl<B: DB> DB for AccountDB<B> {
     type Error = Error;
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        if key == &RLP_NULL {
+            return Ok(Some(NIL_DATA.to_vec()));
+        }
         let concatenated = [&self.address.0[..], &key[..]].concat();
         self.db
             .get(concatenated.as_slice())
@@ -28,6 +33,9 @@ impl<B: DB> DB for AccountDB<B> {
     }
 
     fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Self::Error> {
+        if value == &NIL_DATA || key == &RLP_NULL {
+            return Ok(());
+        }
         let concatenated = [&self.address.0[..], &key[..]].concat();
         self.db
             .insert(concatenated, value)
@@ -35,6 +43,9 @@ impl<B: DB> DB for AccountDB<B> {
     }
 
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
+        if key == &RLP_NULL {
+            return Ok(true);
+        }
         let concatenated = [&self.address.0[..], &key[..]].concat();
         self.db
             .contains(concatenated.as_slice())
@@ -42,6 +53,9 @@ impl<B: DB> DB for AccountDB<B> {
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), Self::Error> {
+        if key == &RLP_NULL {
+            return Ok(());
+        }
         let concatenated = [&self.address.0[..], &key[..]].concat();
         self.db
             .remove(concatenated.as_slice())
