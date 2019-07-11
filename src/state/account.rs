@@ -86,8 +86,8 @@ impl From<Account> for StateObject {
     }
 }
 
-const CODE_PREFIX: &str = "C:";
-const ABI_PREFIX: &str = "ABI:";
+//const CODE_PREFIX: &str = "C:";
+//const ABI_PREFIX: &str = "ABI:";
 
 impl StateObject {
     /// Create a new account.
@@ -160,10 +160,8 @@ impl StateObject {
         if self.code_hash == common::hash::NIL_DATA {
             return Ok(());
         }
-        let mut k = CODE_PREFIX.as_bytes().to_vec();
-        k.extend(self.code_hash.to_vec());
         let c = db
-            .get(&k)
+            .get(&self.code_hash.to_vec())
             .or_else(|e| Err(Error::DB(format!("{}", e))))?
             .unwrap_or_else(|| vec![]);
         self.code = c;
@@ -177,10 +175,8 @@ impl StateObject {
         if self.abi_hash == common::hash::NIL_DATA {
             return Ok(());
         }
-        let mut k = ABI_PREFIX.as_bytes().to_vec();
-        k.extend(self.abi_hash.to_vec());
         let c = db
-            .get(&k)
+            .get(&self.abi_hash.to_vec())
             .or_else(|e| Err(Error::DB(format!("{}", e))))?
             .unwrap_or_else(|| vec![]);
         self.abi = c;
@@ -222,7 +218,7 @@ impl StateObject {
             return Ok(None);
         }
         let trie = PatriciaTrie::from(db, Arc::new(hash::get_hasher()), &self.storage_root.0)?;
-        if let Some(b) = trie.get(&common::hash::summary(key))? {
+        if let Some(b) = trie.get(key)? {
             let u256_k: U256 = rlp::decode(&b)?;
             let h256_k: H256 = u256_k.into();
             return Ok(Some(h256_k));
@@ -263,9 +259,9 @@ impl StateObject {
         };
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
-                trie.remove(&common::hash::summary(&k))?;
+                trie.remove(&k)?;
             } else {
-                trie.insert(common::hash::summary(&k), rlp::encode(&U256::from(v)))?;
+                trie.insert(k.to_vec(), rlp::encode(&U256::from(v)))?;
             }
         }
         self.storage_root = H256::from(&(trie.root()?)[..]);
@@ -280,9 +276,7 @@ impl StateObject {
                 self.code_state = CodeState::Clean;
             }
             (true, false) => {
-                let mut k = CODE_PREFIX.as_bytes().to_vec();
-                k.extend(self.code_hash.to_vec());
-                db.insert(k, self.code.clone())
+                db.insert(self.code_hash.to_vec(), self.code.clone())
                     .or_else(|e| Err(Error::DB(format!("{}", e))))?;
                 self.code_size = self.code.len();
                 self.code_state = CodeState::Clean;
@@ -300,9 +294,7 @@ impl StateObject {
                 self.abi_state = CodeState::Clean;
             }
             (true, false) => {
-                let mut k = ABI_PREFIX.as_bytes().to_vec();
-                k.extend(self.abi_hash.to_vec());
-                db.insert(k, self.abi.clone())
+                db.insert(self.abi_hash.to_vec(), self.abi.clone())
                     .or_else(|e| Err(Error::DB(format!("{}", e))))?;
                 self.abi_size = self.abi.len();
                 self.abi_state = CodeState::Clean;
