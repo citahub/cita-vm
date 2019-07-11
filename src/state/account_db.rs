@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
-use crate::common::hash::{summary, NIL_DATA, RLP_NULL};
+use crate::common::hash::{summary, RLP_NULL};
 use cita_trie::DB;
 use ethereum_types::{Address, H256};
 
 use crate::state::err::Error;
+
+static NULL_RLP_STATIC: [u8; 1] = [0x80; 1];
 
 #[derive(Debug)]
 pub struct AccountDB<B: DB> {
@@ -25,7 +27,7 @@ impl<B: DB> DB for AccountDB<B> {
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
         if H256::from(key) == RLP_NULL {
-            return Ok(Some(NIL_DATA.to_vec()));
+            return Ok(Some(NULL_RLP_STATIC.to_vec()));
         }
         let concatenated = [&self.address_hash.0[..], &key[..]].concat();
         self.db
@@ -34,7 +36,7 @@ impl<B: DB> DB for AccountDB<B> {
     }
 
     fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Self::Error> {
-        if H256::from(value.as_slice()) == NIL_DATA || H256::from(key.as_slice()) == RLP_NULL {
+        if H256::from(key.as_slice()) == RLP_NULL {
             return Ok(());
         }
         let concatenated = [&self.address_hash.0[..], &key[..]].concat();

@@ -34,8 +34,9 @@ pub enum InterpreterResult {
     Create(Vec<u8>, u64, Vec<Log>, Address),
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct InterpreterConf {
+    pub no_empty: bool,
     pub eip1283: bool,
     pub stack_limit: u64,
     pub max_create_code_size: u64, // See: https://github.com/ethereum/EIPs/issues/659
@@ -84,19 +85,20 @@ impl Default for InterpreterConf {
     // If you want to step through the steps, let the
     fn default() -> Self {
         InterpreterConf {
+            no_empty: false,
             eip1283: false,
             stack_limit: 1024,
-            max_create_code_size: 24567,
+            max_create_code_size: std::u64::MAX,
             max_call_depth: 1024,
 
             gas_tier_step: [0, 2, 3, 5, 8, 10, 20, 0],
             gas_exp: 10,
-            gas_exp_byte: 50,
+            gas_exp_byte: 10,//50,
             gas_sha3: 30,
             gas_sha3_word: 6,
-            gas_balance: 400,
+            gas_balance: 20, //400,
             gas_memory: 3,
-            gas_sload: 200,
+            gas_sload: 50, //200,
             gas_sstore_noop: 200,
             gas_sstore_init: 20000,
             gas_sstore_clear_refund: 15000,
@@ -114,14 +116,14 @@ impl Default for InterpreterConf {
             gas_create: 32000,
             gas_jumpdest: 1,
             gas_copy: 3,
-            gas_call: 700,
+            gas_call: 40,//700,
             gas_call_value_transfer: 9000,
             gas_call_stipend: 2300,
-            gas_self_destruct: 5000,
+            gas_self_destruct: 0,//5000,
             gas_self_destruct_refund: 24000,
-            gas_extcode: 700,
+            gas_extcode: 20,//700,
             gas_call_new_account: 25000,
-            gas_self_destruct_new_account: 25000,
+            gas_self_destruct_new_account: 0,//25000,
             gas_ext_code_hash: 400,
         }
     }
@@ -214,6 +216,7 @@ impl Interpreter {
             // Gas cost and mem expand.
             let op_gas = self.cfg.gas_tier_step[op.gas_price_tier().idx()];
             self.use_gas(op_gas)?;
+            println!("********** interpert run op {:?}",op);
             match op {
                 opcodes::OpCode::EXP => {
                     let expon = self.stack.back(1);
@@ -263,6 +266,7 @@ impl Interpreter {
                     let mem_offset = self.stack.back(0);
                     let size = self.stack.back(2);
                     self.mem_gas_work(mem_offset, size)?;
+                    println!("***** RETURNDATACOPY return data {:?},size {:?}",self.return_data,size);
                     let size_min = cmp::min(self.return_data.len() as u64, size.low_u64());
                     let gas = common::to_word_size(size_min) * self.cfg.gas_copy;
                     self.use_gas(gas)?;
@@ -290,6 +294,8 @@ impl Interpreter {
                     let new_value = self.stack.back(1);
                     let original_value =
                         U256::from(&*self.data_provider.get_storage_origin(&self.params.address, &address));
+
+                    println!("************ SSTORE address {:?} cur {:?} new {:?}",address,current_value,new_value);
                     let gas: u64 = {
                         if self.cfg.eip1283 {
                             // See https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1283.md
@@ -358,6 +364,7 @@ impl Interpreter {
                 opcodes::OpCode::CREATE => {
                     let mem_offset = self.stack.back(1);
                     let mem_len = self.stack.back(2);
+                    println!("******* mem len {:?} max code size {:?}",mem_len,U256::from(self.cfg.max_create_code_size));
                     if mem_len > U256::from(self.cfg.max_create_code_size) {
                         return Err(err::Error::ExccedMaxCodeSize);
                     }
@@ -378,7 +385,10 @@ impl Interpreter {
                     self.use_gas(self.cfg.gas_call)?;
 
                     let is_value_transfer = !value.is_zero();
-                    if op == opcodes::OpCode::CALL && is_value_transfer && self.data_provider.is_empty(&address) {
+
+                    println!("\n****** value transfer {:?} \n",self.data_provider.get_balance(&address));
+                    if op == opcodes::OpCode::CALL
+                        && (!self.cfg.no_empty && !self.data_provider.exist(&address) || (self.cfg.no_empty && is_value_transfer && self.data_provider.is_empty(&address))) {
                         self.use_gas(self.cfg.gas_call_new_account)?;
                     }
                     if is_value_transfer {
@@ -409,6 +419,7 @@ impl Interpreter {
                 opcodes::OpCode::CREATE2 => {
                     let mem_offset = self.stack.back(1);
                     let mem_len = self.stack.back(2);
+                    println!("******* mem len 2 {:?} max code size {:?}",mem_len,U256::from(self.cfg.max_create_code_size));
                     if mem_len > U256::from(self.cfg.max_create_code_size) {
                         return Err(err::Error::ExccedMaxCodeSize);
                     }
@@ -728,6 +739,7 @@ impl Interpreter {
                     let raw_offset = self.stack.pop();
                     let size = self.stack.pop();
                     let return_data_len = U256::from(self.return_data.len());
+                    println!("***** offsert {:?} size {:?} return_len {:?} memoff {:?}",raw_offset,size,return_data_len,mem_offset);
                     if raw_offset.saturating_add(size) > return_data_len {
                         return Err(err::Error::OutOfBounds);
                     }
@@ -922,9 +934,12 @@ impl Interpreter {
                     });
                     let data = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
                     // Exit immediately if value > balance.
+                    println!("\n********** in create value {:?} address {:?} balance {:?} \n",
+                             value,self.params.address,self.data_provider.get_balance(&self.params.address));
                     if value > self.data_provider.get_balance(&self.params.address) {
                         self.gas += self.gas_tmp;
                         self.stack.push(U256::zero());
+                        println!("******** unused_gas {:?} add tmp gas {:?}",self.gas,self.gas_tmp);
                         continue;
                     }
                     // Exit immediately if depth exceed limit.
@@ -954,6 +969,8 @@ impl Interpreter {
                                 self.stack.push(U256::zero());
                                 self.gas += gas;
                                 self.return_data = ret;
+                                println!("***** InterpreterResult::Revert return data {:?}",self.return_data);
+
                             }
                             _ => {}
                         },
@@ -993,6 +1010,9 @@ impl Interpreter {
                         gas += self.cfg.gas_call_stipend;
                     }
                     // Exit immediately if value > balance.
+                    println!("\n********** in call  value {:?} address {:?} balance {:?} gas {:?} \n",
+                             value,self.params.address,self.data_provider.get_balance(&self.params.address),gas);
+
                     if value > self.data_provider.get_balance(&self.params.address) {
                         self.gas += gas;
                         self.stack.push(U256::zero());
@@ -1072,10 +1092,12 @@ impl Interpreter {
                                 self.mem.set(out_offset.low_u64() as usize, ret.as_slice());
                                 self.gas += gas;
                                 self.logs.extend(logs);
+                                println!("***** normal result return data {:?} gas {:?} self.gas {:?}",self.return_data,gas,self.gas);
                             }
                             InterpreterResult::Revert(mut ret, gas) => {
                                 self.stack.push(U256::zero());
                                 self.return_data = ret.clone();
+                                println!("***** revert result return data {:?}",self.return_data);
                                 if ret.len() > out_len.low_u64() as usize {
                                     ret.resize(out_len.low_u64() as usize, 0u8);
                                 }
@@ -1094,6 +1116,7 @@ impl Interpreter {
                     let mem_len = self.stack.pop();
                     let r = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
                     let return_data = Vec::from(r);
+                    //println!("***** return op return data {:?}",return_data);
                     return Ok(InterpreterResult::Normal(
                         return_data.clone(),
                         self.gas,
@@ -1105,6 +1128,7 @@ impl Interpreter {
                     let mem_len = self.stack.pop();
                     let r = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
                     let return_data = Vec::from(r);
+                    println!("***** revert op return data {:?}",return_data);
                     return Ok(InterpreterResult::Revert(return_data.clone(), self.gas));
                 }
                 opcodes::OpCode::SELFDESTRUCT => {
@@ -1132,6 +1156,7 @@ impl Interpreter {
 
     fn use_gas(&mut self, gas: u64) -> Result<(), err::Error> {
         debug!("[Gas] - {}", gas);
+        println!("******** [use_gas] self {:?} gas {:?}",self.gas, gas);
         if self.gas < gas {
             return Err(err::Error::OutOfGas);
         }

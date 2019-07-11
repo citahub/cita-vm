@@ -119,7 +119,7 @@ pub struct Vm {
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
-pub struct Test(BTreeMap<String, Vm>);
+pub struct Test(pub BTreeMap<String, Vm>);
 
 impl IntoIterator for Test {
     type Item = <BTreeMap<String, Vm> as IntoIterator>::Item;
@@ -146,7 +146,9 @@ mod tests {
 
     #[test]
     fn test_json_tests_parse() {
-        let f = fs::File::open("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json").unwrap();
+        let f = fs::File::open("/root/git_resp/cita/tests/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json").unwrap();
+
+        //let f = fs::File::open("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json").unwrap();
         let t = Test::load(f).unwrap();
         assert!(t.0.contains_key("addmodNonConst"));
         let v = &t.0["addmodNonConst"];
