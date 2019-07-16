@@ -13,6 +13,7 @@ pub enum Error {
     CallError,
     ExccedMaxCodeSize,
     InvalidJumpDestination,
+    Internal(String),
 }
 
 impl error::Error for Error {}
@@ -29,6 +30,7 @@ impl fmt::Display for Error {
             Error::CallError => return write!(f, "CallError"),
             Error::ExccedMaxCodeSize => return write!(f, "ExccedMaxCodeSize"),
             Error::InvalidJumpDestination => return write!(f, "InvalidJumpDestination"),
+            Error::Internal(err) => return write!(f, "Internal error {}", err),
         };
     }
 }
