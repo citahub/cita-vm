@@ -12,11 +12,6 @@ fn test_json_file(p: &str) {
     let f = fs::File::open(p).unwrap();
     let t = cita_vm::json_tests::general_state_test::Test::load(f).unwrap();
     for (name, data) in t.into_iter() {
-        /*let data_post_constantinople = data.post.unwrap().constantinople;
-        if data_post_constantinople.is_none() {
-            continue;
-        }*/
-
         let data_post_homestead = data.post.unwrap().homestead;
         if data_post_homestead.is_none() {
             continue;
@@ -76,11 +71,8 @@ fn test_json_file(p: &str) {
             if !data.transaction.to.is_empty() {
                 tx.to = Some(string_2_address(data.transaction.to.clone()));
             }
-            println!("********* tx {:?}",tx);
-            println!("********* cfg {:?}",cfg);
             let exepinst = Executive::new(Arc::new(BlockDataProviderMock::default()), state_provider, cfg);
             let exec_result = exepinst.exec(evm_context, tx);
-            println!("********* exec_result {:?}",exec_result);
             let root = exepinst.commit().unwrap();
             // let _ = exec(
             //     Arc::new(Box::new(BlockDataProviderMock::default())),
@@ -91,8 +83,6 @@ fn test_json_file(p: &str) {
             // );
             // let root = state_provider.borrow_mut().root;
             assert_eq!(root, string_2_h256(postdata.hash.clone()));
-
-            println!("---------------------------------------------------------\n\n");
         }
     }
 }
@@ -2452,42 +2442,42 @@ fn test_state_pass() {
         skip("precompile", "/tmp/jsondata/GeneralStateTests/stZeroKnowledge2/ecadd_1-2_0-0_25000_128.json");
         skip("precompile", "/tmp/jsondata/GeneralStateTests/stZeroKnowledge2/ecadd_1-2_0-0_25000_192.json");*/
 
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stRandom");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stSystemOperationsTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stRecursiveCreate");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stLogTests");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stCodeCopyTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stExtCodeHash");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stCallCodes");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stCreateTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stZeroKnowledge");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stRandom2");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stTransitionTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stZeroCallsTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stBugs");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stBadOpcode");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stWalletTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stNonZeroCallsTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stCallDelegateCodesHomestead");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stAttackTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stStackTests");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stExample");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stSolidityTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stQuadraticComplexityTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stPreCompiledContracts2");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stInitCodeTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stDelegatecallTestHomestead");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stMemoryTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stSpecialTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stShift");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stHomesteadSpecific");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stCodeSizeLimit");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stReturnDataTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stTransactionTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stRevertTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stMemoryStressTest");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stCallDelegateCodesCallCodeHomestead");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stMemExpandingEIP150Calls");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stRefundTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stRandom");
+        test_json_path(r"../jsondata/GeneralStateTests/stSystemOperationsTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stRecursiveCreate");
+        test_json_path(r"../jsondata/GeneralStateTests/stLogTests");
+        test_json_path(r"../jsondata/GeneralStateTests/stCodeCopyTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stExtCodeHash");
+        test_json_path(r"../jsondata/GeneralStateTests/stCallCodes");
+        test_json_path(r"../jsondata/GeneralStateTests/stCreateTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stZeroKnowledge");
+        test_json_path(r"../jsondata/GeneralStateTests/stRandom2");
+        test_json_path(r"../jsondata/GeneralStateTests/stTransitionTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stZeroCallsTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stBugs");
+        test_json_path(r"../jsondata/GeneralStateTests/stBadOpcode");
+        test_json_path(r"../jsondata/GeneralStateTests/stWalletTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stNonZeroCallsTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stCallDelegateCodesHomestead");
+        test_json_path(r"../jsondata/GeneralStateTests/stAttackTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stStackTests");
+        test_json_path(r"../jsondata/GeneralStateTests/stExample");
+        test_json_path(r"../jsondata/GeneralStateTests/stSolidityTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stQuadraticComplexityTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stPreCompiledContracts2");
+        test_json_path(r"../jsondata/GeneralStateTests/stInitCodeTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stDelegatecallTestHomestead");
+        test_json_path(r"../jsondata/GeneralStateTests/stMemoryTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stSpecialTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stShift");
+        test_json_path(r"../jsondata/GeneralStateTests/stHomesteadSpecific");
+        test_json_path(r"../jsondata/GeneralStateTests/stCodeSizeLimit");
+        test_json_path(r"../jsondata/GeneralStateTests/stReturnDataTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stTransactionTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stRevertTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stMemoryStressTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stCallDelegateCodesCallCodeHomestead");
+        test_json_path(r"../jsondata/GeneralStateTests/stMemExpandingEIP150Calls");
+        test_json_path(r"../jsondata/GeneralStateTests/stRefundTest");
     }).unwrap().join().unwrap();
 }

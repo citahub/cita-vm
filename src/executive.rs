@@ -72,7 +72,6 @@ impl Store {
     /// When a account has been read or write, record a log
     /// to prove that it has dose.
     pub fn used(&mut self, address: Address) {
-        println!("*********** store used={:?}", address);
         if address == Address::zero() {
             return;
         }
@@ -260,8 +259,6 @@ fn call<B: DB + 'static>(
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
 ) -> Result<evm::InterpreterResult, err::Error> {
-    //println!("call request={:?}", request);
-
 
     // Here not need check twice,becauce prepay is subed ,but need think call_static
     /*if !request.disable_transfer_value && state_provider.borrow_mut().balance(&request.sender)? < request.value {
@@ -347,7 +344,6 @@ fn create<B: DB + 'static>(
     match r {
         Ok(evm::InterpreterResult::Normal(output, gas_left, logs)) => {
             // Ensure code size
-            println!("******* output len {:?} max code size {:?}",output.len(),MAX_CREATE_CODE_SIZE);
             if output.len() as u64 > MAX_CREATE_CODE_SIZE {
                 state_provider.borrow_mut().revert_checkpoint();
                 return Err(err::Error::ExccedMaxCodeSize);
@@ -472,7 +468,6 @@ pub fn exec<B: DB + 'static>(
     // Increament the nonce for the next transaction
     state_provider.borrow_mut().inc_nonce(&request.sender)?;
 
-    //println!("************ before request {:?}",request);
     // Init the store for the transaction
     let mut store = Store::default();
     store.evm_cfg = get_interpreter_conf();
@@ -494,10 +489,8 @@ pub fn exec<B: DB + 'static>(
         call(block_provider.clone(), state_provider.clone(), store.clone(), &reqchan)
     };
     // Finalize
-    println!("**** call or create exec result={:?}", r);
     match r {
         Ok(evm::InterpreterResult::Normal(output, gas_left, logs)) => {
-            println!("exec gas_left={:?}", gas_left);
             let refund = get_refund(store.clone(), &request, gas_left);
             clear(state_provider.clone(), store.clone(), &request, gas_left, refund)?;
             // Handle self destruct: Kill it.
@@ -509,18 +502,14 @@ pub fn exec<B: DB + 'static>(
             Ok(evm::InterpreterResult::Normal(output, gas_left, logs))
         }
         Ok(evm::InterpreterResult::Revert(output, gas_left)) => {
-            println!("exec gas_left={:?}", gas_left);
             clear(state_provider.clone(), store.clone(), &request, gas_left, 0)?;
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
             Ok(evm::InterpreterResult::Revert(output, gas_left))
         }
         Ok(evm::InterpreterResult::Create(output, gas_left, logs, addr)) => {
-            println!("**** exec create gas_left={:?}", gas_left);
             let refund = get_refund(store.clone(), &request, gas_left);
-            println!("**** exec create refund={:?} store {:?} request {:?}", refund,store,request);
             clear(state_provider.clone(), store.clone(), &request, gas_left, refund)?;
             for e in store.borrow_mut().selfdestruct.drain() {
-                println!("**** exec create selfdestruct drain {:?}", e);
                 state_provider.borrow_mut().kill_contract(&e)
             }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
@@ -579,6 +568,15 @@ impl<B: DB + 'static> Executive<B> {
     }
 
     pub fn exec(&self, evm_context: evm::Context, tx: Transaction) -> Result<evm::InterpreterResult, err::Error> {
+        exec(
+            self.block_provider.clone(),
+            self.state_provider.clone(),
+            evm_context,
+            self.config.clone(),
+            tx.clone(),
+        )
+        // Bellow is saved for jsondata test
+        /*
         let coinbase = evm_context.coinbase;
         let exec_result = exec(
             self.block_provider.clone(),
@@ -587,8 +585,6 @@ impl<B: DB + 'static> Executive<B> {
             self.config.clone(),
             tx.clone(),
         );
-
-        // to be deleted
         match exec_result {
             Err(err::Error::ExccedMaxBlockGasLimit)
             | Err(err::Error::NotEnoughBaseGas)
@@ -603,7 +599,7 @@ impl<B: DB + 'static> Executive<B> {
                         balance
                     }
                 };
-                self.state_provider.borrow_mut().sub_balance(&tx.from, real.clone())?;
+                self.state_provider.borrow_mut().sub_balance(&tx.from, real)?;
                 self.state_provider.borrow_mut().add_balance(&coinbase,real)?;
                 self.state_provider.borrow_mut().inc_nonce(&tx.from)?;
 
@@ -617,6 +613,7 @@ impl<B: DB + 'static> Executive<B> {
             Ok(_) => {}
         }
         exec_result
+        */
     }
 
     pub fn exec_static(
@@ -650,7 +647,6 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     }
 
     fn add_refund(&mut self, address: &Address, n: u64) {
-        println!("ext.add_refund {:?} {}", address, n);
         self.store
             .borrow_mut()
             .refund

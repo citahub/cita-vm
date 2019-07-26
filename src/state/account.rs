@@ -265,14 +265,12 @@ impl StateObject {
 
     /// Flush data in storage cache to database.
     pub fn commit_storage<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
-        //println!("*****--- self.commit_storage {:?}", self.storage_root);
         let mut trie = if self.storage_root == common::hash::RLP_NULL {
             PatriciaTrie::new(db, Arc::new(hash::get_hasher()))
         } else {
             PatriciaTrie::from(db, Arc::new(hash::get_hasher()), &self.storage_root.0)?
         };
 
-        //println!("*****--- self.storage_changes {:?}", self.storage_changes);
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
                 trie.remove(&k)?;
@@ -281,9 +279,7 @@ impl StateObject {
             }
         }
 
-        //println!("***trie**[ {:?} ]*******", trie.root()?);
         self.storage_root = H256::from(&(trie.root()?)[..]);
-        println!("*****--- self.storage_root {:?}", self.storage_root);
         Ok(())
     }
 

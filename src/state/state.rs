@@ -56,10 +56,6 @@ impl<B: DB> State<B> {
     /// Create a contract account with code or not
     /// Overwrite the code if the contract already exists
     pub fn new_contract(&mut self, contract: &Address, balance: U256, nonce: U256, code: Vec<u8>) -> StateObject {
-        println!(
-            "state.new_contract contract={:?} balance={:?}, nonce={:?} code={:?}",
-            contract, balance, nonce, code
-        );
         let mut state_object = StateObject::new(balance, nonce);
         state_object.init_code(code);
 
@@ -69,7 +65,6 @@ impl<B: DB> State<B> {
 
     /// Kill a contract.
     pub fn kill_contract(&mut self, contract: &Address) {
-        println!("state.kill_contract contract={:?}", contract);
         self.insert_cache(contract, StateObjectEntry::new_dirty(None));
     }
 
@@ -101,7 +96,6 @@ impl<B: DB> State<B> {
     where
         F: Fn(Option<&StateObject>) -> U,
     {
-        //println!("******* call_with_cached {:?} ",address);
         if let Some(state_object_entry) = self.cache.borrow().get(address) {
             if let Some(state_object) = &state_object_entry.state_object {
                 return Ok(f(Some(state_object)));
@@ -165,7 +159,6 @@ impl<B: DB> State<B> {
 
     /// Get the storage proof for given account and key.
     pub fn get_storage_proof(&self, address: &Address, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
-        println!("************** get_storage_proof address {:?}",address);
         self.call_with_cached(address, |a| match a {
             Some(data) => {
                 let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
@@ -177,7 +170,6 @@ impl<B: DB> State<B> {
 
     /// Check if an account exists.
     pub fn exist(&mut self, address: &Address) -> Result<bool, Error> {
-        println!("************** exist address {:?}",address);
         self.call_with_cached(address, |a| Ok(a.is_some()))?
     }
 
@@ -185,19 +177,17 @@ impl<B: DB> State<B> {
     /// EIP161 (balance = nonce = code = 0).
     #[allow(clippy::wrong_self_convention)]
     pub fn is_empty(&mut self, address: &Address) -> Result<bool, Error> {
-        println!("************** is_empty address {:?}",address);
         self.call_with_cached(address, |a| match a {
             Some(data) => {
-                println!("************** is_empty data {:?}",data);
                 Ok(data.is_empty())
             },
-            None => Ok(false),
+            None => Ok(true),
         })?
     }
 
     /// Set (key, value) in storage cache.
     pub fn set_storage(&mut self, address: &Address, key: H256, value: H256) -> Result<(), Error> {
-        println!(
+        debug!(
             "state.set_storage address={:?} key={:?} value={:?}",
             address, key, value
         );
@@ -213,9 +203,6 @@ impl<B: DB> State<B> {
                 Some(ref mut state_object) => {
                     state_object.set_storage(key, value);
                     state_object_entry.status = ObjectStatus::Dirty;
-                    println!(
-                        "state.set_storage state_object={:?}",state_object
-                    );
                 }
                 None => panic!("state object always exist in cache."),
             }
@@ -225,7 +212,6 @@ impl<B: DB> State<B> {
 
     /// Set code for an account.
     pub fn set_code(&mut self, address: &Address, code: Vec<u8>) -> Result<(), Error> {
-        println!("state.set_code address={:?} code={:?}", address, code);
         let mut state_object = self.get_state_object_or_default(address)?;
         state_object.init_code(code);
         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
@@ -234,7 +220,6 @@ impl<B: DB> State<B> {
 
     /// Set abi for an account.
     pub fn set_abi(&mut self, address: &Address, abi: Vec<u8>) -> Result<(), Error> {
-        println!("state.set_abi address={:?} abi={:?}", address, abi);
         let mut state_object = self.get_state_object_or_default(address)?;
         state_object.init_abi(abi);
         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
@@ -243,7 +228,6 @@ impl<B: DB> State<B> {
 
     /// Add balance by incr for an account.
     pub fn add_balance(&mut self, address: &Address, incr: U256) -> Result<(), Error> {
-        println!("state.add_balance a={:?} incr={:?}", address, incr);
         if incr.is_zero() {
             return Ok(());
         }
@@ -252,14 +236,12 @@ impl<B: DB> State<B> {
             return Err(Error::BalanceError);
         }
         state_object.add_balance(incr);
-        //println!("**** add_balance address {:?} {:?}", address, state_object);
         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
         Ok(())
     }
 
     /// Sub balance by decr for an account.
     pub fn sub_balance(&mut self, a: &Address, decr: U256) -> Result<(), Error> {
-        println!("state.sub_balance a={:?} decr={:?}", a, decr);
         if decr.is_zero() {
             return Ok(());
         }
@@ -281,7 +263,6 @@ impl<B: DB> State<B> {
 
     /// Increase nonce for an account.
     pub fn inc_nonce(&mut self, address: &Address) -> Result<(), Error> {
-        println!("state.inc_nonce a={:?}", address);
         let mut state_object = self.get_state_object_or_default(address)?;
         state_object.inc_nonce();
         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
@@ -290,7 +271,6 @@ impl<B: DB> State<B> {
 
     /// Insert a state object entry into cache.
     fn insert_cache(&self, address: &Address, state_object_entry: StateObjectEntry) {
-        //println!("************ insert cache address {:?}, state_object {:?}",address,state_object_entry);
         let is_dirty = state_object_entry.is_dirty();
         let old_entry = self
             .cache
@@ -319,10 +299,6 @@ impl<B: DB> State<B> {
                 }
 
                 if let Some(ref mut state_object) = entry.state_object {
-                    /*println!(
-                        "********************** commit_storage addr {:?} {:?}",
-                        address, state_object
-                    );*/
                     let accdb = Arc::new(AccountDB::new(*address, Arc::clone(&db)));
                     state_object.commit_storage(Arc::clone(&accdb))?;
                     state_object.commit_code(Arc::clone(&db))?;
@@ -332,7 +308,6 @@ impl<B: DB> State<B> {
             })
             .collect::<Result<(), Error>>()?;
 
-        //println!("***** root-- {:?}", self.root);
         // Secondly, update the world state tree
         let mut trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
 
@@ -343,10 +318,8 @@ impl<B: DB> State<B> {
             .filter(|&(_, ref a)| a.is_dirty())
             .map(|(address, entry)| {
                 entry.status = ObjectStatus::Committed;
-                println!("***** in state_object-- address {:?} -- {:?}",address, entry.state_object);
                 match entry.state_object {
                     Some(ref mut state_object) => {
-                        //println!("***** in state_object rlp-- {:x?}", rlp::encode(&state_object.account()));
                         (address.to_vec(), rlp::encode(&state_object.account()))
                     },
                     None => (address.to_vec(), vec![]),
@@ -354,7 +327,6 @@ impl<B: DB> State<B> {
             })
             .collect::<Vec<(Vec<u8>, Vec<u8>)>>();
 
-        //println!("**** key values {:x?}", key_values);
         for (key, value) in key_values.into_iter() {
             trie.insert(key, value)?;
         }
@@ -382,7 +354,6 @@ impl<B: DB> State<B> {
 
     /// Merge last checkpoint with previous.
     pub fn discard_checkpoint(&mut self) {
-        //println!("state.discard_checkpoint {:?}",self.checkpoints);
         let last = self.checkpoints.borrow_mut().pop();
         if let Some(mut checkpoint) = last {
             if let Some(prev) = self.checkpoints.borrow_mut().last_mut() {
@@ -448,18 +419,15 @@ pub trait StateObjectInfo {
 
 impl<B: DB> StateObjectInfo for State<B> {
     fn nonce(&mut self, address: &Address) -> Result<U256, Error> {
-        println!("************** nonce address {:?}",address);
         self.call_with_cached(address, |a| Ok(a.map_or(U256::zero(), |e| e.nonce)))?
     }
 
     fn balance(&mut self, address: &Address) -> Result<U256, Error> {
-        println!("************** balance address {:?}",address);
         self.call_with_cached(address, |a| Ok(a.map_or(U256::zero(), |e|
             e.balance)))?
     }
 
     fn get_storage(&mut self, address: &Address, key: &H256) -> Result<H256, Error> {
-        println!("************** get_storage address {:?}",address);
         self.call_with_cached(address, |a| match a {
             Some(state_object) => {
                 let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
@@ -473,32 +441,26 @@ impl<B: DB> StateObjectInfo for State<B> {
     }
 
     fn code(&mut self, address: &Address) -> Result<Vec<u8>, Error> {
-        println!("************** code address {:?}",address);
         self.call_with_cached(address, |a| Ok(a.map_or(vec![], |e| e.code.clone())))?
     }
 
     fn code_hash(&mut self, address: &Address) -> Result<H256, Error> {
-        println!("************** code_hash address {:?}",address);
         self.call_with_cached(address, |a| Ok(a.map_or(H256::zero(), |e| e.code_hash)))?
     }
 
     fn code_size(&mut self, address: &Address) -> Result<usize, Error> {
-        println!("************** code_size address {:?}",address);
         self.call_with_cached(address, |a| Ok(a.map_or(0, |e| e.code_size)))?
     }
 
     fn abi(&mut self, address: &Address) -> Result<Vec<u8>, Error> {
-        println!("************** abi address {:?}",address);
         self.call_with_cached(address, |a| Ok(a.map_or(vec![], |e| e.abi.clone())))?
     }
 
     fn abi_hash(&mut self, address: &Address) -> Result<H256, Error> {
-        println!("************** abi_hash address {:?}",address);
         self.call_with_cached(address, |a| Ok(a.map_or(H256::zero(), |e| e.abi_hash)))?
     }
 
     fn abi_size(&mut self, address: &Address) -> Result<usize, Error> {
-        println!("************** abi_size address {:?}",address);
         self.call_with_cached(address, |a| Ok(a.map_or(0, |e| e.abi_size)))?
     }
 }
