@@ -34,7 +34,7 @@ pub enum InterpreterResult {
     Create(Vec<u8>, u64, Vec<Log>, Address),
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct InterpreterConf {
     pub no_empty: bool,
     pub eip1283: bool,
@@ -93,7 +93,7 @@ impl Default for InterpreterConf {
 
             gas_tier_step: [0, 2, 3, 5, 8, 10, 20, 0],
             gas_exp: 10,
-            gas_exp_byte: 10,//50,
+            gas_exp_byte: 10, //50,
             gas_sha3: 30,
             gas_sha3_word: 6,
             gas_balance: 20, //400,
@@ -116,14 +116,14 @@ impl Default for InterpreterConf {
             gas_create: 32000,
             gas_jumpdest: 1,
             gas_copy: 3,
-            gas_call: 40,//700,
+            gas_call: 40, //700,
             gas_call_value_transfer: 9000,
             gas_call_stipend: 2300,
-            gas_self_destruct: 0,//5000,
+            gas_self_destruct: 0, //5000,
             gas_self_destruct_refund: 24000,
-            gas_extcode: 20,//700,
+            gas_extcode: 20, //700,
             gas_call_new_account: 25000,
-            gas_self_destruct_new_account: 0,//25000,
+            gas_self_destruct_new_account: 0, //25000,
             gas_ext_code_hash: 400,
         }
     }
@@ -382,7 +382,9 @@ impl Interpreter {
                     let is_value_transfer = !value.is_zero();
 
                     if op == opcodes::OpCode::CALL
-                        && (!self.cfg.no_empty && !self.data_provider.exist(&address) || (self.cfg.no_empty && is_value_transfer && self.data_provider.is_empty(&address))) {
+                        && (!self.cfg.no_empty && !self.data_provider.exist(&address)
+                            || (self.cfg.no_empty && is_value_transfer && self.data_provider.is_empty(&address)))
+                    {
                         self.use_gas(self.cfg.gas_call_new_account)?;
                     }
                     if is_value_transfer {

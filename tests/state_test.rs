@@ -72,7 +72,7 @@ fn test_json_file(p: &str) {
                 tx.to = Some(string_2_address(data.transaction.to.clone()));
             }
             let exepinst = Executive::new(Arc::new(BlockDataProviderMock::default()), state_provider, cfg);
-            let exec_result = exepinst.exec(evm_context, tx);
+            let _exec_result = exepinst.exec(evm_context, tx);
             let root = exepinst.commit().unwrap();
             // let _ = exec(
             //     Arc::new(Box::new(BlockDataProviderMock::default())),
@@ -110,7 +110,7 @@ fn test_json_path(p: &str) {
 }
 
 // The reason contains "bug", "overflow", "slow", "precompile" and "obsolete".
-#[allow(unused_variables)]
+#[allow(dead_code)]
 fn skip(reason: &str, name: &str) {}
 
 #[rustfmt::skip]

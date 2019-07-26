@@ -99,12 +99,14 @@ impl ext::DataProvider for DataProviderMock {
         match self.db.get(address) {
             Some(account) => {
                 account.balance == U256::zero() && account.code.is_empty() && account.nonce == U256::zero()
-            },
+            }
             None => true,
         }
     }
 
-    fn exist(&self, address: &Address) ->bool {self.db.get(address).is_none()}
+    fn exist(&self, address: &Address) -> bool {
+        self.db.get(address).is_none()
+    }
 
     fn call(
         &self,

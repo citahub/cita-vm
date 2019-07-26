@@ -44,7 +44,7 @@ impl BlockDataProvider for BlockDataProviderMock {
 }
 
 /// Store storages shared datas.
-#[derive(Clone, Default,Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct Store {
     refund: HashMap<Address, u64>,                 // For record refunds
     origin: HashMap<Address, HashMap<H256, H256>>, // For record origin value
@@ -259,7 +259,6 @@ fn call<B: DB + 'static>(
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
 ) -> Result<evm::InterpreterResult, err::Error> {
-
     // Here not need check twice,becauce prepay is subed ,but need think call_static
     /*if !request.disable_transfer_value && state_provider.borrow_mut().balance(&request.sender)? < request.value {
         return Err(err::Error::NotEnoughBalance);
@@ -378,8 +377,8 @@ fn create<B: DB + 'static>(
     }
 }
 
-const G_TX_DATA_ZERO: u64 = 0;//4; // Paid for every zero byte of data or code for a transaction
-const G_TX_DATA_NON_ZERO: u64 = 0;//68; // Paid for every non-zero byte of data or code for a transaction
+const G_TX_DATA_ZERO: u64 = 0; //4; // Paid for every zero byte of data or code for a transaction
+const G_TX_DATA_NON_ZERO: u64 = 0; //68; // Paid for every non-zero byte of data or code for a transaction
 const G_TRANSACTION: u64 = 21000; // Paid for every transaction
 const G_CREATE: u64 = 32000; // Paid for contract create
 const G_CODE_DEPOSIT: u64 = 200; // Paid per byte for a CREATE operation to succeed in placing code into state.
@@ -434,7 +433,7 @@ pub fn exec<B: DB + 'static>(
     config: Config,
     tx: Transaction,
 ) -> Result<evm::InterpreterResult, err::Error> {
-    let request = &reinterpret_tx(tx, state_provider.clone());
+    let mut request = &mut reinterpret_tx(tx, state_provider.clone());
     // Ensure gas < block_gas_limit
 
     /* TODO : this judgement need be reconsider
@@ -448,6 +447,8 @@ pub fn exec<B: DB + 'static>(
         if request.nonce != state_provider.borrow_mut().nonce(&request.sender)? {
             return Err(err::Error::InvalidNonce);
         }
+    } else {
+        request.nonce = state_provider.borrow_mut().nonce(&request.sender)?;
     }
     // Ensure gas
     let gas_prepare = get_gas_prepare(request);
@@ -568,15 +569,15 @@ impl<B: DB + 'static> Executive<B> {
     }
 
     pub fn exec(&self, evm_context: evm::Context, tx: Transaction) -> Result<evm::InterpreterResult, err::Error> {
-        exec(
+        /*exec(
             self.block_provider.clone(),
             self.state_provider.clone(),
             evm_context,
             self.config.clone(),
             tx.clone(),
-        )
+        )*/
         // Bellow is saved for jsondata test
-        /*
+
         let coinbase = evm_context.coinbase;
         let exec_result = exec(
             self.block_provider.clone(),
@@ -589,7 +590,7 @@ impl<B: DB + 'static> Executive<B> {
             Err(err::Error::ExccedMaxBlockGasLimit)
             | Err(err::Error::NotEnoughBaseGas)
             | Err(err::Error::InvalidNonce)
-            |Err(err::Error::NotEnoughBalance) => {
+            | Err(err::Error::NotEnoughBalance) => {
                 let balance = tx.gas_price * G_TRANSACTION;
                 let account_balance = self.state_provider.borrow_mut().balance(&tx.from)?;
                 let real = {
@@ -600,20 +601,14 @@ impl<B: DB + 'static> Executive<B> {
                     }
                 };
                 self.state_provider.borrow_mut().sub_balance(&tx.from, real)?;
-                self.state_provider.borrow_mut().add_balance(&coinbase,real)?;
+                self.state_provider.borrow_mut().add_balance(&coinbase, real)?;
                 self.state_provider.borrow_mut().inc_nonce(&tx.from)?;
-
-            },
-            Err(err::Error::Evm(_)) => {
-
             }
-            Err(_) => {
-
-            }
+            Err(err::Error::Evm(_)) => {}
+            Err(_) => {}
             Ok(_) => {}
         }
         exec_result
-        */
     }
 
     pub fn exec_static(

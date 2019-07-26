@@ -178,9 +178,7 @@ impl<B: DB> State<B> {
     #[allow(clippy::wrong_self_convention)]
     pub fn is_empty(&mut self, address: &Address) -> Result<bool, Error> {
         self.call_with_cached(address, |a| match a {
-            Some(data) => {
-                Ok(data.is_empty())
-            },
+            Some(data) => Ok(data.is_empty()),
             None => Ok(true),
         })?
     }
@@ -319,9 +317,7 @@ impl<B: DB> State<B> {
             .map(|(address, entry)| {
                 entry.status = ObjectStatus::Committed;
                 match entry.state_object {
-                    Some(ref mut state_object) => {
-                        (address.to_vec(), rlp::encode(&state_object.account()))
-                    },
+                    Some(ref mut state_object) => (address.to_vec(), rlp::encode(&state_object.account())),
                     None => (address.to_vec(), vec![]),
                 }
             })
@@ -423,8 +419,7 @@ impl<B: DB> StateObjectInfo for State<B> {
     }
 
     fn balance(&mut self, address: &Address) -> Result<U256, Error> {
-        self.call_with_cached(address, |a| Ok(a.map_or(U256::zero(), |e|
-            e.balance)))?
+        self.call_with_cached(address, |a| Ok(a.map_or(U256::zero(), |e| e.balance)))?
     }
 
     fn get_storage(&mut self, address: &Address, key: &H256) -> Result<H256, Error> {
