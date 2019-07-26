@@ -2452,7 +2452,7 @@ fn test_state_pass() {
         skip("precompile", "/tmp/jsondata/GeneralStateTests/stZeroKnowledge2/ecadd_1-2_0-0_25000_128.json");
         skip("precompile", "/tmp/jsondata/GeneralStateTests/stZeroKnowledge2/ecadd_1-2_0-0_25000_192.json");*/
 
-        /*test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stRandom");
+        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stRandom");
         test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stSystemOperationsTest");
         test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stRecursiveCreate");
         test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stLogTests");
@@ -2480,7 +2480,7 @@ fn test_state_pass() {
         test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stMemoryTest");
         test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stSpecialTest");
         test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stShift");
-        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stHomesteadSpecific");*/
+        test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stHomesteadSpecific");
         test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stCodeSizeLimit");
         test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stReturnDataTest");
         test_json_path(r"/root/git_resp/cita/tests/jsondata/GeneralStateTests/stTransactionTest");

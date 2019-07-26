@@ -202,6 +202,7 @@ pub fn clear<B: DB + 'static>(
 pub struct Config {
     pub block_gas_limit: u64, // gas limit for a block.
     pub check_nonce: bool,
+    pub check_balance: bool,
 }
 
 impl Default for Config {
@@ -209,6 +210,7 @@ impl Default for Config {
         Config {
             block_gas_limit: 8_000_000,
             check_nonce: false,
+            check_balance: true,
         }
     }
 }
@@ -259,8 +261,9 @@ fn call<B: DB + 'static>(
     request: &InterpreterParams,
 ) -> Result<evm::InterpreterResult, err::Error> {
     //println!("call request={:?}", request);
-    // Ensure balance
-    // don't check twice,but need think call_static
+
+
+    // Here not need check twice,becauce prepay is subed ,but need think call_static
     /*if !request.disable_transfer_value && state_provider.borrow_mut().balance(&request.sender)? < request.value {
         return Err(err::Error::NotEnoughBalance);
     }*/
@@ -455,13 +458,17 @@ pub fn exec<B: DB + 'static>(
     if request.gas_limit < gas_prepare {
         return Err(err::Error::NotEnoughBaseGas);
     }
+
     // Ensure value
-    let gas_prepay = request.gas_price * request.gas_limit;
-    if state_provider.borrow_mut().balance(&request.sender)? < gas_prepay + request.value {
-        return Err(err::Error::NotEnoughBalance);
+    if config.check_balance {
+        let gas_prepay = request.gas_price * request.gas_limit;
+        if state_provider.borrow_mut().balance(&request.sender)? < gas_prepay + request.value {
+            return Err(err::Error::NotEnoughBalance);
+        }
+        // Pay intrinsic gas
+        state_provider.borrow_mut().sub_balance(&request.sender, gas_prepay)?;
     }
-    // Pay intrinsic gas
-    state_provider.borrow_mut().sub_balance(&request.sender, gas_prepay)?;
+
     // Increament the nonce for the next transaction
     state_provider.borrow_mut().inc_nonce(&request.sender)?;
 
