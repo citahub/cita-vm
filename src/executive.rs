@@ -569,16 +569,16 @@ impl<B: DB + 'static> Executive<B> {
     }
 
     pub fn exec(&self, evm_context: evm::Context, tx: Transaction) -> Result<evm::InterpreterResult, err::Error> {
-        /*exec(
+        exec(
             self.block_provider.clone(),
             self.state_provider.clone(),
             evm_context,
             self.config.clone(),
             tx.clone(),
-        )*/
-        // Bellow is saved for jsondata test
+        )
 
-        let coinbase = evm_context.coinbase;
+        // Bellow is saved for jsondata test
+        /*let coinbase = evm_context.coinbase;
         let exec_result = exec(
             self.block_provider.clone(),
             self.state_provider.clone(),
@@ -609,6 +609,7 @@ impl<B: DB + 'static> Executive<B> {
             Ok(_) => {}
         }
         exec_result
+        */
     }
 
     pub fn exec_static(

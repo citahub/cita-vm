@@ -108,15 +108,15 @@ fn test_json_path(p: &str) {
 
 #[test]
 fn test_vm() {
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmArithmeticTest");
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmBitwiseLogicOperation");
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmBlockInfoTest");
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmEnvironmentalInfo");
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmIOandFlowOperations");
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmLogTest");
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmPushDupSwapTest");
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmRandomTest");
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmSha3Test");
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmSystemOperations");
-    test_json_path(r"/root/git_resp/cita/tests/jsondata/VMTests/vmTests");
+    test_json_path(r"../jsondata/VMTests/vmArithmeticTest");
+    test_json_path(r"../jsondata/VMTests/vmBitwiseLogicOperation");
+    test_json_path(r"../jsondata/VMTests/vmBlockInfoTest");
+    test_json_path(r"../jsondata/VMTests/vmEnvironmentalInfo");
+    test_json_path(r"../jsondata/VMTests/vmIOandFlowOperations");
+    test_json_path(r"../jsondata/VMTests/vmLogTest");
+    test_json_path(r"../jsondata/VMTests/vmPushDupSwapTest");
+    test_json_path(r"../jsondata/VMTests/vmRandomTest");
+    test_json_path(r"../jsondata/VMTests/vmSha3Test");
+    test_json_path(r"../jsondata/VMTests/vmSystemOperations");
+    test_json_path(r"../jsondata/VMTests/vmTests");
 }

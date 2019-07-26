@@ -146,10 +146,7 @@ mod tests {
 
     #[test]
     fn test_json_tests_parse() {
-        let f = fs::File::open(
-            "/root/git_resp/cita/tests/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json",
-        )
-        .unwrap();
+        let f = fs::File::open("../jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json").unwrap();
 
         //let f = fs::File::open("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json").unwrap();
         let t = Test::load(f).unwrap();
