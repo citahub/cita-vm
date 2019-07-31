@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use cita_trie::{PatriciaTrie, Trie, DB};
@@ -242,6 +243,17 @@ impl StateObject {
     /// Get value by key from storage cache.
     pub fn get_storage_at_changes(&self, key: &H256) -> Option<H256> {
         self.storage_changes.get(key).and_then(|e| Some(*e))
+    }
+
+    /// Get the storage changes
+    pub fn get_storage_changes(&self) -> BTreeMap<String, String> {
+        let mut result = BTreeMap::new();
+        for (k, v) in self.storage_changes.iter() {
+            let key = String::from("0x") + &hex::encode(*k);
+            let value = String::from("0x") + &hex::encode(*v);
+            result.insert(key.clone(), value.clone());
+        }
+        result
     }
 
     /// Get value by key.
