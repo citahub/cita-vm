@@ -44,7 +44,7 @@ impl BlockDataProvider for BlockDataProviderMock {
 }
 
 /// Store storages shared datas.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Store {
     refund: HashMap<Address, u64>,                 // For record refunds
     origin: HashMap<Address, HashMap<H256, H256>>, // For record origin value
@@ -72,7 +72,9 @@ impl Store {
     /// When a account has been read or write, record a log
     /// to prove that it has dose.
     pub fn used(&mut self, address: Address) {
-        debug!("store used={:?}", address);
+        if address == Address::zero() {
+            return;
+        }
         self.inused.insert(address);
     }
 }
@@ -125,7 +127,7 @@ pub enum CreateKind {
 /// Returns the default interpreter configs for Constantinople.
 pub fn get_interpreter_conf() -> evm::InterpreterConf {
     let mut evm_cfg = evm::InterpreterConf::default();
-    evm_cfg.eip1283 = true;
+    evm_cfg.eip1283 = false;
     evm_cfg
 }
 
@@ -199,13 +201,15 @@ pub fn clear<B: DB + 'static>(
 pub struct Config {
     pub block_gas_limit: u64, // gas limit for a block.
     pub check_nonce: bool,
+    pub check_balance: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
             block_gas_limit: 8_000_000,
-            check_nonce: true,
+            check_nonce: false,
+            check_balance: true,
         }
     }
 }
@@ -227,6 +231,7 @@ fn call_pure<B: DB + 'static>(
             .borrow_mut()
             .transfer_balance(&request.sender, &request.receiver, request.value)?;
     }
+
     // Execute pre-compiled contracts.
     if native::contains(&request.contract.code_address) {
         let c = native::get(request.contract.code_address);
@@ -254,11 +259,10 @@ fn call<B: DB + 'static>(
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
 ) -> Result<evm::InterpreterResult, err::Error> {
-    debug!("call request={:?}", request);
-    // Ensure balance
-    if !request.disable_transfer_value && state_provider.borrow_mut().balance(&request.sender)? < request.value {
+    // Here not need check twice,becauce prepay is subed ,but need think call_static
+    /*if !request.disable_transfer_value && state_provider.borrow_mut().balance(&request.sender)? < request.value {
         return Err(err::Error::NotEnoughBalance);
-    }
+    }*/
     // Run
     state_provider.borrow_mut().checkpoint();
     let store_son = Arc::new(RefCell::new(store.borrow_mut().clone()));
@@ -319,7 +323,7 @@ fn create<B: DB + 'static>(
         &address,
         balance,
         // The init nonce for a new contract is one, see above documents.
-        U256::one(),
+        U256::zero(),
         // The init code should be none. Consider a situation: ContractA will create
         // ContractB with address 0x1ff...fff, but ContractB's init code contains some
         // op like "get code hash from 0x1ff..fff or get code size form 0x1ff...fff",
@@ -373,12 +377,12 @@ fn create<B: DB + 'static>(
     }
 }
 
-const G_TX_DATA_ZERO: u64 = 4; // Paid for every zero byte of data or code for a transaction
-const G_TX_DATA_NON_ZERO: u64 = 68; // Paid for every non-zero byte of data or code for a transaction
+const G_TX_DATA_ZERO: u64 = 0; //4; // Paid for every zero byte of data or code for a transaction
+const G_TX_DATA_NON_ZERO: u64 = 0; //68; // Paid for every non-zero byte of data or code for a transaction
 const G_TRANSACTION: u64 = 21000; // Paid for every transaction
 const G_CREATE: u64 = 32000; // Paid for contract create
 const G_CODE_DEPOSIT: u64 = 200; // Paid per byte for a CREATE operation to succeed in placing code into state.
-const MAX_CREATE_CODE_SIZE: u64 = 24576; // See: https://github.com/ethereum/EIPs/issues/659
+const MAX_CREATE_CODE_SIZE: u64 = std::u64::MAX; // See: https://github.com/ethereum/EIPs/issues/659
 
 /// Transaction struct.
 #[derive(Clone, Debug)]
@@ -429,36 +433,47 @@ pub fn exec<B: DB + 'static>(
     config: Config,
     tx: Transaction,
 ) -> Result<evm::InterpreterResult, err::Error> {
-    let request = &reinterpret_tx(tx, state_provider.clone());
+    let mut request = &mut reinterpret_tx(tx, state_provider.clone());
     // Ensure gas < block_gas_limit
-    if config.block_gas_limit > G_TRANSACTION && request.gas_limit > config.block_gas_limit {
+
+    /* TODO : this judgement need be reconsider
+     fi config.block_gas_limit > G_TRANSACTION && request.gas_limit > config.block_gas_limit {
         return Err(err::Error::ExccedMaxBlockGasLimit);
     }
+    */
+
     if config.check_nonce {
         // Ensure nonce
         if request.nonce != state_provider.borrow_mut().nonce(&request.sender)? {
             return Err(err::Error::InvalidNonce);
         }
+    } else {
+        request.nonce = state_provider.borrow_mut().nonce(&request.sender)?;
     }
     // Ensure gas
     let gas_prepare = get_gas_prepare(request);
     if request.gas_limit < gas_prepare {
         return Err(err::Error::NotEnoughBaseGas);
     }
+
     // Ensure value
-    let gas_prepay = request.gas_price * request.gas_limit;
-    if state_provider.borrow_mut().balance(&request.sender)? < gas_prepay + request.value {
-        return Err(err::Error::NotEnoughBalance);
+    if config.check_balance {
+        let gas_prepay = request.gas_price * request.gas_limit;
+        if state_provider.borrow_mut().balance(&request.sender)? < gas_prepay + request.value {
+            return Err(err::Error::NotEnoughBalance);
+        }
+        // Pay intrinsic gas
+        state_provider.borrow_mut().sub_balance(&request.sender, gas_prepay)?;
     }
-    // Pay intrinsic gas
-    state_provider.borrow_mut().sub_balance(&request.sender, gas_prepay)?;
+
     // Increament the nonce for the next transaction
     state_provider.borrow_mut().inc_nonce(&request.sender)?;
+
     // Init the store for the transaction
     let mut store = Store::default();
     store.evm_cfg = get_interpreter_conf();
     store.evm_context = evm_context.clone();
-    store.used(request.receiver);
+    //store.used(request.receiver);
     let store = Arc::new(RefCell::new(store));
     // Create a sub request
     let mut reqchan = request.clone();
@@ -475,12 +490,9 @@ pub fn exec<B: DB + 'static>(
         call(block_provider.clone(), state_provider.clone(), store.clone(), &reqchan)
     };
     // Finalize
-    debug!("exec result={:?}", r);
     match r {
         Ok(evm::InterpreterResult::Normal(output, gas_left, logs)) => {
-            debug!("exec gas_left={:?}", gas_left);
             let refund = get_refund(store.clone(), &request, gas_left);
-            debug!("exec refund={:?}", refund);
             clear(state_provider.clone(), store.clone(), &request, gas_left, refund)?;
             // Handle self destruct: Kill it.
             // Note: must after ends of the transaction.
@@ -491,15 +503,12 @@ pub fn exec<B: DB + 'static>(
             Ok(evm::InterpreterResult::Normal(output, gas_left, logs))
         }
         Ok(evm::InterpreterResult::Revert(output, gas_left)) => {
-            debug!("exec gas_left={:?}", gas_left);
             clear(state_provider.clone(), store.clone(), &request, gas_left, 0)?;
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
             Ok(evm::InterpreterResult::Revert(output, gas_left))
         }
         Ok(evm::InterpreterResult::Create(output, gas_left, logs, addr)) => {
-            debug!("exec gas_left={:?}", gas_left);
             let refund = get_refund(store.clone(), &request, gas_left);
-            debug!("exec refund={:?}", refund);
             clear(state_provider.clone(), store.clone(), &request, gas_left, refund)?;
             for e in store.borrow_mut().selfdestruct.drain() {
                 state_provider.borrow_mut().kill_contract(&e)
@@ -565,8 +574,42 @@ impl<B: DB + 'static> Executive<B> {
             self.state_provider.clone(),
             evm_context,
             self.config.clone(),
-            tx,
+            tx.clone(),
         )
+
+        // Bellow is saved for jsondata test
+        /*let coinbase = evm_context.coinbase;
+        let exec_result = exec(
+            self.block_provider.clone(),
+            self.state_provider.clone(),
+            evm_context,
+            self.config.clone(),
+            tx.clone(),
+        );
+        match exec_result {
+            Err(err::Error::ExccedMaxBlockGasLimit)
+            | Err(err::Error::NotEnoughBaseGas)
+            | Err(err::Error::InvalidNonce)
+            | Err(err::Error::NotEnoughBalance) => {
+                let balance = tx.gas_price * G_TRANSACTION;
+                let account_balance = self.state_provider.borrow_mut().balance(&tx.from)?;
+                let real = {
+                    if balance > account_balance {
+                        account_balance
+                    } else {
+                        balance
+                    }
+                };
+                self.state_provider.borrow_mut().sub_balance(&tx.from, real)?;
+                self.state_provider.borrow_mut().add_balance(&coinbase, real)?;
+                self.state_provider.borrow_mut().inc_nonce(&tx.from)?;
+            }
+            Err(err::Error::Evm(_)) => {}
+            Err(_) => {}
+            Ok(_) => {}
+        }
+        exec_result
+        */
     }
 
     pub fn exec_static(
@@ -600,7 +643,6 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     }
 
     fn add_refund(&mut self, address: &Address, n: u64) {
-        debug!("ext.add_refund {:?} {}", address, n);
         self.store
             .borrow_mut()
             .refund
@@ -667,7 +709,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     }
 
     fn get_storage_origin(&self, address: &Address, key: &H256) -> H256 {
-        self.store.borrow_mut().used(address.clone());
+        //self.store.borrow_mut().used(address.clone());
         match self.store.borrow_mut().origin.get(address) {
             Some(account) => match account.get(key) {
                 Some(val) => *val,
@@ -685,7 +727,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
         if self.store.borrow_mut().selfdestruct.contains(address) {
             return false;
         }
-        self.store.borrow_mut().used(refund_to.clone());
+        //self.store.borrow_mut().used(refund_to.clone());
         self.store.borrow_mut().selfdestruct.insert(address.clone());
         let b = self.get_balance(address);
 
@@ -709,6 +751,10 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
         self.state_provider.borrow_mut().is_empty(address).unwrap_or(false)
     }
 
+    fn exist(&self, address: &Address) -> bool {
+        self.state_provider.borrow_mut().exist(address).unwrap_or(false)
+    }
+
     fn call(
         &self,
         opcode: evm::OpCode,
@@ -716,7 +762,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     ) -> (Result<evm::InterpreterResult, evm::Error>) {
         match opcode {
             evm::OpCode::CALL | evm::OpCode::CALLCODE | evm::OpCode::DELEGATECALL | evm::OpCode::STATICCALL => {
-                self.store.borrow_mut().used(params.address);
+                //self.store.borrow_mut().used(params.address);
                 let r = call(
                     self.block_provider.clone(),
                     self.state_provider.clone(),

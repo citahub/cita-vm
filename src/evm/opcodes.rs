@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum OpCode {
     STOP = 0x00,
     ADD = 0x01,

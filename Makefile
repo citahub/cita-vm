@@ -4,6 +4,6 @@ testdata:
 ci:
 	cargo fmt --all -- --check
 	cargo clippy --all --tests --all-targets -- -D warnings
-	cargo test
+	RUST_BACKTRACE=1 cargo test
 
 .PHONY: testdata ci

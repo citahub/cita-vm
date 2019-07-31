@@ -12,11 +12,12 @@ fn test_json_file(p: &str) {
     let f = fs::File::open(p).unwrap();
     let t = cita_vm::json_tests::general_state_test::Test::load(f).unwrap();
     for (name, data) in t.into_iter() {
-        let data_post_constantinople = data.post.unwrap().constantinople;
-        if data_post_constantinople.is_none() {
+        let data_post_homestead = data.post.unwrap().homestead;
+        if data_post_homestead.is_none() {
             continue;
         }
-        for (i, postdata) in data_post_constantinople.unwrap().iter().enumerate() {
+
+        for (i, postdata) in data_post_homestead.unwrap().iter().enumerate() {
             io::stderr()
                 .write_all(format!("{}::{}::{}\n", p, name, i).as_bytes())
                 .unwrap();
@@ -70,9 +71,8 @@ fn test_json_file(p: &str) {
             if !data.transaction.to.is_empty() {
                 tx.to = Some(string_2_address(data.transaction.to.clone()));
             }
-
             let exepinst = Executive::new(Arc::new(BlockDataProviderMock::default()), state_provider, cfg);
-            let _ = exepinst.exec(evm_context, tx);
+            let _exec_result = exepinst.exec(evm_context, tx);
             let root = exepinst.commit().unwrap();
             // let _ = exec(
             //     Arc::new(Box::new(BlockDataProviderMock::default())),
@@ -110,7 +110,7 @@ fn test_json_path(p: &str) {
 }
 
 // The reason contains "bug", "overflow", "slow", "precompile" and "obsolete".
-#[allow(unused_variables)]
+#[allow(dead_code)]
 fn skip(reason: &str, name: &str) {}
 
 #[rustfmt::skip]
@@ -123,7 +123,7 @@ fn test_state_work() {
 #[test]
 fn test_state_pass() {
     thread::Builder::new().stack_size(134_217_728).spawn(move || {
-        test_json_file("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json");
+        /*test_json_file("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addmodNonConst.json");
         test_json_file("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/addNonConst.json");
         test_json_file("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/andNonConst.json");
         test_json_file("/tmp/jsondata/GeneralStateTests/stArgsZeroOneBalance/balanceNonConst.json");
@@ -2440,6 +2440,44 @@ fn test_state_pass() {
         skip("precompile", "/tmp/jsondata/GeneralStateTests/stZeroKnowledge2/ecadd_1-2_0-0_21000_192.json");
         skip("precompile", "/tmp/jsondata/GeneralStateTests/stZeroKnowledge2/ecadd_1-2_0-0_21000_64.json");
         skip("precompile", "/tmp/jsondata/GeneralStateTests/stZeroKnowledge2/ecadd_1-2_0-0_25000_128.json");
-        skip("precompile", "/tmp/jsondata/GeneralStateTests/stZeroKnowledge2/ecadd_1-2_0-0_25000_192.json");
+        skip("precompile", "/tmp/jsondata/GeneralStateTests/stZeroKnowledge2/ecadd_1-2_0-0_25000_192.json");*/
+
+        test_json_path(r"../jsondata/GeneralStateTests/stRandom");
+        test_json_path(r"../jsondata/GeneralStateTests/stSystemOperationsTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stRecursiveCreate");
+        test_json_path(r"../jsondata/GeneralStateTests/stLogTests");
+        test_json_path(r"../jsondata/GeneralStateTests/stCodeCopyTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stExtCodeHash");
+        test_json_path(r"../jsondata/GeneralStateTests/stCallCodes");
+        test_json_path(r"../jsondata/GeneralStateTests/stCreateTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stZeroKnowledge");
+        test_json_path(r"../jsondata/GeneralStateTests/stRandom2");
+        test_json_path(r"../jsondata/GeneralStateTests/stTransitionTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stZeroCallsTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stBugs");
+        test_json_path(r"../jsondata/GeneralStateTests/stBadOpcode");
+        test_json_path(r"../jsondata/GeneralStateTests/stWalletTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stNonZeroCallsTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stCallDelegateCodesHomestead");
+        test_json_path(r"../jsondata/GeneralStateTests/stAttackTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stStackTests");
+        test_json_path(r"../jsondata/GeneralStateTests/stExample");
+        test_json_path(r"../jsondata/GeneralStateTests/stSolidityTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stQuadraticComplexityTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stPreCompiledContracts2");
+        test_json_path(r"../jsondata/GeneralStateTests/stInitCodeTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stDelegatecallTestHomestead");
+        test_json_path(r"../jsondata/GeneralStateTests/stMemoryTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stSpecialTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stShift");
+        test_json_path(r"../jsondata/GeneralStateTests/stHomesteadSpecific");
+        test_json_path(r"../jsondata/GeneralStateTests/stCodeSizeLimit");
+        test_json_path(r"../jsondata/GeneralStateTests/stReturnDataTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stTransactionTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stRevertTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stMemoryStressTest");
+        test_json_path(r"../jsondata/GeneralStateTests/stCallDelegateCodesCallCodeHomestead");
+        test_json_path(r"../jsondata/GeneralStateTests/stMemExpandingEIP150Calls");
+        test_json_path(r"../jsondata/GeneralStateTests/stRefundTest");
     }).unwrap().join().unwrap();
 }

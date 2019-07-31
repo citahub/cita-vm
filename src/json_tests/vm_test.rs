@@ -128,7 +128,8 @@ mod tests {
 
     #[test]
     fn test_json_tests_parse() {
-        let f = fs::File::open("/tmp/jsondata/VMTests/vmArithmeticTest/add0.json").unwrap();
+        let f = fs::File::open("../jsondata/VMTests/vmArithmeticTest/add0.json").unwrap();
+        //let f = fs::File::open("/tmp/jsondata/VMTests/vmArithmeticTest/add0.json").unwrap();
         let t = Test::load(f).unwrap();
         assert!(t.0.contains_key("add0"));
         let v = &t.0["add0"];

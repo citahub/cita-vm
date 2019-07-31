@@ -27,6 +27,7 @@ pub trait DataProvider {
     // is_empty returns whether the given account is empty. Empty
     // is defined according to EIP161 (balance = nonce = code = 0).
     fn is_empty(&self, address: &Address) -> bool;
+    fn exist(&self, address: &Address) -> bool;
 
     // call is a low-level function for
     //   OpCode::CALL

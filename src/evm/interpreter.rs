@@ -34,8 +34,9 @@ pub enum InterpreterResult {
     Create(Vec<u8>, u64, Vec<Log>, Address),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct InterpreterConf {
+    pub no_empty: bool,
     pub eip1283: bool,
     pub stack_limit: u64,
     pub max_create_code_size: u64, // See: https://github.com/ethereum/EIPs/issues/659
@@ -84,19 +85,20 @@ impl Default for InterpreterConf {
     // If you want to step through the steps, let the
     fn default() -> Self {
         InterpreterConf {
+            no_empty: false,
             eip1283: false,
             stack_limit: 1024,
-            max_create_code_size: 24567,
+            max_create_code_size: std::u64::MAX,
             max_call_depth: 1024,
 
             gas_tier_step: [0, 2, 3, 5, 8, 10, 20, 0],
             gas_exp: 10,
-            gas_exp_byte: 50,
+            gas_exp_byte: 10, //50,
             gas_sha3: 30,
             gas_sha3_word: 6,
-            gas_balance: 400,
+            gas_balance: 20, //400,
             gas_memory: 3,
-            gas_sload: 200,
+            gas_sload: 50, //200,
             gas_sstore_noop: 200,
             gas_sstore_init: 20000,
             gas_sstore_clear_refund: 15000,
@@ -114,14 +116,14 @@ impl Default for InterpreterConf {
             gas_create: 32000,
             gas_jumpdest: 1,
             gas_copy: 3,
-            gas_call: 700,
+            gas_call: 40, //700,
             gas_call_value_transfer: 9000,
             gas_call_stipend: 2300,
-            gas_self_destruct: 5000,
+            gas_self_destruct: 0, //5000,
             gas_self_destruct_refund: 24000,
-            gas_extcode: 700,
+            gas_extcode: 20, //700,
             gas_call_new_account: 25000,
-            gas_self_destruct_new_account: 25000,
+            gas_self_destruct_new_account: 0, //25000,
             gas_ext_code_hash: 400,
         }
     }
@@ -290,6 +292,7 @@ impl Interpreter {
                     let new_value = self.stack.back(1);
                     let original_value =
                         U256::from(&*self.data_provider.get_storage_origin(&self.params.address, &address));
+
                     let gas: u64 = {
                         if self.cfg.eip1283 {
                             // See https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1283.md
@@ -376,9 +379,12 @@ impl Interpreter {
                     let out_len = self.stack.back(6);
 
                     self.use_gas(self.cfg.gas_call)?;
-
                     let is_value_transfer = !value.is_zero();
-                    if op == opcodes::OpCode::CALL && is_value_transfer && self.data_provider.is_empty(&address) {
+
+                    if op == opcodes::OpCode::CALL
+                        && (!self.cfg.no_empty && !self.data_provider.exist(&address)
+                            || (self.cfg.no_empty && is_value_transfer && self.data_provider.is_empty(&address)))
+                    {
                         self.use_gas(self.cfg.gas_call_new_account)?;
                     }
                     if is_value_transfer {

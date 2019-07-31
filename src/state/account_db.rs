@@ -1,19 +1,24 @@
 use std::sync::Arc;
 
+use crate::common::hash::{summary, RLP_NULL};
 use cita_trie::DB;
-use ethereum_types::Address;
+use ethereum_types::{Address, H256};
 
 use crate::state::err::Error;
 
+static NULL_RLP_STATIC: [u8; 1] = [0x80; 1];
+
 #[derive(Debug)]
 pub struct AccountDB<B: DB> {
-    address: Address,
+    /// address means address's hash
+    address_hash: H256,
     db: Arc<B>,
 }
 
 impl<B: DB> AccountDB<B> {
     pub fn new(address: Address, db: Arc<B>) -> Self {
-        AccountDB { address, db }
+        let address_hash = summary(&address[..]).as_slice().into();
+        AccountDB { address_hash, db }
     }
 }
 
@@ -21,28 +26,40 @@ impl<B: DB> DB for AccountDB<B> {
     type Error = Error;
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
-        let concatenated = [&self.address.0[..], &key[..]].concat();
+        if H256::from(key) == RLP_NULL {
+            return Ok(Some(NULL_RLP_STATIC.to_vec()));
+        }
+        let concatenated = [&self.address_hash.0[..], &key[..]].concat();
         self.db
             .get(concatenated.as_slice())
             .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
     fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Self::Error> {
-        let concatenated = [&self.address.0[..], &key[..]].concat();
+        if H256::from(key.as_slice()) == RLP_NULL {
+            return Ok(());
+        }
+        let concatenated = [&self.address_hash.0[..], &key[..]].concat();
         self.db
             .insert(concatenated, value)
             .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
-        let concatenated = [&self.address.0[..], &key[..]].concat();
+        if H256::from(key) == RLP_NULL {
+            return Ok(true);
+        }
+        let concatenated = [&self.address_hash.0[..], &key[..]].concat();
         self.db
             .contains(concatenated.as_slice())
             .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), Self::Error> {
-        let concatenated = [&self.address.0[..], &key[..]].concat();
+        if H256::from(key) == RLP_NULL {
+            return Ok(());
+        }
+        let concatenated = [&self.address_hash.0[..], &key[..]].concat();
         self.db
             .remove(concatenated.as_slice())
             .or_else(|e| Err(Error::DB(format!("{}", e))))

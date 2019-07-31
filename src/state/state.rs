@@ -9,7 +9,7 @@ use hashbrown::{HashMap, HashSet};
 use log::debug;
 use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
 
-use crate::common;
+//use crate::common;
 use crate::common::hash;
 use crate::state::account::StateObject;
 use crate::state::account_db::AccountDB;
@@ -29,6 +29,7 @@ impl<B: DB> State<B> {
     /// Creates empty state for test.
     pub fn new(db: Arc<B>) -> Result<State<B>, Error> {
         let mut trie = PatriciaTrie::new(Arc::clone(&db), Arc::new(hash::get_hasher()));
+        //let mut trie = PatriciaTrie::new(Arc::clone(&db), Arc::new(hash::HasherNull::new()));
         let root = trie.root()?;
 
         Ok(State {
@@ -55,10 +56,6 @@ impl<B: DB> State<B> {
     /// Create a contract account with code or not
     /// Overwrite the code if the contract already exists
     pub fn new_contract(&mut self, contract: &Address, balance: U256, nonce: U256, code: Vec<u8>) -> StateObject {
-        debug!(
-            "state.new_contract contract={:?} balance={:?}, nonce={:?} code={:?}",
-            contract, balance, nonce, code
-        );
         let mut state_object = StateObject::new(balance, nonce);
         state_object.init_code(code);
 
@@ -68,7 +65,6 @@ impl<B: DB> State<B> {
 
     /// Kill a contract.
     pub fn kill_contract(&mut self, contract: &Address) {
-        debug!("state.kill_contract contract={:?}", contract);
         self.insert_cache(contract, StateObjectEntry::new_dirty(None));
     }
 
@@ -108,7 +104,7 @@ impl<B: DB> State<B> {
             }
         }
         let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
-        match trie.get(common::hash::summary(&address[..]).as_slice())? {
+        match trie.get(&address[..])? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
@@ -128,7 +124,9 @@ impl<B: DB> State<B> {
             }
         }
         let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
-        match trie.get(common::hash::summary(&address[..]).as_slice())? {
+
+        //match trie.get(common::hash::summary(&address[..]).as_slice())? {
+        match trie.get(&address[..])? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
@@ -154,7 +152,8 @@ impl<B: DB> State<B> {
     /// Get the merkle proof for a given account.
     pub fn get_account_proof(&self, address: &Address) -> Result<Vec<Vec<u8>>, Error> {
         let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
-        let proof = trie.get_proof(common::hash::summary(&address[..]).as_slice())?;
+        //let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::HasherNull::new()), &self.root.0)?;
+        let proof = trie.get_proof(&address[..])?;
         Ok(proof)
     }
 
@@ -211,7 +210,6 @@ impl<B: DB> State<B> {
 
     /// Set code for an account.
     pub fn set_code(&mut self, address: &Address, code: Vec<u8>) -> Result<(), Error> {
-        debug!("state.set_code address={:?} code={:?}", address, code);
         let mut state_object = self.get_state_object_or_default(address)?;
         state_object.init_code(code);
         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
@@ -220,7 +218,6 @@ impl<B: DB> State<B> {
 
     /// Set abi for an account.
     pub fn set_abi(&mut self, address: &Address, abi: Vec<u8>) -> Result<(), Error> {
-        debug!("state.set_abi address={:?} abi={:?}", address, abi);
         let mut state_object = self.get_state_object_or_default(address)?;
         state_object.init_abi(abi);
         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
@@ -229,7 +226,6 @@ impl<B: DB> State<B> {
 
     /// Add balance by incr for an account.
     pub fn add_balance(&mut self, address: &Address, incr: U256) -> Result<(), Error> {
-        debug!("state.add_balance a={:?} incr={:?}", address, incr);
         if incr.is_zero() {
             return Ok(());
         }
@@ -244,7 +240,6 @@ impl<B: DB> State<B> {
 
     /// Sub balance by decr for an account.
     pub fn sub_balance(&mut self, a: &Address, decr: U256) -> Result<(), Error> {
-        debug!("state.sub_balance a={:?} decr={:?}", a, decr);
         if decr.is_zero() {
             return Ok(());
         }
@@ -266,7 +261,6 @@ impl<B: DB> State<B> {
 
     /// Increase nonce for an account.
     pub fn inc_nonce(&mut self, address: &Address) -> Result<(), Error> {
-        debug!("state.inc_nonce a={:?}", address);
         let mut state_object = self.get_state_object_or_default(address)?;
         state_object.inc_nonce();
         self.insert_cache(address, StateObjectEntry::new_dirty(Some(state_object)));
@@ -314,6 +308,7 @@ impl<B: DB> State<B> {
 
         // Secondly, update the world state tree
         let mut trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
+
         let key_values = self
             .cache
             .borrow_mut()
@@ -321,13 +316,9 @@ impl<B: DB> State<B> {
             .filter(|&(_, ref a)| a.is_dirty())
             .map(|(address, entry)| {
                 entry.status = ObjectStatus::Committed;
-
                 match entry.state_object {
-                    Some(ref mut state_object) => (
-                        common::hash::summary(&address[..]),
-                        rlp::encode(&state_object.account()),
-                    ),
-                    None => (common::hash::summary(&address[..]), vec![]),
+                    Some(ref mut state_object) => (address.to_vec(), rlp::encode(&state_object.account())),
+                    None => (address.to_vec(), vec![]),
                 }
             })
             .collect::<Vec<(Vec<u8>, Vec<u8>)>>();
@@ -359,7 +350,6 @@ impl<B: DB> State<B> {
 
     /// Merge last checkpoint with previous.
     pub fn discard_checkpoint(&mut self) {
-        debug!("state.discard_checkpoint");
         let last = self.checkpoints.borrow_mut().pop();
         if let Some(mut checkpoint) = last {
             if let Some(prev) = self.checkpoints.borrow_mut().last_mut() {
@@ -634,7 +624,6 @@ mod tests {
         assert_eq!(state.balance(&a).unwrap(), U256::from(27u64));
         state.commit().unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(27u64));
-
         state.transfer_balance(&a, &b, U256::from(18)).unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(9u64));
         assert_eq!(state.balance(&b).unwrap(), U256::from(18u64));
@@ -678,7 +667,7 @@ mod tests {
         state.commit().unwrap();
         assert_eq!(
             state.root,
-            "3289114a6a9abfd07c8333cfd165aa5c034a19ae3af504348c4d2688ea1d46bb".into()
+            "530acecc6ec873396bb3e90b6578161f9688ed7eeeb93d6fba5684895a93b78a".into()
         );
     }
 
@@ -894,5 +883,20 @@ mod tests {
         assert_eq!(proof2.len(), 1);
 
         assert_eq!(proof1, proof2);
+    }
+
+    #[test]
+    fn create_empty() {
+        let mut state = get_temp_state();
+        state.commit().unwrap();
+
+        #[cfg(feature = "hash-keccak")]
+        let expected = "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
+        #[cfg(feature = "hash-blake2b")]
+        let expected = "c14af59107ef14003e4697a40ea912d865eb1463086a4649977c13ea69b0d9af";
+        #[cfg(feature = "hash-sm3")]
+        let expected = "995b949869f80fa1465a9d8b6fa759ec65c3020d59c2624662bdff059bdf19b3";
+
+        assert_eq!(state.root, expected.into());
     }
 }
