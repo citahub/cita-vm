@@ -444,7 +444,7 @@ pub fn exec<B: DB + 'static>(
 
     if config.check_nonce {
         // Ensure nonce
-        if request.nonce != state_provider.borrow_mut().nonce(&request.sender)? {
+        if request.nonce + 1 != state_provider.borrow_mut().nonce(&request.sender)? {
             return Err(err::Error::InvalidNonce);
         }
     } else {
