@@ -105,7 +105,7 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn exist(&self, address: &Address) -> bool {
-        self.db.get(address).is_none()
+        self.db.get(address).is_some()
     }
 
     fn call(

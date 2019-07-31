@@ -467,7 +467,8 @@ pub fn exec<B: DB + 'static>(
     }
 
     // Increament the nonce for the next transaction
-    state_provider.borrow_mut().inc_nonce(&request.sender)?;
+    // Comment for inc_nonce out of this exec
+    // state_provider.borrow_mut().inc_nonce(&request.sender)?;
 
     // Init the store for the transaction
     let mut store = Store::default();
