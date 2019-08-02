@@ -8,6 +8,16 @@ use crate::state::err::Error;
 
 static NULL_RLP_STATIC: [u8; 1] = [0x80; 1];
 
+fn combine_key<'a>(addr_hash: &[u8], key: &'a [u8]) -> Vec<u8> {
+    let mut dst = key.clone().to_vec();
+    {
+        for (k, a) in dst[12..].iter_mut().zip(&addr_hash[12..]) {
+            *k ^= *a
+        }
+    }
+    dst
+}
+
 #[derive(Debug)]
 pub struct AccountDB<B: DB> {
     /// address means address's hash
@@ -29,7 +39,8 @@ impl<B: DB> DB for AccountDB<B> {
         if H256::from(key) == RLP_NULL {
             return Ok(Some(NULL_RLP_STATIC.to_vec()));
         }
-        let concatenated = [&self.address_hash.0[..], &key[..]].concat();
+
+        let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
         self.db
             .get(concatenated.as_slice())
             .or_else(|e| Err(Error::DB(format!("{}", e))))
@@ -39,7 +50,7 @@ impl<B: DB> DB for AccountDB<B> {
         if H256::from(key.as_slice()) == RLP_NULL {
             return Ok(());
         }
-        let concatenated = [&self.address_hash.0[..], &key[..]].concat();
+        let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
         self.db
             .insert(concatenated, value)
             .or_else(|e| Err(Error::DB(format!("{}", e))))
@@ -49,7 +60,7 @@ impl<B: DB> DB for AccountDB<B> {
         if H256::from(key) == RLP_NULL {
             return Ok(true);
         }
-        let concatenated = [&self.address_hash.0[..], &key[..]].concat();
+        let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
         self.db
             .contains(concatenated.as_slice())
             .or_else(|e| Err(Error::DB(format!("{}", e))))
@@ -59,7 +70,7 @@ impl<B: DB> DB for AccountDB<B> {
         if H256::from(key) == RLP_NULL {
             return Ok(());
         }
-        let concatenated = [&self.address_hash.0[..], &key[..]].concat();
+        let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
         self.db
             .remove(concatenated.as_slice())
             .or_else(|e| Err(Error::DB(format!("{}", e))))
