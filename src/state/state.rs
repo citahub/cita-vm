@@ -8,8 +8,9 @@ use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
 use log::debug;
 use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
+//use std::str::FromStr;
 
-//use crate::common;
+use crate::common;
 use crate::common::hash;
 use crate::state::account::StateObject;
 use crate::state::account_db::AccountDB;
@@ -104,7 +105,7 @@ impl<B: DB> State<B> {
             }
         }
         let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
-        match trie.get(&address[..])? {
+        match trie.get(common::hash::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
@@ -125,8 +126,7 @@ impl<B: DB> State<B> {
         }
         let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
 
-        //match trie.get(common::hash::summary(&address[..]).as_slice())? {
-        match trie.get(&address[..])? {
+        match trie.get(common::hash::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
@@ -153,7 +153,7 @@ impl<B: DB> State<B> {
     pub fn get_account_proof(&self, address: &Address) -> Result<Vec<Vec<u8>>, Error> {
         let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
         //let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::HasherNull::new()), &self.root.0)?;
-        let proof = trie.get_proof(&address[..])?;
+        let proof = trie.get_proof(common::hash::summary(&address[..]).as_slice())?;
         Ok(proof)
     }
 
@@ -285,7 +285,6 @@ impl<B: DB> State<B> {
     /// Flush the data from cache to database.
     pub fn commit(&mut self) -> Result<(), Error> {
         assert!(self.checkpoints.borrow().is_empty());
-
         // Firstly, update account storage tree
         let db = Arc::clone(&self.db);
         self.cache
@@ -317,8 +316,11 @@ impl<B: DB> State<B> {
             .map(|(address, entry)| {
                 entry.status = ObjectStatus::Committed;
                 match entry.state_object {
-                    Some(ref mut state_object) => (address.to_vec(), rlp::encode(&state_object.account())),
-                    None => (address.to_vec(), vec![]),
+                    Some(ref mut state_object) => (
+                        common::hash::summary(&address[..]),
+                        rlp::encode(&state_object.account()),
+                    ),
+                    None => (common::hash::summary(&address[..]), vec![]),
                 }
             })
             .collect::<Vec<(Vec<u8>, Vec<u8>)>>();
