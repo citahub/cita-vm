@@ -20,4 +20,5 @@ jobs:
       name: Test
       script:
         - make evm/testdata
+        - make riscv/all
         - cargo test

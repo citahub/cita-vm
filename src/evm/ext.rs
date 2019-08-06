@@ -35,5 +35,5 @@ pub trait DataProvider {
     //   OpCode::STATICCALL
     //   OpCode::CREATE
     //   OpCode::CREATE2
-    fn call(&self, opcode: OpCode, params: InterpreterParams) -> (Result<InterpreterResult, Error>);
+    fn call(&self, opcode: OpCode, params: InterpreterParams) -> Result<InterpreterResult, Error>;
 }

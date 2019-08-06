@@ -18,5 +18,5 @@ pub use state::State;
 mod fake;
 pub use fake::FakeVM;
 
-mod structure;
-pub use structure::{Context, Contract, InterpreterParams, InterpreterResult, InterpreterType, Log, Transaction};
+mod types;
+pub use types::{Context, Contract, InterpreterParams, InterpreterResult, InterpreterType, Log, Transaction};
