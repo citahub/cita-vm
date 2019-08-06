@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::io::Read;
 
 use ethereum_types::Address;
@@ -55,15 +55,15 @@ pub struct Account {
     pub balance: String,
     pub code: String,
     pub nonce: String,
-    pub storage: BTreeMap<String, String>,
+    pub storage: HashMap<String, String>,
 }
 
 #[derive(Debug, PartialEq, Deserialize, Clone)]
-pub struct State(pub BTreeMap<Address, Account>);
+pub struct State(pub HashMap<Address, Account>);
 
 impl IntoIterator for State {
-    type Item = <BTreeMap<Address, Account> as IntoIterator>::Item;
-    type IntoIter = <BTreeMap<Address, Account> as IntoIterator>::IntoIter;
+    type Item = <HashMap<Address, Account> as IntoIterator>::Item;
+    type IntoIter = <HashMap<Address, Account> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -76,7 +76,7 @@ pub struct PostData {
     pub hash: String,
 
     #[serde(rename = "indexes")]
-    pub indexes: BTreeMap<String, usize>,
+    pub indexes: HashMap<String, usize>,
 
     #[serde(rename = "logs")]
     pub logs: String,
@@ -119,11 +119,11 @@ pub struct Vm {
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
-pub struct Test(BTreeMap<String, Vm>);
+pub struct Test(HashMap<String, Vm>);
 
 impl IntoIterator for Test {
-    type Item = <BTreeMap<String, Vm> as IntoIterator>::Item;
-    type IntoIter = <BTreeMap<String, Vm> as IntoIterator>::IntoIter;
+    type Item = <HashMap<String, Vm> as IntoIterator>::Item;
+    type IntoIter = <HashMap<String, Vm> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()

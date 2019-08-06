@@ -1,29 +1,30 @@
-use std::collections::BTreeMap;
-
 use ethereum_types::{Address, H256, U256};
 
-use crate::common;
-use crate::evm::err;
-use crate::evm::ext;
-use crate::evm::interpreter;
-use crate::evm::opcodes;
+use hashbrown::HashMap;
+
+use crate::common::hash::summary;
+use crate::evm::err::Error;
+use crate::evm::ext::DataProvider;
+use crate::evm::interpreter::{Interpreter, InterpreterConf};
+use crate::evm::opcodes::OpCode;
+use crate::{Context, InterpreterParams, InterpreterResult};
 
 #[derive(Clone, Default)]
 pub struct Account {
     pub balance: U256,
     pub code: Vec<u8>,
     pub nonce: U256,
-    pub storage: BTreeMap<H256, H256>,
+    pub storage: HashMap<H256, H256>,
 }
 
 #[derive(Default)]
 pub struct DataProviderMock {
-    pub db: BTreeMap<Address, Account>,
-    pub db_origin: BTreeMap<Address, Account>,
-    pub refund: BTreeMap<Address, u64>,
+    pub db: HashMap<Address, Account>,
+    pub db_origin: HashMap<Address, Account>,
+    pub refund: HashMap<Address, u64>,
 }
 
-impl ext::DataProvider for DataProviderMock {
+impl DataProvider for DataProviderMock {
     fn get_balance(&self, address: &Address) -> U256 {
         self.db.get(address).map_or(U256::zero(), |v| v.balance)
     }
@@ -54,8 +55,8 @@ impl ext::DataProvider for DataProviderMock {
             .map_or(H256::zero(), |v| self.sha3(v.code.as_slice()))
     }
 
-    fn get_block_hash(&self, _: &U256) -> H256 {
-        H256::zero()
+    fn get_block_hash(&self, n: &U256) -> H256 {
+        H256::from(n)
     }
 
     fn get_storage(&self, address: &Address, key: &H256) -> H256 {
@@ -92,23 +93,19 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn sha3(&self, data: &[u8]) -> H256 {
-        H256::from(&common::hash::summary(data)[..])
+        H256::from(&summary(data)[..])
     }
 
     fn is_empty(&self, address: &Address) -> bool {
         self.db.get(address).is_none()
     }
 
-    fn call(
-        &self,
-        opcode: opcodes::OpCode,
-        params: interpreter::InterpreterParams,
-    ) -> (Result<interpreter::InterpreterResult, err::Error>) {
+    fn call(&self, opcode: OpCode, params: InterpreterParams) -> (Result<InterpreterResult, Error>) {
         match opcode {
-            opcodes::OpCode::CALL => {
-                let mut it = interpreter::Interpreter::new(
-                    interpreter::Context::default(),
-                    interpreter::InterpreterConf::default(),
+            OpCode::CALL => {
+                let mut it = Interpreter::new(
+                    Context::default(),
+                    InterpreterConf::default(),
                     Box::new(DataProviderMock::default()),
                     params,
                 );

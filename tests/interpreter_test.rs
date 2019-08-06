@@ -2,10 +2,10 @@ use std::fs;
 use std::io;
 use std::io::Write;
 
-use cita_vm;
 use cita_vm::evm;
 use cita_vm::evm::extmock;
 use cita_vm::json_tests::common::*;
+use cita_vm::{InterpreterParams, InterpreterResult};
 
 fn test_json_file(p: &str) {
     let f = fs::File::open(p).unwrap();
@@ -14,7 +14,7 @@ fn test_json_file(p: &str) {
         io::stderr().write_all(format!("{}::{}\n", p, name).as_bytes()).unwrap();
         let vm: cita_vm::json_tests::vm_test::Vm = data;
         // Init context
-        let mut ctx = evm::Context::default();
+        let mut ctx = cita_vm::Context::default();
         ctx.coinbase = vm.env.current_coinbase;
         ctx.difficulty = string_2_u256(vm.env.current_difficulty);
         ctx.gas_limit = string_2_u256(vm.env.current_gas_limit).low_u64();
@@ -29,7 +29,7 @@ fn test_json_file(p: &str) {
         cfg.gas_self_destruct_new_account = 0;
 
         // Init params
-        let mut params = evm::InterpreterParams::default();
+        let mut params = InterpreterParams::default();
         params.origin = vm.exec.origin;
         params.contract.code_address = vm.exec.address;
         params.address = vm.exec.address;
@@ -44,7 +44,7 @@ fn test_json_file(p: &str) {
         params.value = string_2_u256(vm.exec.value);
         params.contract.code_data = string_2_bytes(vm.exec.code);
 
-        let mut it = evm::Interpreter::new(ctx, cfg, Box::new(extmock::DataProviderMock::default()), params);
+        let mut it = cita_vm::evm::Interpreter::new(ctx, cfg, Box::new(extmock::DataProviderMock::default()), params);
 
         // Init state db
         if let Some(data) = vm.pre {
@@ -64,7 +64,7 @@ fn test_json_file(p: &str) {
         match r {
             Ok(data) => {
                 match data {
-                    evm::InterpreterResult::Normal(ret, gas, _) | evm::InterpreterResult::Revert(ret, gas) => {
+                    InterpreterResult::Normal(ret, gas, _) | InterpreterResult::Revert(ret, gas) => {
                         // Check statedb
                         if let Some(data) = vm.post {
                             for (address, account) in data.into_iter() {
