@@ -91,10 +91,8 @@ fn test_json_path_skip(p: &str, skip: Vec<&'static str>) {
             }
             test_json_path(p.to_str().unwrap());
         }
-    } else {
-        if p.ends_with("json") {
-            test_json_file(p);
-        }
+    } else if p.ends_with("json") {
+        test_json_file(p);
     }
 }
 

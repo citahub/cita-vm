@@ -53,12 +53,12 @@ fn main() {
             )))
             .syscall(Box::new(cita_vm::riscv::SyscallRet::new(ret_data.clone())))
             .syscall(Box::new(cita_vm::riscv::SyscallStorage::new(
-                vm_params.address.clone(),
+                vm_params.address,
                 state.clone(),
             )))
             .build();
 
-    machine.load_program(&buffer, &vec!["riscv_c_main".into()]).unwrap();
+    machine.load_program(&buffer, &["riscv_c_main".into()]).unwrap();
     let result = machine.run().unwrap();
     println!(
         "exit={:#02x} ret={:?} cycles={:?}",

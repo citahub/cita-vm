@@ -6,7 +6,7 @@ fn main() {
     let vm = cita_vm::FakeVM::new();
 
     let tx = cita_vm::Transaction {
-        from: vm.account1.clone(),
+        from: vm.account1,
         to: None,
         value: U256::from(0),
         nonce: U256::from(1),
@@ -23,7 +23,7 @@ fn main() {
     };
 
     let tx = cita_vm::Transaction {
-        from: vm.account1.clone(),
+        from: vm.account1,
         to: Some(contract_address),
         value: U256::from(0),
         nonce: U256::from(2),
@@ -36,7 +36,7 @@ fn main() {
     println!("{:?}", r);
 
     let tx = cita_vm::Transaction {
-        from: vm.account1.clone(),
+        from: vm.account1,
         to: Some(contract_address),
         value: U256::from(0),
         nonce: U256::from(3),
