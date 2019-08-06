@@ -17,12 +17,15 @@ use crate::state::account_db::AccountDB;
 use crate::state::err::Error;
 use crate::state::object_entry::{ObjectStatus, StateObjectEntry};
 
+const PREFIX_LEN: usize = 12;
+const LATEST_ERA_KEY: [u8; PREFIX_LEN] = [b'l', b'a', b's', b't', 0, 0, 0, 0, 0, 0, 0, 0];
+
 /// State is the one who managers all accounts and states in Ethereum's system.
 pub struct State<B> {
     pub db: Arc<B>,
     pub root: H256,
     pub cache: RefCell<HashMap<Address, StateObjectEntry>>,
-    /// Checkpoints are used to revert to history.
+    /// Checkpoints are used to revert to history
     pub checkpoints: RefCell<Vec<HashMap<Address, Option<StateObjectEntry>>>>,
 }
 
@@ -45,6 +48,11 @@ impl<B: DB> State<B> {
     pub fn from_existing(db: Arc<B>, root: H256) -> Result<State<B>, Error> {
         if !db.contains(&root.0[..]).or_else(|e| Err(Error::DB(format!("{}", e))))? {
             return Err(Error::NotFound);
+        }
+        // This for compatible with cita 0.x,no need to update it
+        // For state test,this should be removed
+        if root == common::hash::RLP_NULL {
+            db.insert(LATEST_ERA_KEY.to_vec(), [0x80].to_vec()).unwrap();
         }
         Ok(State {
             db,
@@ -105,11 +113,12 @@ impl<B: DB> State<B> {
             }
         }
         let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
-        match trie.get(common::hash::summary(&address[..]).as_slice())? {
+        match trie.get(&address[..])? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
-                state_object.read_code(self.db.clone())?;
-                state_object.read_abi(self.db.clone())?;
+                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                state_object.read_code(accdb.clone())?;
+                state_object.read_abi(accdb)?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(f(Some(&state_object)))
             }
@@ -126,7 +135,8 @@ impl<B: DB> State<B> {
         }
         let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
 
-        match trie.get(common::hash::summary(&address[..]).as_slice())? {
+        //match trie.get(common::hash::summary(&address[..]).as_slice())? {
+        match trie.get(&address[..])? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
                 state_object.read_code(self.db.clone())?;
@@ -296,10 +306,11 @@ impl<B: DB> State<B> {
                 }
 
                 if let Some(ref mut state_object) = entry.state_object {
+                    // When operate on account element, AccountDB should be used
                     let accdb = Arc::new(AccountDB::new(*address, Arc::clone(&db)));
                     state_object.commit_storage(Arc::clone(&accdb))?;
-                    state_object.commit_code(Arc::clone(&db))?;
-                    state_object.commit_abi(Arc::clone(&db))?;
+                    state_object.commit_code(Arc::clone(&accdb))?;
+                    state_object.commit_abi(Arc::clone(&accdb))?;
                 }
                 Ok(())
             })
@@ -316,11 +327,13 @@ impl<B: DB> State<B> {
             .map(|(address, entry)| {
                 entry.status = ObjectStatus::Committed;
                 match entry.state_object {
-                    Some(ref mut state_object) => (
-                        common::hash::summary(&address[..]),
-                        rlp::encode(&state_object.account()),
-                    ),
-                    None => (common::hash::summary(&address[..]), vec![]),
+                    Some(ref mut state_object) => {
+                        (
+                            address.to_vec(),
+                            rlp::encode(&state_object.account()),
+                        )
+                    }
+                    None => (address.to_vec(), vec![]),
                 }
             })
             .collect::<Vec<(Vec<u8>, Vec<u8>)>>();
