@@ -430,11 +430,11 @@ fn call<B: DB + 'static>(
     block_provider: Arc<BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
-    request: &InterpreterParams,
+    iparams: &InterpreterParams,
 ) -> Result<InterpreterResult, Error> {
-    log::debug!("call request={:?}", request);
+    log::debug!("call iparams={:?}", iparams);
     // Ensure balance
-    if !request.disable_transfer_value && state_provider.borrow_mut().balance(&request.sender)? < request.value {
+    if !iparams.disable_transfer_value && state_provider.borrow_mut().balance(&iparams.sender)? < iparams.value {
         return Err(Error::NotEnoughBalance);
     }
     // Run
@@ -444,7 +444,7 @@ fn call<B: DB + 'static>(
         block_provider.clone(),
         state_provider.clone(),
         store_son.clone(),
-        request,
+        iparams,
     );
     log::debug!("call result={:?}", r);
     match r {
@@ -470,18 +470,18 @@ fn create<B: DB + 'static>(
     block_provider: Arc<BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
-    request: &InterpreterParams,
+    iparams: &InterpreterParams,
     create_kind: CreateKind,
 ) -> Result<InterpreterResult, Error> {
-    log::debug!("create request={:?}", request);
+    log::debug!("create iparams={:?}", iparams);
     let address = match create_kind {
         CreateKind::FromAddressAndNonce => {
             // Generate new address created from address, nonce
-            create_address_from_address_and_nonce(&request.sender, &request.nonce)
+            create_address_from_address_and_nonce(&iparams.sender, &iparams.nonce)
         }
         CreateKind::FromSaltAndCodeHash => {
             // Generate new address created from sender salt and code hash
-            create_address_from_salt_and_code_hash(&request.sender, request.extra, request.input.clone())
+            create_address_from_salt_and_code_hash(&iparams.sender, iparams.extra, iparams.input.clone())
         }
     };
     log::debug!("create address={:?}", address);
@@ -491,9 +491,9 @@ fn create<B: DB + 'static>(
     }
 
     // Just save the code at account's code field.
-    if request.itype != InterpreterType::EVM {
-        state_provider.borrow_mut().set_code(&address, request.input.clone())?;
-        return Ok(InterpreterResult::Create(vec![], request.gas_limit, vec![], address));
+    if iparams.itype != InterpreterType::EVM {
+        state_provider.borrow_mut().set_code(&address, iparams.input.clone())?;
+        return Ok(InterpreterResult::Create(vec![], iparams.gas_limit, vec![], address));
     }
 
     // Make a checkpoint here
@@ -511,16 +511,16 @@ fn create<B: DB + 'static>(
         // The right result should be "summary(none)" and "0".
         vec![],
     );
-    let mut reqchan = request.clone();
-    reqchan.address = address;
-    reqchan.receiver = address;
-    reqchan.is_create = false;
-    reqchan.input = vec![];
-    reqchan.contract = Contract {
+    let mut jparams = iparams.clone();
+    jparams.address = address;
+    jparams.receiver = address;
+    jparams.is_create = false;
+    jparams.input = vec![];
+    jparams.contract = Contract {
         code_address: address,
-        code_data: request.input.clone(),
+        code_data: iparams.input.clone(),
     };
-    let r = call(block_provider.clone(), state_provider.clone(), store.clone(), &reqchan);
+    let r = call(block_provider.clone(), state_provider.clone(), store.clone(), &jparams);
     match r {
         Ok(InterpreterResult::Normal(output, gas_left, logs)) => {
             // Ensure code size
