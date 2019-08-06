@@ -19,5 +19,5 @@ jobs:
     - stage: Test
       name: Test
       script:
-        - make testdata
+        - make evm/testdata
         - cargo test
