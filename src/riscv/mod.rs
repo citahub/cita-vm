@@ -5,7 +5,7 @@ mod err;
 pub use err::Error;
 
 mod interpreter;
-pub use interpreter::Interpreter;
+pub use interpreter::{Interpreter, InterpreterConf, MachineType};
 
 mod syscall;
 pub use syscall::{SyscallDebug, SyscallEnvironment, SyscallRet, SyscallStorage};

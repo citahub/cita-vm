@@ -10,7 +10,7 @@ use crate::evm::Error;
 use crate::evm::OpCode;
 use crate::{Context, InterpreterParams, InterpreterResult, Log};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct InterpreterConf {
     pub eip1283: bool,
     pub stack_limit: u64,

@@ -28,14 +28,7 @@ impl FakeVM {
         Self {
             account1,
             account2,
-            executor: Executive::new(
-                block_data_provider,
-                state,
-                Config {
-                    block_gas_limit: 8_000_000_000,
-                    check_nonce: true,
-                },
-            ),
+            executor: Executive::new(block_data_provider, state, Config::default()),
         }
     }
 }

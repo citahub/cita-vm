@@ -245,7 +245,7 @@ pub struct Store {
     //   ./tests/jsondata/GeneralStateTests/stSStoreTest/sstore_combinations_initial2.json
     pub inused: HashSet<Address>,
     pub context: Context,
-    pub cfg: evm::InterpreterConf,
+    pub cfg: Config,
 }
 
 impl Store {
@@ -289,13 +289,6 @@ pub fn create_address_from_salt_and_code_hash(address: &Address, salt: H256, cod
 pub enum CreateKind {
     FromAddressAndNonce, // use create_address_from_address_and_nonce
     FromSaltAndCodeHash, // use create_address_from_salt_and_code_hash
-}
-
-/// Returns the default interpreter configs for Constantinople.
-pub fn get_interpreter_conf() -> evm::InterpreterConf {
-    let mut evm_cfg = evm::InterpreterConf::default();
-    evm_cfg.eip1283 = true;
-    evm_cfg
 }
 
 /// If a contract creation is attempted, due to either a creation transaction
@@ -368,13 +361,20 @@ fn clear<B: DB + 'static>(
 pub struct Config {
     pub block_gas_limit: u64, // gas limit for a block.
     pub check_nonce: bool,
+    pub cfg_evm: evm::InterpreterConf,
+    pub cfg_riscv: riscv::InterpreterConf,
 }
 
 impl Default for Config {
     fn default() -> Self {
+        let mut cfg_evm = evm::InterpreterConf::default();
+        cfg_evm.eip1283 = true;
+        let cfg_riscv = riscv::InterpreterConf::default();
         Config {
             block_gas_limit: 8_000_000,
             check_nonce: true,
+            cfg_evm,
+            cfg_riscv,
         }
     }
 }
@@ -387,7 +387,7 @@ fn call_pure<B: DB + 'static>(
     iparams: &InterpreterParams,
 ) -> Result<InterpreterResult, Error> {
     let context = store.borrow().context.clone();
-    let evm_cfg = store.borrow().cfg.clone();
+    let cfg = store.borrow().cfg.clone();
     let iparams = iparams.clone();
     let data_provider = DataProvider::new(block_provider.clone(), state_provider.clone(), store.clone());
     // Transfer value
@@ -415,11 +415,11 @@ fn call_pure<B: DB + 'static>(
     // Run
     match iparams.itype {
         InterpreterType::EVM => {
-            let mut it = evm::Interpreter::new(context, evm_cfg, Box::new(data_provider), iparams);
+            let mut it = evm::Interpreter::new(context, cfg.cfg_evm, Box::new(data_provider), iparams);
             Ok(it.run()?)
         }
         InterpreterType::RISCV => {
-            let mut it = riscv::Interpreter::new(context, iparams, Rc::new(RefCell::new(data_provider)));
+            let mut it = riscv::Interpreter::new(context, cfg.cfg_riscv, iparams, Rc::new(RefCell::new(data_provider)));
             Ok(it.run()?)
         }
     }
@@ -640,7 +640,7 @@ impl<B: DB + 'static> Executive<B> {
         self.state_provider.borrow_mut().inc_nonce(&iparams.sender)?;
         // Init the store for the transaction
         let mut store = Store::default();
-        store.cfg = get_interpreter_conf();
+        store.cfg = self.config.clone();
         store.context = context.clone();
         store.used(iparams.receiver);
         let store = Arc::new(RefCell::new(store));
@@ -728,7 +728,7 @@ impl<B: DB + 'static> Executive<B> {
         iparams.read_only = true;
         iparams.disable_transfer_value = true;
         let mut store = Store::default();
-        store.cfg = get_interpreter_conf();
+        store.cfg = self.config.clone();
         store.context = context.clone();
         let store = Arc::new(RefCell::new(store));
         call_pure(
