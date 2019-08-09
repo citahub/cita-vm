@@ -204,7 +204,7 @@ impl Interpreter {
             // Ensure stack
             let stack_require = op.stack_require();
             if !self.stack.require(stack_require as usize) {
-                return Err(err::Error::OutOfStack);
+                return Err(err::Error::StackUnderflow);
             }
             if self.stack.len() as u64 - op.stack_require() + op.stack_returns() > self.cfg.stack_limit {
                 return Err(err::Error::OutOfStack);

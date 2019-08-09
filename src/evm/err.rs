@@ -14,6 +14,7 @@ pub enum Error {
     ExccedMaxCodeSize,
     InvalidJumpDestination,
     Internal(String),
+    StackUnderflow,
 }
 
 impl error::Error for Error {}
@@ -31,6 +32,7 @@ impl fmt::Display for Error {
             Error::ExccedMaxCodeSize => return write!(f, "ExccedMaxCodeSize"),
             Error::InvalidJumpDestination => return write!(f, "InvalidJumpDestination"),
             Error::Internal(err) => return write!(f, "Internal error {}", err),
+            Error::StackUnderflow => return write!(f, "StackUnderflow"),
         };
     }
 }
