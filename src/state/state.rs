@@ -327,12 +327,7 @@ impl<B: DB> State<B> {
             .map(|(address, entry)| {
                 entry.status = ObjectStatus::Committed;
                 match entry.state_object {
-                    Some(ref mut state_object) => {
-                        (
-                            address.to_vec(),
-                            rlp::encode(&state_object.account()),
-                        )
-                    }
+                    Some(ref mut state_object) => (address.to_vec(), rlp::encode(&state_object.account())),
                     None => (address.to_vec(), vec![]),
                 }
             })
