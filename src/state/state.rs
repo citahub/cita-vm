@@ -6,7 +6,7 @@ use cita_trie::{PatriciaTrie, Trie};
 use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
-use log::debug;
+use log::{debug,warn};
 use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
 //use std::str::FromStr;
 
@@ -305,6 +305,7 @@ impl<B: DB> State<B> {
                     return Ok(());
                 }
 
+                warn!("********** state commit {:?}",entry.state_object);
                 if let Some(ref mut state_object) = entry.state_object {
                     // When operate on account element, AccountDB should be used
                     let accdb = Arc::new(AccountDB::new(*address, Arc::clone(&db)));
@@ -334,6 +335,7 @@ impl<B: DB> State<B> {
             .collect::<Vec<(Vec<u8>, Vec<u8>)>>();
 
         for (key, value) in key_values.into_iter() {
+            warn!("********** state commit key {:?} value {:?}",key,value);
             trie.insert(key, value)?;
         }
 
