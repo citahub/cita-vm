@@ -63,9 +63,9 @@ impl<B: DB> State<B> {
         })
     }
 
-    pub fn iter<H>(&mut self) -> Result<TrieIterator<B,H>,Error> where H:hasher::Hasher {
+    pub fn iter(&mut self) -> Result<TrieIterator<DB,H>,Error> where H:hasher::Hasher {
         let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root)?;
-        Ok(trie.iter<B,H>())
+        Ok(trie.iter())
     }
 
     /*pub fn account_iter(&mut self,root:H256) -> Result<impl Iterator,Error> {
