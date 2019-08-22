@@ -479,6 +479,9 @@ pub fn exec<B: DB + 'static>(
     // Create a sub request
     let mut reqchan = request.clone();
     reqchan.gas_limit = request.gas_limit - gas_prepare;
+    if !config.check_balance {
+        reqchan.disable_transfer_value = true;
+    }
     let r = if request.is_create {
         create(
             block_provider.clone(),
@@ -493,8 +496,10 @@ pub fn exec<B: DB + 'static>(
     // Finalize
     match r {
         Ok(evm::InterpreterResult::Normal(output, gas_left, logs)) => {
-            let refund = get_refund(store.clone(), &request, gas_left);
-            clear(state_provider.clone(), store.clone(), &request, gas_left, refund)?;
+            if config.check_balance {
+                let refund = get_refund(store.clone(), &request, gas_left);
+                clear(state_provider.clone(), store.clone(), &request, gas_left, refund)?;
+            }
             // Handle self destruct: Kill it.
             // Note: must after ends of the transaction.
             for e in store.borrow_mut().selfdestruct.drain() {
@@ -504,13 +509,17 @@ pub fn exec<B: DB + 'static>(
             Ok(evm::InterpreterResult::Normal(output, gas_left, logs))
         }
         Ok(evm::InterpreterResult::Revert(output, gas_left)) => {
-            clear(state_provider.clone(), store.clone(), &request, gas_left, 0)?;
+            if config.check_balance {
+                clear(state_provider.clone(), store.clone(), &request, gas_left, 0)?;
+            }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
             Ok(evm::InterpreterResult::Revert(output, gas_left))
         }
         Ok(evm::InterpreterResult::Create(output, gas_left, logs, addr)) => {
-            let refund = get_refund(store.clone(), &request, gas_left);
-            clear(state_provider.clone(), store.clone(), &request, gas_left, refund)?;
+            if config.check_balance {
+                let refund = get_refund(store.clone(), &request, gas_left);
+                clear(state_provider.clone(), store.clone(), &request, gas_left, refund)?;
+            }
             for e in store.borrow_mut().selfdestruct.drain() {
                 state_provider.borrow_mut().kill_contract(&e)
             }
@@ -519,7 +528,9 @@ pub fn exec<B: DB + 'static>(
         }
         Err(e) => {
             // When error, coinbase eats all gas as it's price, yummy.
-            clear(state_provider.clone(), store.clone(), &request, 0, 0)?;
+            if config.check_balance {
+                clear(state_provider.clone(), store.clone(), &request, 0, 0)?;
+            }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
             Err(e)
         }
