@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use cita_trie::DB;
-use cita_trie::{PatriciaTrie, Trie};
+use cita_trie::{PatriciaTrie, Trie, TrieIterator};
 use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
@@ -29,6 +29,7 @@ pub struct State<B> {
     pub checkpoints: RefCell<Vec<HashMap<Address, Option<StateObjectEntry>>>>,
 }
 
+//impl<B,H> State<B,H> where B:DB,H:hasher::Hasher{
 impl<B: DB> State<B> {
     /// Creates empty state for test.
     pub fn new(db: Arc<B>) -> Result<State<B>, Error> {
@@ -61,6 +62,16 @@ impl<B: DB> State<B> {
             checkpoints: RefCell::new(Vec::new()),
         })
     }
+
+    pub fn iter<H>(&mut self) -> Result<TrieIterator<B,H>,Error> where H:hasher::Hasher {
+        let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root)?;
+        Ok(trie.iter<B,H>())
+    }
+
+    /*pub fn account_iter(&mut self,root:H256) -> Result<impl Iterator,Error> {
+        let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &root)?;
+        Ok(trie.iter())
+    }*/
 
     /// Create a contract account with code or not
     /// Overwrite the code if the contract already exists
@@ -139,8 +150,9 @@ impl<B: DB> State<B> {
         match trie.get(&address[..])? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
-                state_object.read_code(self.db.clone())?;
-                state_object.read_abi(self.db.clone())?;
+                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                state_object.read_code(accdb.clone())?;
+                state_object.read_abi(accdb.clone())?;
                 self.insert_cache(address, StateObjectEntry::new_clean(Some(state_object.clone_clean())));
                 Ok(Some(state_object))
             }
@@ -327,12 +339,7 @@ impl<B: DB> State<B> {
             .map(|(address, entry)| {
                 entry.status = ObjectStatus::Committed;
                 match entry.state_object {
-                    Some(ref mut state_object) => {
-                        (
-                            address.to_vec(),
-                            rlp::encode(&state_object.account()),
-                        )
-                    }
+                    Some(ref mut state_object) => (address.to_vec(), rlp::encode(&state_object.account())),
                     None => (address.to_vec(), vec![]),
                 }
             })

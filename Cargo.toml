@@ -10,7 +10,8 @@ documentation = "https://github.com/cryptape/cita-vm/blob/master/README.md"
 
 [dependencies]
 byteorder = "1.0"
-cita_trie = "2.0"
+#cita_trie = "2.0"
+cita_trie = { git = "https://github.com/cryptape/cita-trie.git", branch = "fix_lib_pub_mod" }
 env_logger = "0.6"
 ethereum-types = "0.4"
 hashbrown = { version = "0.3", features = ["rayon"] }
