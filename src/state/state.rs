@@ -305,7 +305,7 @@ impl<B: DB> State<B> {
                     return Ok(());
                 }
 
-                warn!("********** state commit {:?}",entry.state_object);
+                warn!("********** state commit address {:?} {:02x?}",address,entry.state_object);
                 if let Some(ref mut state_object) = entry.state_object {
                     // When operate on account element, AccountDB should be used
                     let accdb = Arc::new(AccountDB::new(*address, Arc::clone(&db)));
@@ -335,11 +335,12 @@ impl<B: DB> State<B> {
             .collect::<Vec<(Vec<u8>, Vec<u8>)>>();
 
         for (key, value) in key_values.into_iter() {
-            warn!("********** state commit key {:?} value {:?}",key,value);
+            warn!("********** state commit key {:02x?} value {:02x?}",key,value);
             trie.insert(key, value)?;
         }
 
         self.root = From::from(&trie.root()?[..]);
+        warn!("********** state commit root {:?} ",self.root);
         self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
