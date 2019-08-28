@@ -433,7 +433,7 @@ pub fn exec<B: DB + 'static>(
     config: Config,
     tx: Transaction,
 ) -> Result<evm::InterpreterResult, err::Error> {
-    let mut request = &mut reinterpret_tx(tx, state_provider.clone());
+    let request = &mut reinterpret_tx(tx, state_provider.clone());
     // Ensure gas < block_gas_limit
 
     /* TODO : this judgement need be reconsider
@@ -443,13 +443,15 @@ pub fn exec<B: DB + 'static>(
     */
 
     if config.check_nonce {
-        // Ensure nonce
-        if request.nonce + 1 != state_provider.borrow_mut().nonce(&request.sender)? {
+        // Ensure nonce. for state test compatible
+        //if request.nonce + 1 != state_provider.borrow_mut().nonce(&request.sender)? {
+        if request.nonce != state_provider.borrow_mut().nonce(&request.sender)? {
             return Err(err::Error::InvalidNonce);
         }
-    } else {
-        request.nonce = state_provider.borrow_mut().nonce(&request.sender)?;
     }
+    /*else {
+        request.nonce = state_provider.borrow_mut().nonce(&request.sender)?;
+    }*/
     // Ensure gas
     let gas_prepare = get_gas_prepare(request);
     if request.gas_limit < gas_prepare {
@@ -468,7 +470,7 @@ pub fn exec<B: DB + 'static>(
 
     // Increament the nonce for the next transaction
     // Comment for inc_nonce out of this exec
-    // state_provider.borrow_mut().inc_nonce(&request.sender)?;
+    state_provider.borrow_mut().inc_nonce(&request.sender)?;
 
     // Init the store for the transaction
     let mut store = Store::default();
@@ -581,16 +583,16 @@ impl<B: DB + 'static> Executive<B> {
     }
 
     pub fn exec(&self, evm_context: evm::Context, tx: Transaction) -> Result<evm::InterpreterResult, err::Error> {
-        exec(
+        /*exec(
             self.block_provider.clone(),
             self.state_provider.clone(),
             evm_context,
             self.config.clone(),
             tx.clone(),
-        )
+        )*/
 
         // Bellow is saved for jsondata test
-        /*let coinbase = evm_context.coinbase;
+        let coinbase = evm_context.coinbase;
         let exec_result = exec(
             self.block_provider.clone(),
             self.state_provider.clone(),
@@ -621,7 +623,6 @@ impl<B: DB + 'static> Executive<B> {
             Ok(_) => {}
         }
         exec_result
-        */
     }
 
     pub fn exec_static(

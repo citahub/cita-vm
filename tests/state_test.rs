@@ -73,15 +73,9 @@ fn test_json_file(p: &str) {
             }
             let exepinst = Executive::new(Arc::new(BlockDataProviderMock::default()), state_provider, cfg);
             let _exec_result = exepinst.exec(evm_context, tx);
+            //println!("******* exec resutl {:?}",exec_result);
             let root = exepinst.commit().unwrap();
-            // let _ = exec(
-            //     Arc::new(Box::new(BlockDataProviderMock::default())),
-            //     state_provider.clone(),
-            //     evm_context,
-            //     cfg,
-            //     tx,
-            // );
-            // let root = state_provider.borrow_mut().root;
+            //println!("\n--------------------------------------------------\n");
             assert_eq!(root, string_2_h256(postdata.hash.clone()));
         }
     }
@@ -111,7 +105,7 @@ fn test_json_path(p: &str) {
 
 // The reason contains "bug", "overflow", "slow", "precompile" and "obsolete".
 #[allow(dead_code)]
-fn skip(reason: &str, name: &str) {}
+fn skip(_reason: &str, _name: &str) {}
 
 #[rustfmt::skip]
 #[test]

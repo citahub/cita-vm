@@ -90,8 +90,10 @@ mod test_account_db {
     fn test_accdb_get() {
         let memdb = Arc::new(MemoryDB::new(false));
         let accdb = AccountDB::new(Address::zero(), memdb);
-        accdb.insert(b"test-key".to_vec(), b"test-value".to_vec()).unwrap();
-        let v = accdb.get(b"test-key").unwrap().unwrap();
+        let mut key = b"test-key".to_vec();
+        key.resize_with(32,Default::default);
+        accdb.insert(key.clone(), b"test-value".to_vec()).unwrap();
+        let v = accdb.get(&key).unwrap().unwrap();
         assert_eq!(v, b"test-value")
     }
 
@@ -99,8 +101,10 @@ mod test_account_db {
     fn test_accdb_contains() {
         let memdb = Arc::new(MemoryDB::new(false));
         let accdb = AccountDB::new(Address::zero(), memdb);
-        accdb.insert(b"test".to_vec(), b"test".to_vec()).unwrap();
-        let contains = accdb.contains(b"test").unwrap();
+        let mut key = b"test-key".to_vec();
+        key.resize_with(32,Default::default);
+        accdb.insert(key.clone(), b"test".to_vec()).unwrap();
+        let contains = accdb.contains(&key).unwrap();
         assert_eq!(contains, true)
     }
 
@@ -108,9 +112,11 @@ mod test_account_db {
     fn test_accdb_remove() {
         let memdb = Arc::new(MemoryDB::new(true));
         let accdb = AccountDB::new(Address::zero(), memdb);
-        accdb.insert(b"test".to_vec(), b"test".to_vec()).unwrap();
-        accdb.remove(b"test").unwrap();
-        let contains = accdb.contains(b"test").unwrap();
+        let mut key = b"test".to_vec();
+        key.resize_with(32,Default::default);
+        accdb.insert(key.clone(), b"test".to_vec()).unwrap();
+        accdb.remove(&key).unwrap();
+        let contains = accdb.contains(&key).unwrap();
         assert_eq!(contains, false)
     }
 }
