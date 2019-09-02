@@ -900,11 +900,11 @@ mod tests {
         let mut state = get_temp_state();
         state.commit().unwrap();
 
-        #[cfg(feature = "hash-keccak")]
+        #[cfg(feature = "sha3hash")]
         let expected = "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
-        #[cfg(feature = "hash-blake2b")]
+        #[cfg(feature = "blake2bhash")]
         let expected = "c14af59107ef14003e4697a40ea912d865eb1463086a4649977c13ea69b0d9af";
-        #[cfg(feature = "hash-sm3")]
+        #[cfg(feature = "sm3hash")]
         let expected = "995b949869f80fa1465a9d8b6fa759ec65c3020d59c2624662bdff059bdf19b3";
 
         assert_eq!(state.root, expected.into());

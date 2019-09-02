@@ -35,7 +35,7 @@ name = "benchmark"
 harness = false
 
 [features]
-default = ["hash-keccak"]
-hash-keccak = ["hasher/hash-keccak"]
-hash-blake2b = ["hasher/hash-blake2b"]
-hash-sm3 = ["hasher/hash-sm3"]
+default = ["sha3hash"]
+sha3hash = ["hasher/hash-keccak"]
+blake2bhash = ["hasher/hash-blake2b"]
+sm3hash = ["hasher/hash-sm3"]
