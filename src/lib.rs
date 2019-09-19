@@ -7,6 +7,7 @@ pub mod json_tests;
 pub mod native;
 pub mod state;
 
+pub use common::hash::summary;
 pub use err::Error;
 pub use executive::{
     create_address_from_address_and_nonce, exec, exec_static, BlockDataProvider, BlockDataProviderMock, Config,
