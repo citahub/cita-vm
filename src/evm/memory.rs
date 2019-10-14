@@ -10,7 +10,6 @@ impl Memory {
         if offset + val.len() > self.store.len() {
             panic!("invalid memory: store empty")
         }
-
         self.store[offset..offset + val.len()].copy_from_slice(val)
     }
 

@@ -243,6 +243,7 @@ impl Interpreter {
                 opcodes::OpCode::CODECOPY => {
                     let mem_offset = self.stack.back(0);
                     let mem_len = self.stack.back(2);
+
                     self.mem_gas_work(mem_offset, mem_len)?;
                     let gas = common::to_word_size(mem_len.low_u64()) * self.cfg.gas_copy;
                     self.use_gas(gas)?;
@@ -1157,9 +1158,6 @@ impl Interpreter {
     }
 
     fn mem_gas_work(&mut self, mem_offset: U256, mem_len: U256) -> Result<(), err::Error> {
-        if mem_len.is_zero() {
-            return Ok(());
-        }
         let (mem_sum, b) = mem_offset.overflowing_add(mem_len);
         // Ethereum's max block gas is 8000000, when mem size > 1024 * 64,
         // about 8000000 gas should be fired. That's means this transaction
@@ -1173,6 +1171,7 @@ impl Interpreter {
             let gas = self.mem_gas_cost(mem_sum.low_u64());
             self.use_gas(gas)?;
         }
+
         self.mem.expand(mem_sum.low_u64() as usize);
         Ok(())
     }
