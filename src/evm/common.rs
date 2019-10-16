@@ -83,6 +83,9 @@ pub fn rpad(slice: Vec<u8>, n: usize) -> Vec<u8> {
 /// Copy data from source by start and size.
 #[inline]
 pub fn copy_data(source: &[u8], start: U256, size: U256) -> Vec<u8> {
+    if size.is_zero() {
+        return Vec::new();
+    }
     let source_len = U256::from(source.len());
     let s = u256_min(start, source_len);
     let e = u256_min(s + size, source_len);

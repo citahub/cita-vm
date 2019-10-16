@@ -7,10 +7,14 @@ pub struct Memory {
 
 impl Memory {
     pub fn set(&mut self, offset: usize, val: &[u8]) {
-        if offset + val.len() > self.store.len() {
+        let len = val.len();
+        if len == 0 {
+            return;
+        }
+        if offset + len > self.store.len() {
             panic!("invalid memory: store empty")
         }
-        self.store[offset..offset + val.len()].copy_from_slice(val)
+        self.store[offset..offset + len].copy_from_slice(val)
     }
 
     pub fn get(&self, offset: usize, size: usize) -> &[u8] {
