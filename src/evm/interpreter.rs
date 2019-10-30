@@ -1241,7 +1241,7 @@ mod tests {
             ),
         ];
         for (val, th, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack
                 .push_n(&[U256::from(val), U256::from(th.parse::<u64>().unwrap())]);
             it.params.contract.code_data = vec![OpCode::BYTE as u8];
@@ -1310,7 +1310,7 @@ mod tests {
             ),
         ];
         for (x, y, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![OpCode::SHL as u8];
             it.run().unwrap();
@@ -1378,7 +1378,7 @@ mod tests {
             ),
         ];
         for (x, y, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![OpCode::SHR as u8];
             it.run().unwrap();
@@ -1471,7 +1471,7 @@ mod tests {
             ),
         ];
         for (x, y, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![OpCode::SAR as u8];
             it.run().unwrap();
@@ -1544,7 +1544,7 @@ mod tests {
             ),
         ];
         for (x, y, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![OpCode::SGT as u8];
             it.run().unwrap();
@@ -1617,7 +1617,7 @@ mod tests {
             ),
         ];
         for (x, y, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![OpCode::SLT as u8];
             it.run().unwrap();
@@ -1627,7 +1627,7 @@ mod tests {
 
     #[test]
     fn test_op_mstore() {
-        let mut it = default_interpreter();;
+        let mut it = default_interpreter();
         let v = "abcdef00000000000000abba000000000deaf000000c0de00100000000133700";
         it.stack.push_n(&[U256::from(v), U256::zero()]);
         it.params.contract.code_data = vec![OpCode::MSTORE as u8];
@@ -1683,7 +1683,7 @@ mod tests {
 
     #[test]
     fn test_op_invalid() {
-        let mut it = default_interpreter();;
+        let mut it = default_interpreter();
         it.params.contract.code_data = hex::decode("fb").unwrap();
         let r = it.run();
         assert!(r.is_err());
