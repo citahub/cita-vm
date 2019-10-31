@@ -64,11 +64,11 @@ fn gen_mapped(k: &[u8], v: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)> {
 
 pub struct SyscallStorage {
     address: Address,
-    data: Rc<RefCell<DataProvider>>,
+    data: Rc<RefCell<dyn DataProvider>>,
 }
 
 impl SyscallStorage {
-    pub fn new(address: Address, data: Rc<RefCell<DataProvider>>) -> Self {
+    pub fn new(address: Address, data: Rc<RefCell<dyn DataProvider>>) -> Self {
         Self { address, data }
     }
 }

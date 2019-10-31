@@ -34,7 +34,7 @@ impl Default for InterpreterConf {
 pub struct Interpreter {
     pub context: Context,
     pub iparams: InterpreterParams,
-    pub data_provider: Rc<RefCell<DataProvider>>,
+    pub data_provider: Rc<RefCell<dyn DataProvider>>,
     pub cfg: InterpreterConf,
 }
 
@@ -43,7 +43,7 @@ impl Interpreter {
         context: Context,
         cfg: InterpreterConf,
         iparams: InterpreterParams,
-        data_provider: Rc<RefCell<DataProvider>>,
+        data_provider: Rc<RefCell<dyn DataProvider>>,
     ) -> Self {
         Self {
             context,

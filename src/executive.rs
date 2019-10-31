@@ -46,14 +46,14 @@ impl BlockDataProvider for BlockDataProviderMock {
 
 /// An implemention for evm::DataProvider
 pub struct DataProvider<B> {
-    pub block_provider: Arc<BlockDataProvider>,
+    pub block_provider: Arc<dyn BlockDataProvider>,
     pub state_provider: Arc<RefCell<State<B>>>,
     pub store: Arc<RefCell<Store>>,
 }
 
 impl<B: DB> DataProvider<B> {
     /// Create a new instance. It's obvious.
-    pub fn new(b: Arc<BlockDataProvider>, s: Arc<RefCell<State<B>>>, store: Arc<RefCell<Store>>) -> Self {
+    pub fn new(b: Arc<dyn BlockDataProvider>, s: Arc<RefCell<State<B>>>, store: Arc<RefCell<Store>>) -> Self {
         DataProvider {
             block_provider: b,
             state_provider: s,
@@ -381,7 +381,7 @@ impl Default for Config {
 
 /// Function call_pure enters into the specific contract with no check or checkpoints.
 fn call_pure<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     iparams: &InterpreterParams,
@@ -427,7 +427,7 @@ fn call_pure<B: DB + 'static>(
 
 /// Function call enters into the specific contract.
 fn call<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     iparams: &InterpreterParams,
@@ -467,7 +467,7 @@ fn call<B: DB + 'static>(
 
 /// Function create creates a new contract.
 fn create<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     iparams: &InterpreterParams,
@@ -596,13 +596,13 @@ fn reinterpret_tx<B: DB + 'static>(
 }
 
 pub struct Executive<B> {
-    pub block_provider: Arc<BlockDataProvider>,
+    pub block_provider: Arc<dyn BlockDataProvider>,
     pub state_provider: Arc<RefCell<state::State<B>>>,
     pub config: Config,
 }
 
 impl<B: DB + 'static> Executive<B> {
-    pub fn new(block_provider: Arc<BlockDataProvider>, state_provider: state::State<B>, config: Config) -> Self {
+    pub fn new(block_provider: Arc<dyn BlockDataProvider>, state_provider: state::State<B>, config: Config) -> Self {
         Self {
             block_provider,
             state_provider: Arc::new(RefCell::new(state_provider)),
