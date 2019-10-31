@@ -23,7 +23,7 @@ impl FakeVM {
         state.new_contract(&account2, U256::from(200_000_000_000u64), U256::from(1), vec![]);
         state.commit().unwrap();
 
-        let block_data_provider: Arc<BlockDataProvider> = Arc::new(BlockDataProviderMock::default());
+        let block_data_provider: Arc<dyn BlockDataProvider> = Arc::new(BlockDataProviderMock::default());
 
         Self {
             account1,

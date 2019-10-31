@@ -17,11 +17,11 @@ use crate::{Context, InterpreterParams};
 pub struct SyscallEnvironment {
     context: Context,
     iparams: InterpreterParams,
-    data: Rc<RefCell<DataProvider>>,
+    data: Rc<RefCell<dyn DataProvider>>,
 }
 
 impl SyscallEnvironment {
-    pub fn new(context: Context, iparams: InterpreterParams, data: Rc<RefCell<DataProvider>>) -> Self {
+    pub fn new(context: Context, iparams: InterpreterParams, data: Rc<RefCell<dyn DataProvider>>) -> Self {
         Self { context, iparams, data }
     }
 }

@@ -28,16 +28,16 @@ pub trait PrecompiledContract: Send + Sync {
 }
 
 /// Function get returns a pre-compiled contract by given address.
-pub fn get(address: Address) -> Box<PrecompiledContract> {
+pub fn get(address: Address) -> Box<dyn PrecompiledContract> {
     match U256::from(H256::from(address)).low_u64() {
-        0x01 => Box::new(EcRecover {}) as Box<PrecompiledContract>,
-        0x02 => Box::new(SHA256Hash {}) as Box<PrecompiledContract>,
-        0x03 => Box::new(RIPEMD160Hash {}) as Box<PrecompiledContract>,
-        0x04 => Box::new(DataCopy {}) as Box<PrecompiledContract>,
-        0x05 => Box::new(BigModExp {}) as Box<PrecompiledContract>,
-        0x06 => Box::new(Bn256Add {}) as Box<PrecompiledContract>,
-        0x07 => Box::new(Bn256ScalarMul {}) as Box<PrecompiledContract>,
-        0x08 => Box::new(Bn256Pairing {}) as Box<PrecompiledContract>,
+        0x01 => Box::new(EcRecover {}) as Box<dyn PrecompiledContract>,
+        0x02 => Box::new(SHA256Hash {}) as Box<dyn PrecompiledContract>,
+        0x03 => Box::new(RIPEMD160Hash {}) as Box<dyn PrecompiledContract>,
+        0x04 => Box::new(DataCopy {}) as Box<dyn PrecompiledContract>,
+        0x05 => Box::new(BigModExp {}) as Box<dyn PrecompiledContract>,
+        0x06 => Box::new(Bn256Add {}) as Box<dyn PrecompiledContract>,
+        0x07 => Box::new(Bn256ScalarMul {}) as Box<dyn PrecompiledContract>,
+        0x08 => Box::new(Bn256Pairing {}) as Box<dyn PrecompiledContract>,
         _ => unimplemented!(),
     }
 }

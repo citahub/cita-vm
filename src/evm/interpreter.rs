@@ -106,7 +106,7 @@ impl Default for InterpreterConf {
 pub struct Interpreter {
     pub context: Context,
     pub cfg: InterpreterConf,
-    pub data_provider: Box<DataProvider>,
+    pub data_provider: Box<dyn DataProvider>,
     pub params: InterpreterParams,
 
     gas: u64,
@@ -122,7 +122,7 @@ impl Interpreter {
     pub fn new(
         context: Context,
         cfg: InterpreterConf,
-        data_provider: Box<DataProvider>,
+        data_provider: Box<dyn DataProvider>,
         params: InterpreterParams,
     ) -> Self {
         let gas = params.gas_limit;
