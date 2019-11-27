@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use cita_trie::DB;
@@ -18,7 +19,7 @@ use crate::state::object_entry::{ObjectStatus, StateObjectEntry};
 
 /// State is the one who managers all accounts and states in Ethereum's system.
 pub struct State<B> {
-    pub db: Arc<B>,
+    pub db: Rc<RefCell<B>>,
     pub root: H256,
     pub cache: RefCell<HashMap<Address, StateObjectEntry>>,
     /// Checkpoints are used to revert to history.
@@ -27,8 +28,8 @@ pub struct State<B> {
 
 impl<B: DB> State<B> {
     /// Creates empty state for test.
-    pub fn new(db: Arc<B>) -> Result<State<B>, Error> {
-        let mut trie = PatriciaTrie::new(Arc::clone(&db), Arc::new(hash::get_hasher()));
+    pub fn new(db: Rc<RefCell<B>>) -> Result<State<B>, Error> {
+        let mut trie = PatriciaTrie::new(Rc::clone(&db), Rc::new(hash::get_hasher()));
         let root = trie.root()?;
 
         Ok(State {
@@ -40,8 +41,12 @@ impl<B: DB> State<B> {
     }
 
     /// Creates new state with existing state root
-    pub fn from_existing(db: Arc<B>, root: H256) -> Result<State<B>, Error> {
-        if !db.contains(&root.0[..]).or_else(|e| Err(Error::DB(format!("{}", e))))? {
+    pub fn from_existing(db: Rc<RefCell<B>>, root: H256) -> Result<State<B>, Error> {
+        if !db
+            .borrow()
+            .contains(&root.0[..])
+            .or_else(|e| Err(Error::DB(format!("{}", e))))?
+        {
             return Err(Error::NotFound);
         }
         Ok(State {
@@ -107,7 +112,7 @@ impl<B: DB> State<B> {
                 return Ok(f(None));
             }
         }
-        let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
+        let trie = PatriciaTrie::from(Rc::clone(&self.db), Rc::new(hash::get_hasher()), &self.root.0)?;
         match trie.get(common::hash::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
@@ -126,7 +131,7 @@ impl<B: DB> State<B> {
                 return Ok(Some((*state_object).clone_dirty()));
             }
         }
-        let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
+        let trie = PatriciaTrie::from(Rc::clone(&self.db), Rc::new(hash::get_hasher()), &self.root.0)?;
         match trie.get(common::hash::summary(&address[..]).as_slice())? {
             Some(rlp) => {
                 let mut state_object = StateObject::from_rlp(&rlp)?;
@@ -151,7 +156,7 @@ impl<B: DB> State<B> {
 
     /// Get the merkle proof for a given account.
     pub fn get_account_proof(&self, address: &Address) -> Result<Vec<Vec<u8>>, Error> {
-        let trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
+        let trie = PatriciaTrie::from(Rc::clone(&self.db), Rc::new(hash::get_hasher()), &self.root.0)?;
         let proof = trie.get_proof(common::hash::summary(&address[..]).as_slice())?;
         Ok(proof)
     }
@@ -160,7 +165,7 @@ impl<B: DB> State<B> {
     pub fn get_storage_proof(&self, address: &Address, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
         self.call_with_cached(address, |a| match a {
             Some(data) => {
-                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                let accdb = Rc::new(RefCell::new(AccountDB::new(*address, self.db.clone())));
                 data.get_storage_proof(accdb, key)
             }
             None => Ok(vec![]),
@@ -189,7 +194,7 @@ impl<B: DB> State<B> {
             address, key, value
         );
         let state_object = self.get_state_object_or_default(address)?;
-        let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+        let accdb = Rc::new(RefCell::new(AccountDB::new(*address, self.db.clone())));
         if state_object.get_storage(accdb, &key)? == Some(value) {
             return Ok(());
         }
@@ -282,26 +287,26 @@ impl<B: DB> State<B> {
         assert!(self.checkpoints.borrow().is_empty());
 
         // Firstly, update account storage tree
-        let db = Arc::clone(&self.db);
+        let db = Rc::clone(&self.db);
         self.cache
             .borrow_mut()
-            .par_iter_mut()
+            .iter_mut()
             .map(|(address, entry)| {
                 if !entry.is_dirty() {
                     return Ok(());
                 }
 
                 if let Some(ref mut state_object) = entry.state_object {
-                    let accdb = Arc::new(AccountDB::new(*address, Arc::clone(&db)));
-                    state_object.commit_storage(Arc::clone(&accdb))?;
-                    state_object.commit_code(Arc::clone(&db))?;
+                    let accdb = Rc::new(RefCell::new(AccountDB::new(*address, Rc::clone(&db))));
+                    state_object.commit_storage(Rc::clone(&accdb))?;
+                    state_object.commit_code(Rc::clone(&db))?;
                 }
                 Ok(())
             })
             .collect::<Result<(), Error>>()?;
 
         // Secondly, update the world state tree
-        let mut trie = PatriciaTrie::from(Arc::clone(&self.db), Arc::new(hash::get_hasher()), &self.root.0)?;
+        let mut trie = PatriciaTrie::from(Rc::clone(&self.db), Rc::new(hash::get_hasher()), &self.root.0)?;
         let key_values = self
             .cache
             .borrow_mut()
@@ -325,7 +330,10 @@ impl<B: DB> State<B> {
         }
 
         self.root = From::from(&trie.root()?[..]);
-        self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
+        self.db
+            .borrow_mut()
+            .flush()
+            .or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 
     /// Create a recoverable checkpoint of this state. Return the checkpoint index.
@@ -417,7 +425,7 @@ impl<B: DB> StateObjectInfo for State<B> {
     fn get_storage(&mut self, address: &Address, key: &H256) -> Result<H256, Error> {
         self.call_with_cached(address, |a| match a {
             Some(state_object) => {
-                let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
+                let accdb = Rc::new(RefCell::new(AccountDB::new(*address, self.db.clone())));
                 match state_object.get_storage(accdb, key)? {
                     Some(v) => Ok(v),
                     None => Ok(H256::zero()),

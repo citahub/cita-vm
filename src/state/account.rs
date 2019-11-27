@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use cita_trie::{PatriciaTrie, Trie, DB};
 use ethereum_types::{H256, U256};
@@ -131,13 +132,14 @@ impl StateObject {
     }
 
     /// Read the code from database by it's codehash.
-    pub fn read_code<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
+    pub fn read_code<B: DB>(&mut self, db: Rc<RefCell<B>>) -> Result<(), Error> {
         if self.code_hash == common::hash::NIL_DATA {
             return Ok(());
         }
         let mut k = CODE_PREFIX.as_bytes().to_vec();
         k.extend(self.code_hash.to_vec());
         let c = db
+            .borrow()
             .get(&k)
             .or_else(|e| Err(Error::DB(format!("{}", e))))?
             .unwrap_or_else(|| vec![]);
@@ -175,11 +177,11 @@ impl StateObject {
     }
 
     /// Get value by key from database.
-    pub fn get_storage_at_backend<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Option<H256>, Error> {
+    pub fn get_storage_at_backend<B: DB>(&self, db: Rc<RefCell<B>>, key: &H256) -> Result<Option<H256>, Error> {
         if self.storage_root == common::hash::RLP_NULL {
             return Ok(None);
         }
-        let trie = PatriciaTrie::from(db, Arc::new(hash::get_hasher()), &self.storage_root.0)?;
+        let trie = PatriciaTrie::from(db, Rc::new(hash::get_hasher()), &self.storage_root.0)?;
         if let Some(b) = trie.get(&common::hash::summary(key))? {
             let u256_k: U256 = rlp::decode(&b)?;
             let h256_k: H256 = u256_k.into();
@@ -194,7 +196,7 @@ impl StateObject {
     }
 
     /// Get value by key.
-    pub fn get_storage<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Option<H256>, Error> {
+    pub fn get_storage<B: DB>(&self, db: Rc<RefCell<B>>, key: &H256) -> Result<Option<H256>, Error> {
         if let Some(value) = self.get_storage_at_changes(key) {
             return Ok(Some(value));
         }
@@ -205,19 +207,19 @@ impl StateObject {
     }
 
     /// Get storage proof
-    pub fn get_storage_proof<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
-        let trie = PatriciaTrie::from(db, Arc::new(hash::get_hasher()), &self.storage_root.0)
+    pub fn get_storage_proof<B: DB>(&self, db: Rc<RefCell<B>>, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
+        let trie = PatriciaTrie::from(db, Rc::new(hash::get_hasher()), &self.storage_root.0)
             .or_else(|e| Err(Error::DB(format!("StateObject::get_storage_proof: {}", e))))?;
         let proof = trie.get_proof(&key.0)?;
         Ok(proof)
     }
 
     /// Flush data in storage cache to database.
-    pub fn commit_storage<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
+    pub fn commit_storage<B: DB>(&mut self, db: Rc<RefCell<B>>) -> Result<(), Error> {
         let mut trie = if self.storage_root == common::hash::RLP_NULL {
-            PatriciaTrie::new(db, Arc::new(hash::get_hasher()))
+            PatriciaTrie::new(db, Rc::new(hash::get_hasher()))
         } else {
-            PatriciaTrie::from(db, Arc::new(hash::get_hasher()), &self.storage_root.0)?
+            PatriciaTrie::from(db, Rc::new(hash::get_hasher()), &self.storage_root.0)?
         };
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
@@ -231,7 +233,7 @@ impl StateObject {
     }
 
     /// Flush code to database if necessary.
-    pub fn commit_code<B: DB>(&mut self, db: Arc<B>) -> Result<(), Error> {
+    pub fn commit_code<B: DB>(&mut self, db: Rc<RefCell<B>>) -> Result<(), Error> {
         match (self.code_state == CodeState::Dirty, self.code.is_empty()) {
             (true, true) => {
                 self.code_size = 0;
@@ -240,7 +242,8 @@ impl StateObject {
             (true, false) => {
                 let mut k = CODE_PREFIX.as_bytes().to_vec();
                 k.extend(self.code_hash.to_vec());
-                db.insert(k, self.code.clone())
+                db.borrow_mut()
+                    .insert(k, self.code.clone())
                     .or_else(|e| Err(Error::DB(format!("{}", e))))?;
                 self.code_size = self.code.len();
                 self.code_state = CodeState::Clean;

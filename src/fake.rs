@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use ethereum_types::{Address, U256};
@@ -17,8 +19,8 @@ impl FakeVM {
         let account1 = Address::from("0x0000000000000000000000000000000000000001");
         let account2 = Address::from("0x0000000000000000000000000000000000000002");
 
-        let db = Arc::new(crate::state::MemoryDB::new(false));
-        let mut state = state::State::new(db.clone()).unwrap();
+        let db = Rc::new(RefCell::new(crate::state::MemoryDB::new(false)));
+        let mut state = state::State::new(Rc::clone(&db)).unwrap();
         state.new_contract(&account1, U256::from(100_000_000_000u64), U256::from(1), vec![]);
         state.new_contract(&account2, U256::from(200_000_000_000u64), U256::from(1), vec![]);
         state.commit().unwrap();
