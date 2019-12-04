@@ -82,14 +82,14 @@ impl Store {
 
 /// An implemention for evm::DataProvider
 pub struct DataProvider<B> {
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<State<B>>>,
     store: Arc<RefCell<Store>>,
 }
 
 impl<B: DB> DataProvider<B> {
     /// Create a new instance. It's obvious.
-    pub fn new(b: Arc<BlockDataProvider>, s: Arc<RefCell<State<B>>>, store: Arc<RefCell<Store>>) -> Self {
+    pub fn new(b: Arc<dyn BlockDataProvider>, s: Arc<RefCell<State<B>>>, store: Arc<RefCell<Store>>) -> Self {
         DataProvider {
             block_provider: b,
             state_provider: s,
@@ -103,7 +103,7 @@ pub fn create_address_from_address_and_nonce(address: &Address, nonce: &U256) ->
     let mut stream = RlpStream::new_list(2);
     stream.append(address);
     stream.append(nonce);
-    Address::from(H256::from(common::hash::summary(stream.as_raw()).as_slice()))
+    Address::from(H256::from_slice(common::hash::summary(stream.as_raw()).as_slice()))
 }
 
 /// Returns new address created from sender salt and code hash.
@@ -115,7 +115,7 @@ pub fn create_address_from_salt_and_code_hash(address: &Address, salt: H256, cod
     buffer[1..=20].copy_from_slice(&address[..]);
     buffer[(1 + 20)..(1 + 20 + 32)].copy_from_slice(&salt[..]);
     buffer[(1 + 20 + 32)..].copy_from_slice(code_hash);
-    Address::from(H256::from(common::hash::summary(&buffer[..]).as_slice()))
+    Address::from(H256::from_slice(common::hash::summary(&buffer[..]).as_slice()))
 }
 
 /// A selector for func create_address_from_address_and_nonce() and
@@ -217,7 +217,7 @@ impl Default for Config {
 
 /// Function call_pure enters into the specific contract with no check or checkpoints.
 fn call_pure<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
@@ -255,7 +255,7 @@ fn call_pure<B: DB + 'static>(
 
 /// Function call enters into the specific contract.
 fn call<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
@@ -294,7 +294,7 @@ fn call<B: DB + 'static>(
 
 /// Function create creates a new contract.
 fn create<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
@@ -428,7 +428,7 @@ fn reinterpret_tx<B: DB + 'static>(
 
 /// Execute the transaction from transaction pool
 pub fn exec<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     evm_context: evm::Context,
     config: Config,
@@ -547,7 +547,7 @@ pub fn exec<B: DB + 'static>(
 /// This function is similar with `exec`, but all check & checkpoints are removed.
 #[allow(unused_variables)]
 pub fn exec_static<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     evm_context: evm::Context,
     config: Config,
@@ -567,13 +567,13 @@ pub fn exec_static<B: DB + 'static>(
 }
 
 pub struct Executive<B> {
-    pub block_provider: Arc<BlockDataProvider>,
+    pub block_provider: Arc<dyn BlockDataProvider>,
     pub state_provider: Arc<RefCell<state::State<B>>>,
     pub config: Config,
 }
 
 impl<B: DB + 'static> Executive<B> {
-    pub fn new(block_provider: Arc<BlockDataProvider>, state_provider: state::State<B>, config: Config) -> Self {
+    pub fn new(block_provider: Arc<dyn BlockDataProvider>, state_provider: state::State<B>, config: Config) -> Self {
         Self {
             block_provider,
             state_provider: Arc::new(RefCell::new(state_provider)),
@@ -626,7 +626,7 @@ impl<B: DB + 'static> Executive<B> {
     }
 
     pub fn exec_static(
-        block_provider: Arc<BlockDataProvider>,
+        block_provider: Arc<dyn BlockDataProvider>,
         state_provider: state::State<B>,
         evm_context: evm::Context,
         config: Config,
@@ -757,7 +757,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     }
 
     fn sha3(&self, data: &[u8]) -> H256 {
-        From::from(&hasher::HasherKeccak::new().digest(data)[..])
+        H256::from_slice(&hasher::HasherKeccak::new().digest(data)[..])
     }
 
     fn is_empty(&self, address: &Address) -> bool {

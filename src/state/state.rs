@@ -38,7 +38,7 @@ impl<B: DB> State<B> {
 
         Ok(State {
             db,
-            root: From::from(&root[..]),
+            root: H256::from_slice(&root[..]),
             cache: RefCell::new(HashMap::new()),
             checkpoints: RefCell::new(Vec::new()),
         })
@@ -327,8 +327,8 @@ impl<B: DB> State<B> {
             .map(|(address, entry)| {
                 entry.status = ObjectStatus::Committed;
                 match entry.state_object {
-                    Some(ref mut state_object) => (address.to_vec(), rlp::encode(&state_object.account())),
-                    None => (address.to_vec(), vec![]),
+                    Some(ref mut state_object) => (address.as_bytes().to_vec(), rlp::encode(&state_object.account())),
+                    None => (address.as_bytes().to_vec(), vec![]),
                 }
             })
             .collect::<Vec<(Vec<u8>, Vec<u8>)>>();
@@ -337,7 +337,7 @@ impl<B: DB> State<B> {
             trie.insert(key, value)?;
         }
 
-        self.root = From::from(&trie.root()?[..]);
+        self.root = H256::from_slice(&trie.root()?[..]);
         self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
     }
 

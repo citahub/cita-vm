@@ -92,7 +92,7 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn sha3(&self, data: &[u8]) -> H256 {
-        H256::from(&common::hash::summary(data)[..])
+        H256::from_slice(&common::hash::summary(data)[..])
     }
 
     fn is_empty(&self, address: &Address) -> bool {

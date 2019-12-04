@@ -1,6 +1,6 @@
 use std::u64;
 
-use ethereum_types::{Address, H256, U256};
+use ethereum_types::{Address, BigEndianHash, H256, U256};
 
 /// The size of word in EVM is 32 bytes.
 #[inline]
@@ -39,12 +39,12 @@ pub fn set_sign(value: U256, sign: bool) -> U256 {
 
 #[inline]
 pub fn u256_to_address(value: &U256) -> Address {
-    Address::from(H256::from(value))
+    Address::from(H256::from_uint(value))
 }
 
 #[inline]
 pub fn address_to_u256(value: Address) -> U256 {
-    U256::from(&*H256::from(value))
+    H256::from_slice(value.as_bytes()).into_uint()
 }
 
 #[inline]

@@ -9,7 +9,7 @@ use crate::state::err::Error;
 static NULL_RLP_STATIC: [u8; 1] = [0x80; 1];
 
 fn combine_key<'a>(addr_hash: &[u8], key: &'a [u8]) -> Vec<u8> {
-    let mut dst = key.clone().to_vec();
+    let mut dst = key.to_vec();
     {
         for (k, a) in dst[12..].iter_mut().zip(&addr_hash[12..]) {
             *k ^= *a
@@ -27,7 +27,7 @@ pub struct AccountDB<B: DB> {
 
 impl<B: DB> AccountDB<B> {
     pub fn new(address: Address, db: Arc<B>) -> Self {
-        let address_hash = summary(&address[..]).as_slice().into();
+        let address_hash = H256::from_slice(summary(&address[..]).as_slice());
         AccountDB { address_hash, db }
     }
 }
@@ -36,7 +36,7 @@ impl<B: DB> DB for AccountDB<B> {
     type Error = Error;
 
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
-        if H256::from(key) == RLP_NULL {
+        if H256::from_slice(key) == RLP_NULL {
             return Ok(Some(NULL_RLP_STATIC.to_vec()));
         }
 
@@ -47,7 +47,7 @@ impl<B: DB> DB for AccountDB<B> {
     }
 
     fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Self::Error> {
-        if H256::from(key.as_slice()) == RLP_NULL {
+        if H256::from_slice(key.as_slice()) == RLP_NULL {
             return Ok(());
         }
         let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
@@ -57,7 +57,7 @@ impl<B: DB> DB for AccountDB<B> {
     }
 
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
-        if H256::from(key) == RLP_NULL {
+        if H256::from_slice(key) == RLP_NULL {
             return Ok(true);
         }
         let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
@@ -67,7 +67,7 @@ impl<B: DB> DB for AccountDB<B> {
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), Self::Error> {
-        if H256::from(key) == RLP_NULL {
+        if H256::from_slice(key) == RLP_NULL {
             return Ok(());
         }
         let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
