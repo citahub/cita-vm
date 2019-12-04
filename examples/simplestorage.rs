@@ -4,7 +4,6 @@ use std::sync::Arc;
 use ethereum_types::{Address, U256};
 
 fn main() {
-    env_logger::init();
     let db = Arc::new(cita_vm::state::MemoryDB::new(false));
     let mut state = cita_vm::state::State::new(db).unwrap();
     let code = "6080604052600436106049576000357c0100000000000000000000000000000\
