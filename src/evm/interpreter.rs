@@ -76,6 +76,8 @@ pub struct InterpreterConf {
     pub gas_call_new_account: u64, // Paid for a CALL operation which creates an account
     pub gas_self_destruct_new_account: u64, // Paid for a SELFDESTRUCT operation which creates an account
     pub gas_ext_code_hash: u64, // Piad for a EXTCODEHASH operation. http://eips.ethereum.org/EIPS/eip-1052
+    pub gas_chain_id: u64,     // istanbul,eip155
+    pub gas_self_balance: u64, // istanbul
 }
 
 impl Default for InterpreterConf {
@@ -125,6 +127,8 @@ impl Default for InterpreterConf {
             gas_call_new_account: 25000,
             gas_self_destruct_new_account: 0, //25000,
             gas_ext_code_hash: 400,
+            gas_chain_id: 2,
+            gas_self_balance: 5,
         }
     }
 }
@@ -232,6 +236,12 @@ impl Interpreter {
                 }
                 opcodes::OpCode::BALANCE => {
                     self.use_gas(self.cfg.gas_balance)?;
+                }
+                opcodes::OpCode::SELFBALANCE => {
+                    self.use_gas(self.cfg.gas_self_balance)?;
+                }
+                opcodes::OpCode::CHAINID => {
+                    self.use_gas(self.cfg.gas_chain_id)?;
                 }
                 opcodes::OpCode::CALLDATACOPY => {
                     let mem_offset = self.stack.back(0);
@@ -664,6 +674,14 @@ impl Interpreter {
                     let address = common::u256_to_address(&self.stack.pop());
                     let balance = self.data_provider.get_balance(&address);
                     self.stack.push(balance);
+                }
+                opcodes::OpCode::SELFBALANCE => {
+                    let balance = self.data_provider.get_balance(&self.params.receiver);
+                    self.stack.push(balance);
+                }
+                opcodes::OpCode::CHAINID => {
+                    // Tmp set 0,no need for consortium blockchain
+                    self.stack.push(1.into());
                 }
                 opcodes::OpCode::ORIGIN => {
                     self.stack.push(common::address_to_u256(self.params.origin));
@@ -1307,7 +1325,7 @@ mod tests {
             ),
         ];
         for (val, th, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack
                 .push_n(&[U256::from(val), U256::from(th.parse::<u64>().unwrap())]);
             it.params.contract.code_data = vec![opcodes::OpCode::BYTE as u8];
@@ -1376,7 +1394,7 @@ mod tests {
             ),
         ];
         for (x, y, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![opcodes::OpCode::SHL as u8];
             it.run().unwrap();
@@ -1444,7 +1462,7 @@ mod tests {
             ),
         ];
         for (x, y, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![opcodes::OpCode::SHR as u8];
             it.run().unwrap();
@@ -1537,12 +1555,20 @@ mod tests {
             ),
         ];
         for (x, y, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![opcodes::OpCode::SAR as u8];
             it.run().unwrap();
             assert_eq!(it.stack.pop(), U256::from(expected));
         }
+    }
+
+    #[test]
+    fn test_op_chain_id() {
+        let mut it = default_interpreter();
+        it.params.contract.code_data = vec![opcodes::OpCode::CHAINID as u8];
+        it.run().unwrap();
+        assert_eq!(it.stack.pop(), U256::from(1));
     }
 
     #[test]
@@ -1610,7 +1636,7 @@ mod tests {
             ),
         ];
         for (x, y, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![opcodes::OpCode::SGT as u8];
             it.run().unwrap();
@@ -1683,7 +1709,7 @@ mod tests {
             ),
         ];
         for (x, y, expected) in data {
-            let mut it = default_interpreter();;
+            let mut it = default_interpreter();
             it.stack.push_n(&[U256::from(x), U256::from(y)]);
             it.params.contract.code_data = vec![opcodes::OpCode::SLT as u8];
             it.run().unwrap();
@@ -1693,7 +1719,7 @@ mod tests {
 
     #[test]
     fn test_op_mstore() {
-        let mut it = default_interpreter();;
+        let mut it = default_interpreter();
         let v = "abcdef00000000000000abba000000000deaf000000c0de00100000000133700";
         it.stack.push_n(&[U256::from(v), U256::zero()]);
         it.params.contract.code_data = vec![opcodes::OpCode::MSTORE as u8];
@@ -1749,7 +1775,7 @@ mod tests {
 
     #[test]
     fn test_op_invalid() {
-        let mut it = default_interpreter();;
+        let mut it = default_interpreter();
         it.params.contract.code_data = hex::decode("fb").unwrap();
         let r = it.run();
         assert!(r.is_err());
