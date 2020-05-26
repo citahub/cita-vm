@@ -2,7 +2,6 @@ use std::fs;
 use std::io;
 use std::io::Write;
 
-use cita_vm;
 use cita_vm::evm;
 use cita_vm::evm::extmock;
 use cita_vm::json_tests::common::*;
