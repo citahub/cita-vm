@@ -242,7 +242,7 @@ impl StateObject {
 
     /// Get value by key from storage cache.
     pub fn get_storage_at_changes(&self, key: &H256) -> Option<H256> {
-        self.storage_changes.get(key).and_then(|e| Some(*e))
+        self.storage_changes.get(key).copied()
     }
 
     /// Get the storage changes

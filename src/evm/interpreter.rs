@@ -163,7 +163,7 @@ pub struct InterpreterParams {
 pub struct Interpreter {
     pub context: Context,
     pub cfg: InterpreterConf,
-    pub data_provider: Box<ext::DataProvider>,
+    pub data_provider: Box<dyn ext::DataProvider>,
     pub params: InterpreterParams,
 
     gas: u64,
@@ -179,7 +179,7 @@ impl Interpreter {
     pub fn new(
         context: Context,
         cfg: InterpreterConf,
-        data_provider: Box<ext::DataProvider>,
+        data_provider: Box<dyn ext::DataProvider>,
         params: InterpreterParams,
     ) -> Self {
         let gas = params.gas_limit;
@@ -1119,18 +1119,14 @@ impl Interpreter {
                     let mem_len = self.stack.pop();
                     let r = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
                     let return_data = Vec::from(r);
-                    return Ok(InterpreterResult::Normal(
-                        return_data.clone(),
-                        self.gas,
-                        self.logs.clone(),
-                    ));
+                    return Ok(InterpreterResult::Normal(return_data, self.gas, self.logs.clone()));
                 }
                 opcodes::OpCode::REVERT => {
                     let mem_offset = self.stack.pop();
                     let mem_len = self.stack.pop();
                     let r = self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize);
                     let return_data = Vec::from(r);
-                    return Ok(InterpreterResult::Revert(return_data.clone(), self.gas));
+                    return Ok(InterpreterResult::Revert(return_data, self.gas));
                 }
                 opcodes::OpCode::SELFDESTRUCT => {
                     let address = self.stack.pop();

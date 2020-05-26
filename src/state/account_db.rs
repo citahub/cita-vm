@@ -9,7 +9,7 @@ use crate::state::err::Error;
 static NULL_RLP_STATIC: [u8; 1] = [0x80; 1];
 
 fn combine_key<'a>(addr_hash: &[u8], key: &'a [u8]) -> Vec<u8> {
-    let mut dst = key.clone().to_vec();
+    let mut dst = key.to_owned().to_vec();
     {
         for (k, a) in dst[12..].iter_mut().zip(&addr_hash[12..]) {
             *k ^= *a
