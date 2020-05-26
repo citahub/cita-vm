@@ -1,6 +1,5 @@
 use cita_vm::json_tests::common::*;
 use cita_vm::*;
-use env_logger;
 use state::State;
 use std::fs;
 use std::io;
@@ -111,7 +110,7 @@ fn test_json_path(p: &str) {
 
 // The reason contains "bug", "overflow", "slow", "precompile" and "obsolete".
 #[allow(dead_code)]
-fn skip(reason: &str, name: &str) {}
+fn skip(_reason: &str, _name: &str) {}
 
 #[rustfmt::skip]
 #[test]

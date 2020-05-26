@@ -29,7 +29,7 @@ fn test_solidity_simplestorage() {
         vec![],
     );
 
-    let block_data_provider: Arc<cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
+    let block_data_provider: Arc<dyn cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
     let state_data_provider = Arc::new(RefCell::new(state));
     let context = cita_vm::evm::Context::default();
     let config = cita_vm::Config::default();
@@ -91,14 +91,7 @@ fn test_solidity_simplestorage() {
         gas_price: U256::from(1),   // Omited due to solidity's check.
         input: hex::decode("6d4ce63c").unwrap(),
     };
-    let r = cita_vm::exec_static(
-        block_data_provider.clone(),
-        state_data_provider.clone(),
-        context.clone(),
-        config.clone(),
-        tx,
-    )
-    .unwrap();
+    let r = cita_vm::exec_static(block_data_provider.clone(), state_data_provider, context, config, tx).unwrap();
     debug!("{:?}", r);
     match r {
         cita_vm::evm::InterpreterResult::Normal(output, _, _) => {
@@ -255,7 +248,7 @@ fn test_solidity_erc20() {
                 00000000000000000003424e420000000000000000000000000000000000000000000000000000000000000000\
                 0000000000000000000000000000000000000000000000000000000003424e4200000000000000000000000000\
                 00000000000000000000000000000000";
-    let block_data_provider: Arc<cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
+    let block_data_provider: Arc<dyn cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
     let state_data_provider = Arc::new(RefCell::new(state));
     let context = cita_vm::evm::Context::default();
     let config = cita_vm::Config::default();
@@ -364,14 +357,7 @@ fn test_solidity_erc20() {
         gas_price: U256::from(1),
         input: hex::decode("70a082310000000000000000000000001000000000000000000000000000000000000000").unwrap(),
     };
-    let r = cita_vm::exec(
-        block_data_provider.clone(),
-        state_data_provider.clone(),
-        context.clone(),
-        config.clone(),
-        tx,
-    )
-    .unwrap();
+    let r = cita_vm::exec(block_data_provider.clone(), state_data_provider, context, config, tx).unwrap();
     match r {
         cita_vm::evm::InterpreterResult::Normal(output, _, _) => assert_eq!(
             output,

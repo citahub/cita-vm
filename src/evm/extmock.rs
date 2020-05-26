@@ -112,7 +112,7 @@ impl ext::DataProvider for DataProviderMock {
         &self,
         opcode: opcodes::OpCode,
         params: interpreter::InterpreterParams,
-    ) -> (Result<interpreter::InterpreterResult, err::Error>) {
+    ) -> Result<interpreter::InterpreterResult, err::Error> {
         match opcode {
             opcodes::OpCode::CALL => {
                 let mut it = interpreter::Interpreter::new(

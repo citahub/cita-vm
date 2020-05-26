@@ -82,14 +82,14 @@ impl Store {
 
 /// An implemention for evm::DataProvider
 pub struct DataProvider<B> {
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<State<B>>>,
     store: Arc<RefCell<Store>>,
 }
 
 impl<B: DB> DataProvider<B> {
     /// Create a new instance. It's obvious.
-    pub fn new(b: Arc<BlockDataProvider>, s: Arc<RefCell<State<B>>>, store: Arc<RefCell<Store>>) -> Self {
+    pub fn new(b: Arc<dyn BlockDataProvider>, s: Arc<RefCell<State<B>>>, store: Arc<RefCell<Store>>) -> Self {
         DataProvider {
             block_provider: b,
             state_provider: s,
@@ -217,7 +217,7 @@ impl Default for Config {
 
 /// Function call_pure enters into the specific contract with no check or checkpoints.
 fn call_pure<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
@@ -225,7 +225,7 @@ fn call_pure<B: DB + 'static>(
     let evm_context = store.borrow().evm_context.clone();
     let evm_cfg = store.borrow().evm_cfg.clone();
     let evm_params = request.clone();
-    let evm_data_provider = DataProvider::new(block_provider.clone(), state_provider.clone(), store.clone());
+    let evm_data_provider = DataProvider::new(block_provider.clone(), state_provider.clone(), store);
     // Transfer value
     if !request.disable_transfer_value {
         state_provider
@@ -255,7 +255,7 @@ fn call_pure<B: DB + 'static>(
 
 /// Function call enters into the specific contract.
 fn call<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
@@ -294,7 +294,7 @@ fn call<B: DB + 'static>(
 
 /// Function create creates a new contract.
 fn create<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
@@ -340,7 +340,7 @@ fn create<B: DB + 'static>(
         code_address: address,
         code_data: request.input.clone(),
     };
-    let r = call(block_provider.clone(), state_provider.clone(), store.clone(), &reqchan);
+    let r = call(block_provider.clone(), state_provider.clone(), store, &reqchan);
     match r {
         Ok(evm::InterpreterResult::Normal(output, gas_left, logs)) => {
             // Ensure code size
@@ -428,7 +428,7 @@ fn reinterpret_tx<B: DB + 'static>(
 
 /// Execute the transaction from transaction pool
 pub fn exec<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     evm_context: evm::Context,
     config: Config,
@@ -474,7 +474,7 @@ pub fn exec<B: DB + 'static>(
     // Init the store for the transaction
     let mut store = Store::default();
     store.evm_cfg = get_interpreter_conf();
-    store.evm_context = evm_context.clone();
+    store.evm_context = evm_context;
     //store.used(request.receiver);
     let store = Arc::new(RefCell::new(store));
     // Create a sub request
@@ -547,7 +547,7 @@ pub fn exec<B: DB + 'static>(
 /// This function is similar with `exec`, but all check & checkpoints are removed.
 #[allow(unused_variables)]
 pub fn exec_static<B: DB + 'static>(
-    block_provider: Arc<BlockDataProvider>,
+    block_provider: Arc<dyn BlockDataProvider>,
     state_provider: Arc<RefCell<state::State<B>>>,
     evm_context: evm::Context,
     config: Config,
@@ -561,19 +561,19 @@ pub fn exec_static<B: DB + 'static>(
     request.disable_transfer_value = true;
     let mut store = Store::default();
     store.evm_cfg = get_interpreter_conf();
-    store.evm_context = evm_context.clone();
+    store.evm_context = evm_context;
     let store = Arc::new(RefCell::new(store));
-    call_pure(block_provider.clone(), state_provider.clone(), store.clone(), &request)
+    call_pure(block_provider.clone(), state_provider, store, &request)
 }
 
 pub struct Executive<B> {
-    pub block_provider: Arc<BlockDataProvider>,
+    pub block_provider: Arc<dyn BlockDataProvider>,
     pub state_provider: Arc<RefCell<state::State<B>>>,
     pub config: Config,
 }
 
 impl<B: DB + 'static> Executive<B> {
-    pub fn new(block_provider: Arc<BlockDataProvider>, state_provider: state::State<B>, config: Config) -> Self {
+    pub fn new(block_provider: Arc<dyn BlockDataProvider>, state_provider: state::State<B>, config: Config) -> Self {
         Self {
             block_provider,
             state_provider: Arc::new(RefCell::new(state_provider)),
@@ -587,7 +587,7 @@ impl<B: DB + 'static> Executive<B> {
             self.state_provider.clone(),
             evm_context,
             self.config.clone(),
-            tx.clone(),
+            tx,
         )
 
         // Bellow is saved for jsondata test
@@ -626,7 +626,7 @@ impl<B: DB + 'static> Executive<B> {
     }
 
     pub fn exec_static(
-        block_provider: Arc<BlockDataProvider>,
+        block_provider: Arc<dyn BlockDataProvider>,
         state_provider: state::State<B>,
         evm_context: evm::Context,
         config: Config,
@@ -768,11 +768,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
         self.state_provider.borrow_mut().exist(address).unwrap_or(false)
     }
 
-    fn call(
-        &self,
-        opcode: evm::OpCode,
-        params: evm::InterpreterParams,
-    ) -> (Result<evm::InterpreterResult, evm::Error>) {
+    fn call(&self, opcode: evm::OpCode, params: evm::InterpreterParams) -> Result<evm::InterpreterResult, evm::Error> {
         match opcode {
             evm::OpCode::CALL | evm::OpCode::CALLCODE | evm::OpCode::DELEGATECALL | evm::OpCode::STATICCALL => {
                 //self.store.borrow_mut().used(params.address);
@@ -785,7 +781,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
                 r.or(Err(evm::Error::CallError))
             }
             evm::OpCode::CREATE | evm::OpCode::CREATE2 => {
-                let mut request = params.clone();
+                let mut request = params;
                 request.nonce = self
                     .state_provider
                     .borrow_mut()

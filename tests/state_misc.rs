@@ -25,7 +25,7 @@ fn test_state_misc00() {
     state.commit().unwrap();
     let root0 = state.root;
 
-    let block_data_provider: Arc<cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
+    let block_data_provider: Arc<dyn cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
     let state_data_provider = Arc::new(RefCell::new(state));
     let context = cita_vm::evm::Context::default();
     let config = cita_vm::Config::default();
@@ -42,8 +42,8 @@ fn test_state_misc00() {
     let _ = cita_vm::exec(
         block_data_provider.clone(),
         state_data_provider.clone(),
-        context.clone(),
-        config.clone(),
+        context,
+        config,
         tx,
     );
     state_data_provider.borrow_mut().commit().unwrap();

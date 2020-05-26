@@ -201,7 +201,7 @@ fn bench_new_contract(bench: &mut Bencher) {
     state.new_contract(&address0, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
     state.new_contract(&address1, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
 
-    let block_data_provider: Arc<cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
+    let block_data_provider: Arc<dyn cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
     let state_data_provider = Arc::new(RefCell::new(state));
     let context = cita_vm::evm::Context::default();
     let config = cita_vm::Config::default();
@@ -250,7 +250,7 @@ fn bench_erc20(bench: &mut Bencher) {
     state.new_contract(&address0, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
     state.new_contract(&address1, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
 
-    let block_data_provider: Arc<cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
+    let block_data_provider: Arc<dyn cita_vm::BlockDataProvider> = Arc::new(cita_vm::BlockDataProviderMock::default());
     let state_data_provider = Arc::new(RefCell::new(state));
     let context = cita_vm::evm::Context::default();
     let config = cita_vm::Config::default();

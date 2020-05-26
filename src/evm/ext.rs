@@ -40,5 +40,5 @@ pub trait DataProvider {
         &self,
         opcode: opcodes::OpCode,
         params: interpreter::InterpreterParams,
-    ) -> (Result<interpreter::InterpreterResult, err::Error>);
+    ) -> Result<interpreter::InterpreterResult, err::Error>;
 }
