@@ -72,7 +72,7 @@ fn is_signature_valid(r: &H256, s: &H256, v: u8) -> bool {
 
 /// Recover public from signed messages.
 fn recover(input: &[u8], hash: &[u8], bit: u8) -> Result<H512, secp256k1::Error> {
-    let signature = secp256k1::Signature::parse_slice(&input[64..128])?;
+    let signature = secp256k1::Signature::parse_standard_slice(&input[64..128])?;
     let message = secp256k1::Message::parse_slice(&hash[..])?;
     let recovery_id = secp256k1::RecoveryId::parse(bit)?;
     let pub_key = secp256k1::recover(&message, &signature, &recovery_id)?;
