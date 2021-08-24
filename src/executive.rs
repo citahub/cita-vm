@@ -103,7 +103,7 @@ pub fn create_address_from_address_and_nonce(address: &Address, nonce: &U256) ->
     let mut stream = RlpStream::new_list(2);
     stream.append(address);
     stream.append(nonce);
-    Address::from(H256::from(common::hash::summary(stream.as_raw()).as_slice()))
+    Address::from(H256::from_slice(common::hash::summary(stream.as_raw()).as_slice()))
 }
 
 /// Returns new address created from sender salt and code hash.
@@ -115,7 +115,7 @@ pub fn create_address_from_salt_and_code_hash(address: &Address, salt: H256, cod
     buffer[1..=20].copy_from_slice(&address[..]);
     buffer[(1 + 20)..(1 + 20 + 32)].copy_from_slice(&salt[..]);
     buffer[(1 + 20 + 32)..].copy_from_slice(code_hash);
-    Address::from(H256::from(common::hash::summary(&buffer[..]).as_slice()))
+    Address::from(H256::from_slice(common::hash::summary(&buffer).as_slice()))
 }
 
 /// A selector for func create_address_from_address_and_nonce() and
@@ -757,7 +757,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     }
 
     fn sha3(&self, data: &[u8]) -> H256 {
-        From::from(&hasher::HasherKeccak::new().digest(data)[..])
+        H256::from_slice(hasher::HasherKeccak::new().digest(data).as_slice())
     }
 
     fn is_empty(&self, address: &Address) -> bool {

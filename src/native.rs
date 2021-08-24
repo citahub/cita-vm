@@ -9,6 +9,7 @@
 //!   6. Addition on elliptic curve alt_bn128
 //!   7. Scalar multiplication on elliptic curve alt_bn128
 //!   8. Checking a pairing equation on curve alt_bn128
+use std::str::FromStr;
 use std::io::Write;
 
 use ethereum_types::{Address, H256, H512, U256};
@@ -29,7 +30,7 @@ pub trait PrecompiledContract: Send + Sync {
 
 /// Function get returns a pre-compiled contract by given address.
 pub fn get(address: Address) -> Box<dyn PrecompiledContract> {
-    match U256::from(H256::from(address)).low_u64() {
+    match U256::from(H256::from(address).as_bytes()).low_u64() {
         0x01 => Box::new(EcRecover {}) as Box<dyn PrecompiledContract>,
         0x02 => Box::new(SHA256Hash {}) as Box<dyn PrecompiledContract>,
         0x03 => Box::new(RIPEMD160Hash {}) as Box<dyn PrecompiledContract>,
@@ -44,7 +45,7 @@ pub fn get(address: Address) -> Box<dyn PrecompiledContract> {
 
 /// Check if an address is pre-compiled contract.
 pub fn contains(address: &Address) -> bool {
-    let i = U256::from(H256::from(address));
+    let i = U256::from(H256::from(address.clone()).as_bytes());
     i <= U256::from(8) && !i.is_zero()
 }
 
@@ -64,10 +65,10 @@ const G_BN256_PARING_PER_POINT: u64 = 80000; // Per-point price for an elliptic 
 /// Check if each component of the signature is in range.
 fn is_signature_valid(r: &H256, s: &H256, v: u8) -> bool {
     v <= 1
-        && *r < H256::from("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
-        && *r >= H256::from(1)
-        && *s < H256::from("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
-        && *s >= H256::from(1)
+        && *r < H256::from_str("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141").unwrap()
+        && *r >= H256::from_low_u64_le(1)
+        && *s < H256::from_str("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141").unwrap()
+        && *s >= H256::from_low_u64_le(1)
 }
 
 /// Recover public from signed messages.
@@ -77,7 +78,7 @@ fn recover(input: &[u8], hash: &[u8], bit: u8) -> Result<H512, secp256k1::Error>
     let recovery_id = secp256k1::RecoveryId::parse(bit)?;
     let pub_key = secp256k1::recover(&message, &signature, &recovery_id)?;
     let pub_key_ser = pub_key.serialize();
-    Ok(H512::from(&pub_key_ser[1..65]))
+    Ok(H512::from_slice(&pub_key_ser[1..65]))
 }
 
 /// ECRECOVER implemented as a native contract.
@@ -94,10 +95,10 @@ impl PrecompiledContract for EcRecover {
         let mut input = [0; 128];
         input[..len].copy_from_slice(&i[..len]);
 
-        let hash = H256::from(&input[0..32]);
-        let v = H256::from(&input[32..64]);
-        let r = H256::from(&input[64..96]);
-        let s = H256::from(&input[96..128]);
+        let hash = H256::from_slice(&input[0..32]);
+        let v = H256::from_slice(&input[32..64]);
+        let r = H256::from_slice(&input[64..96]);
+        let s = H256::from_slice(&input[96..128]);
 
         let bit = match v[31] {
             27 | 28 if v.0[..31] == [0; 31] => v[31] - 27,
@@ -109,7 +110,7 @@ impl PrecompiledContract for EcRecover {
             return Ok(vec![]);
         }
         let mut output: Vec<u8> = Vec::new();
-        if let Ok(public) = recover(&input, &hash, bit) {
+        if let Ok(public) = recover(&input, hash.as_bytes(), bit) {
             let data = common::hash::summary(&public.0);
             output.write_all(&[0; 12])?;
             output.write_all(&data[12..data.len()])?;
@@ -130,8 +131,8 @@ impl PrecompiledContract for SHA256Hash {
 
     fn run(&self, i: &[u8]) -> Result<Vec<u8>, err::Error> {
         let mut hasher = Sha256::new();
-        hasher.input(i);
-        let result = hasher.result();
+        hasher.update(i);
+        let result = hasher.finalize();
         let mut output: Vec<u8> = Vec::new();
         output.write_all(&result).unwrap();
         Ok(output)
@@ -150,8 +151,8 @@ impl PrecompiledContract for RIPEMD160Hash {
 
     fn run(&self, i: &[u8]) -> Result<Vec<u8>, err::Error> {
         let mut hasher = Ripemd160::new();
-        hasher.input(i);
-        let result = hasher.result();
+        hasher.update(i);
+        let result = hasher.finalize();
         let mut output: Vec<u8> = Vec::new();
         output.write_all(&[0; 12]).unwrap();
         output.write_all(&result).unwrap();

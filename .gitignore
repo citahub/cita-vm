@@ -10,3 +10,10 @@ Cargo.lock
 **/*.rs.bk
 /go.py
 __pycache__/
+
+# vscode
+.vscode
+# jetbrains ide stuff
+.idea
+*.iml
+

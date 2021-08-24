@@ -3,6 +3,8 @@ use ethereum_types::{Address, Public, H256, U256};
 use crate::common::clean_0x;
 use crate::common::hash;
 
+use std::str::FromStr;
+
 pub fn string_2_u256(value: String) -> U256 {
     let v = Box::leak(value.into_boxed_str());
     let v = clean_0x(v);
@@ -16,9 +18,9 @@ pub fn string_2_h256(value: String) -> H256 {
         let mut s = String::from("0").repeat(64 - v.len());
         s.push_str(v);
         let s: &'static str = Box::leak(s.into_boxed_str());
-        return H256::from(s);
+        return H256::from_str(s).unwrap();
     }
-    H256::from(v)
+    H256::from_str(v).unwrap()
 }
 
 pub fn string_2_bytes(value: String) -> Vec<u8> {
@@ -33,14 +35,12 @@ pub fn string_2_address(value: String) -> Address {
     }
     let v = Box::leak(value.into_boxed_str());
     let v = clean_0x(v);
-    Address::from(v)
+    Address::from_str(v).unwrap()
 }
 
 pub fn public_2_address(public: &Public) -> Address {
     let hash = hash::summary(&public.0);
-    let mut result = Address::default();
-    result.copy_from_slice(&hash[12..]);
-    result
+    Address::from_slice(&hash[12..])
 }
 
 pub fn secret_2_address(secret: &str) -> Address {
@@ -49,6 +49,6 @@ pub fn secret_2_address(secret: &str) -> Address {
     let public_key = secp256k1::PublicKey::from_secret_key(&secret_key);
     let serialized = public_key.serialize();
     let mut public = Public::default();
-    public.copy_from_slice(&serialized[1..65]);
+    public.assign_from_slice(&serialized[1..65]);
     public_2_address(&public)
 }

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use cita_trie::{PatriciaTrie, Trie, DB};
-use ethereum_types::{H256, U256};
+use ethereum_types::{H256, U256, BigEndianHash};
 use hashbrown::HashMap;
 
 use crate::common;
@@ -131,7 +131,7 @@ impl StateObject {
 
     /// Get the rlp data.
     pub fn rlp(&self) -> Vec<u8> {
-        rlp::encode(&self.account())
+        rlp::encode(&self.account()).to_vec()
     }
 
     /// Function is_empty returns whether the given account is empty. Empty
@@ -149,7 +149,7 @@ impl StateObject {
         self.code_size = self.code.len();
         self.code_hash = {
             if self.code_size > 0 {
-                From::from(&common::hash::summary(&self.code)[..])
+                H256::from_slice(common::hash::summary(&self.code).as_slice())
             } else {
                 common::hash::NIL_DATA
             }
@@ -163,7 +163,7 @@ impl StateObject {
         self.abi_size = self.abi.len();
         self.abi_hash = {
             if self.abi_size > 0 {
-                From::from(&common::hash::summary(&self.abi)[..])
+                H256::from_slice(common::hash::summary(&self.abi).as_slice())
             } else {
                 common::hash::NIL_DATA
             }
@@ -177,7 +177,7 @@ impl StateObject {
             return Ok(());
         }
         let c = db
-            .get(&self.code_hash.to_vec())
+            .get(self.code_hash.as_bytes())
             .or_else(|e| Err(Error::DB(format!("{}", e))))?
             .unwrap_or_else(|| vec![]);
         self.code = c;
@@ -192,7 +192,7 @@ impl StateObject {
             return Ok(());
         }
         let c = db
-            .get(&self.abi_hash.to_vec())
+            .get(self.abi_hash.as_bytes())
             .or_else(|e| Err(Error::DB(format!("{}", e))))?
             .unwrap_or_else(|| vec![]);
         self.abi = c;
@@ -232,9 +232,9 @@ impl StateObject {
             return Ok(None);
         }
         let trie = PatriciaTrie::from(db, Arc::new(hash::get_hasher()), &self.storage_root.0)?;
-        if let Some(b) = trie.get(key)? {
+        if let Some(b) = trie.get(key.as_bytes())? {
             let u256_k: U256 = rlp::decode(&b)?;
-            let h256_k: H256 = u256_k.into();
+            let h256_k = H256::from_uint(&u256_k);
             return Ok(Some(h256_k));
         }
         Ok(None)
@@ -285,13 +285,13 @@ impl StateObject {
 
         for (k, v) in self.storage_changes.drain() {
             if v.is_zero() {
-                trie.remove(&k)?;
+                trie.remove(k.as_bytes())?;
             } else {
-                trie.insert(k.to_vec(), rlp::encode(&U256::from(v)))?;
+                trie.insert(k.0.to_vec(), rlp::encode(&U256::from(v.as_bytes())).to_vec())?;
             }
         }
 
-        self.storage_root = H256::from(&(trie.root()?)[..]);
+        self.storage_root = H256::from_slice(trie.root()?.as_slice());
         Ok(())
     }
 
@@ -303,7 +303,7 @@ impl StateObject {
                 self.code_state = CodeState::Clean;
             }
             (true, false) => {
-                db.insert(self.code_hash.to_vec(), self.code.clone())
+                db.insert(self.code_hash.0.to_vec(), self.code.clone())
                     .or_else(|e| Err(Error::DB(format!("{}", e))))?;
                 self.code_size = self.code.len();
                 self.code_state = CodeState::Clean;
@@ -321,7 +321,7 @@ impl StateObject {
                 self.abi_state = CodeState::Clean;
             }
             (true, false) => {
-                db.insert(self.abi_hash.to_vec(), self.abi.clone())
+                db.insert(self.abi_hash.0.to_vec(), self.abi.clone())
                     .or_else(|e| Err(Error::DB(format!("{}", e))))?;
                 self.abi_size = self.abi.len();
                 self.abi_state = CodeState::Clean;
