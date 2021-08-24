@@ -1,6 +1,6 @@
 use std::cmp;
 
-use ethereum_types::{Address, H256, U256, U512, BigEndianHash};
+use ethereum_types::{Address, BigEndianHash, H256, U256, U512};
 use log::debug;
 
 use crate::evm::common;
@@ -299,10 +299,17 @@ impl Interpreter {
                 }
                 opcodes::OpCode::SSTORE => {
                     let address = H256::from_uint(&self.stack.back(0));
-                    let current_value = U256::from(self.data_provider.get_storage(&self.params.address, &address).as_bytes());
+                    let current_value = U256::from(
+                        self.data_provider
+                            .get_storage(&self.params.address, &address)
+                            .as_bytes(),
+                    );
                     let new_value = self.stack.back(1);
-                    let original_value =
-                        U256::from(self.data_provider.get_storage_origin(&self.params.address, &address).as_bytes());
+                    let original_value = U256::from(
+                        self.data_provider
+                            .get_storage_origin(&self.params.address, &address)
+                            .as_bytes(),
+                    );
 
                     let gas: u64 = {
                         if self.cfg.eip1283 {

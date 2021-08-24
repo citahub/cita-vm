@@ -9,8 +9,8 @@
 //!   6. Addition on elliptic curve alt_bn128
 //!   7. Scalar multiplication on elliptic curve alt_bn128
 //!   8. Checking a pairing equation on curve alt_bn128
-use std::str::FromStr;
 use std::io::Write;
+use std::str::FromStr;
 
 use ethereum_types::{Address, H256, H512, U256};
 use ripemd160::{Digest, Ripemd160};

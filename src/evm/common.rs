@@ -1,6 +1,6 @@
 use std::u64;
 
-use ethereum_types::{Address, H256, U256, BigEndianHash};
+use ethereum_types::{Address, BigEndianHash, H256, U256};
 
 /// The size of word in EVM is 32 bytes.
 #[inline]

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use cita_trie::{PatriciaTrie, Trie, DB};
-use ethereum_types::{H256, U256, BigEndianHash};
+use ethereum_types::{BigEndianHash, H256, U256};
 use hashbrown::HashMap;
 
 use crate::common;
