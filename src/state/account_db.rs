@@ -79,14 +79,6 @@ impl<B: DB> DB for AccountDB<B> {
     fn flush(&self) -> Result<(), Self::Error> {
         self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
     }
-
-    fn insert_batch(&self, _keys: Vec<Vec<u8>>, _values: Vec<Vec<u8>>) -> Result<(), Self::Error> {
-        unimplemented!()
-    }
-
-    fn remove_batch(&self, _keys: &[Vec<u8>]) -> Result<(), Self::Error> {
-        unimplemented!()
-    }
 }
 
 #[cfg(test)]
