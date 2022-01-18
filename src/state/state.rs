@@ -296,7 +296,7 @@ impl<B: DB> State<B> {
 
     /// Flush the data from cache to database.
     pub fn commit(&mut self) -> Result<(), Error> {
-        assert!(self.checkpoints.borrow().is_empty());
+        // assert!(self.checkpoints.borrow().is_empty());
         // Firstly, update account storage tree
         let db = Arc::clone(&self.db);
         self.cache
