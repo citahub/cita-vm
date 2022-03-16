@@ -10,7 +10,6 @@ documentation = "https://github.com/cryptape/cita-vm/blob/master/README.md"
 
 [dependencies]
 byteorder = "1.0"
-cita_trie = "2.0"
 env_logger = "0.6"
 ethereum-types = "0.4"
 hashbrown = { version = "0.3", features = ["rayon"] }
@@ -26,6 +25,7 @@ serde_json = "1.0"
 sha2 = "0.8"
 sha3 = "0.8"
 rayon = "1.0"
+cita_trie = { git = "https://github.com/citahub/cita-trie", branch = "cita-snapshot" }
 
 [dev-dependencies]
 bencher = "0.1"
