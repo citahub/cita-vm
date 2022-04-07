@@ -178,8 +178,8 @@ impl StateObject {
         }
         let c = db
             .get(self.code_hash.as_bytes())
-            .or_else(|e| Err(Error::DB(format!("{}", e))))?
-            .unwrap_or_else(|| vec![]);
+            .map_err(|e| Error::DB(format!("{}", e)))?
+            .unwrap_or_default();
         self.code = c;
         self.code_size = self.code.len();
         self.code_state = CodeState::Clean;
@@ -193,8 +193,8 @@ impl StateObject {
         }
         let c = db
             .get(self.abi_hash.as_bytes())
-            .or_else(|e| Err(Error::DB(format!("{}", e))))?
-            .unwrap_or_else(|| vec![]);
+            .map_err(|e| Error::DB(format!("{}", e)))?
+            .unwrap_or_default();
         self.abi = c;
         self.abi_size = self.abi.len();
         self.abi_state = CodeState::Clean;
@@ -211,7 +211,7 @@ impl StateObject {
     pub fn add_balance(&mut self, x: U256) {
         let (a, b) = self.balance.overflowing_add(x);
         // overflow is not allowed at state_object.
-        assert_eq!(b, false);
+        assert!(!b);
         self.balance = a;
     }
 
@@ -270,7 +270,7 @@ impl StateObject {
     /// Get storage proof
     pub fn get_storage_proof<B: DB>(&self, db: Arc<B>, key: &H256) -> Result<Vec<Vec<u8>>, Error> {
         let trie = PatriciaTrie::from(db, Arc::new(hash::get_hasher()), &self.storage_root.0)
-            .or_else(|e| Err(Error::DB(format!("StateObject::get_storage_proof: {}", e))))?;
+            .map_err(|e| Error::DB(format!("StateObject::get_storage_proof: {}", e)))?;
         let proof = trie.get_proof(&key.0)?;
         Ok(proof)
     }
@@ -304,7 +304,7 @@ impl StateObject {
             }
             (true, false) => {
                 db.insert(self.code_hash.0.to_vec(), self.code.clone())
-                    .or_else(|e| Err(Error::DB(format!("{}", e))))?;
+                    .map_err(|e| Error::DB(format!("{}", e)))?;
                 self.code_size = self.code.len();
                 self.code_state = CodeState::Clean;
             }
@@ -322,7 +322,7 @@ impl StateObject {
             }
             (true, false) => {
                 db.insert(self.abi_hash.0.to_vec(), self.abi.clone())
-                    .or_else(|e| Err(Error::DB(format!("{}", e))))?;
+                    .map_err(|e| Error::DB(format!("{}", e)))?;
                 self.abi_size = self.abi.len();
                 self.abi_state = CodeState::Clean;
             }

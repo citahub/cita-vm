@@ -13,7 +13,7 @@ use std::io::Write;
 use std::str::FromStr;
 
 use ethereum_types::{Address, H256, H512, U256};
-use ripemd160::{Digest, Ripemd160};
+use ripemd::{Digest, Ripemd160};
 use sha2::Sha256;
 
 use crate::common;
@@ -45,7 +45,7 @@ pub fn get(address: Address) -> Box<dyn PrecompiledContract> {
 
 /// Check if an address is pre-compiled contract.
 pub fn contains(address: &Address) -> bool {
-    let i = U256::from(H256::from(address.clone()).as_bytes());
+    let i = U256::from(H256::from(*address).as_bytes());
     i <= U256::from(8) && !i.is_zero()
 }
 
@@ -74,7 +74,7 @@ fn is_signature_valid(r: &H256, s: &H256, v: u8) -> bool {
 /// Recover public from signed messages.
 fn recover(input: &[u8], hash: &[u8], bit: u8) -> Result<H512, secp256k1::Error> {
     let signature = secp256k1::Signature::parse_standard_slice(&input[64..128])?;
-    let message = secp256k1::Message::parse_slice(&hash[..])?;
+    let message = secp256k1::Message::parse_slice(hash)?;
     let recovery_id = secp256k1::RecoveryId::parse(bit)?;
     let pub_key = secp256k1::recover(&message, &signature, &recovery_id)?;
     let pub_key_ser = pub_key.serialize();
