@@ -127,9 +127,10 @@ pub enum CreateKind {
 
 /// Returns the default interpreter configs for Constantinople.
 pub fn get_interpreter_conf() -> evm::InterpreterConf {
-    let mut evm_cfg = evm::InterpreterConf::default();
-    evm_cfg.eip1283 = false;
-    evm_cfg
+    evm::InterpreterConf {
+        eip1283: false,
+        ..Default::default()
+    }
 }
 
 /// If a contract creation is attempted, due to either a creation transaction
@@ -144,8 +145,8 @@ pub fn can_create<B: DB + 'static>(
     state_provider: Arc<RefCell<state::State<B>>>,
     address: &Address,
 ) -> Result<bool, err::Error> {
-    let a = state_provider.borrow_mut().nonce(&address)?;
-    let b = state_provider.borrow_mut().code(&address)?;
+    let a = state_provider.borrow_mut().nonce(address)?;
+    let b = state_provider.borrow_mut().code(address)?;
     Ok(a.is_zero() && b.is_empty())
 }
 
@@ -402,9 +403,11 @@ fn reinterpret_tx<B: DB + 'static>(
     tx: Transaction,
     state_provider: Arc<RefCell<state::State<B>>>,
 ) -> InterpreterParams {
-    let mut request = evm::InterpreterParams::default();
-    request.origin = tx.from;
-    request.sender = tx.from;
+    let mut request = InterpreterParams {
+        origin: tx.from,
+        sender: tx.from,
+        ..Default::default()
+    };
     match tx.to {
         Some(data) => {
             request.receiver = data;
@@ -472,9 +475,11 @@ pub fn exec<B: DB + 'static>(
     // state_provider.borrow_mut().inc_nonce(&request.sender)?;
 
     // Init the store for the transaction
-    let mut store = Store::default();
-    store.evm_cfg = get_interpreter_conf();
-    store.evm_context = evm_context;
+    let store = Store {
+        evm_cfg: get_interpreter_conf(),
+        evm_context,
+        ..Default::default()
+    };
     //store.used(request.receiver);
     let store = Arc::new(RefCell::new(store));
     // Create a sub request
@@ -498,8 +503,8 @@ pub fn exec<B: DB + 'static>(
     match r {
         Ok(evm::InterpreterResult::Normal(output, gas_left, logs)) => {
             if config.check_balance {
-                let refund = get_refund(store.clone(), &request, gas_left);
-                clear(state_provider.clone(), store.clone(), &request, gas_left, refund)?;
+                let refund = get_refund(store.clone(), request, gas_left);
+                clear(state_provider.clone(), store.clone(), request, gas_left, refund)?;
             }
             // Handle self destruct: Kill it.
             // Note: must after ends of the transaction.
@@ -511,15 +516,15 @@ pub fn exec<B: DB + 'static>(
         }
         Ok(evm::InterpreterResult::Revert(output, gas_left)) => {
             if config.check_balance {
-                clear(state_provider.clone(), store.clone(), &request, gas_left, 0)?;
+                clear(state_provider.clone(), store.clone(), request, gas_left, 0)?;
             }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
             Ok(evm::InterpreterResult::Revert(output, gas_left))
         }
         Ok(evm::InterpreterResult::Create(output, gas_left, logs, addr)) => {
             if config.check_balance {
-                let refund = get_refund(store.clone(), &request, gas_left);
-                clear(state_provider.clone(), store.clone(), &request, gas_left, refund)?;
+                let refund = get_refund(store.clone(), request, gas_left);
+                clear(state_provider.clone(), store.clone(), request, gas_left, refund)?;
             }
             for e in store.borrow_mut().selfdestruct.drain() {
                 state_provider.borrow_mut().kill_contract(&e)
@@ -530,7 +535,7 @@ pub fn exec<B: DB + 'static>(
         Err(e) => {
             // When error, coinbase eats all gas as it's price, yummy.
             if config.check_balance {
-                clear(state_provider.clone(), store.clone(), &request, 0, 0)?;
+                clear(state_provider.clone(), store.clone(), request, 0, 0)?;
             }
             state_provider.borrow_mut().kill_garbage(&store.borrow().inused.clone());
             Err(e)
@@ -559,9 +564,11 @@ pub fn exec_static<B: DB + 'static>(
     let mut request = reinterpret_tx(tx, state_provider.clone());
     request.read_only = true;
     request.disable_transfer_value = true;
-    let mut store = Store::default();
-    store.evm_cfg = get_interpreter_conf();
-    store.evm_context = evm_context;
+    let store = Store {
+        evm_cfg: get_interpreter_conf(),
+        evm_context,
+        ..Default::default()
+    };
     let store = Arc::new(RefCell::new(store));
     call_pure(block_provider.clone(), state_provider, store, &request)
 }
@@ -741,7 +748,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
             return false;
         }
         //self.store.borrow_mut().used(refund_to.clone());
-        self.store.borrow_mut().selfdestruct.insert(address.clone());
+        self.store.borrow_mut().selfdestruct.insert(*address);
         let b = self.get_balance(address);
 
         if address != refund_to {

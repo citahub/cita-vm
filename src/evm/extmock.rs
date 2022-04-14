@@ -121,8 +121,10 @@ impl ext::DataProvider for DataProviderMock {
                     Box::new(DataProviderMock::default()),
                     params,
                 );
-                let mut data_provider = DataProviderMock::default();
-                data_provider.db = self.db.clone();
+                let data_provider = DataProviderMock {
+                    db: self.db.clone(),
+                    ..Default::default()
+                };
                 it.data_provider = Box::new(data_provider);
                 it.run()
             }

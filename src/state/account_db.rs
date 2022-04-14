@@ -8,7 +8,7 @@ use crate::state::err::Error;
 
 static NULL_RLP_STATIC: [u8; 1] = [0x80; 1];
 
-fn combine_key<'a>(addr_hash: &[u8], key: &'a [u8]) -> Vec<u8> {
+fn combine_key(addr_hash: &[u8], key: &[u8]) -> Vec<u8> {
     let mut dst = key.to_owned().to_vec();
     {
         for (k, a) in dst[12..].iter_mut().zip(&addr_hash[12..]) {
@@ -40,10 +40,10 @@ impl<B: DB> DB for AccountDB<B> {
             return Ok(Some(NULL_RLP_STATIC.to_vec()));
         }
 
-        let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
+        let concatenated = combine_key(&self.address_hash.0[..], key);
         self.db
             .get(concatenated.as_slice())
-            .or_else(|e| Err(Error::DB(format!("{}", e))))
+            .map_err(|e| Error::DB(format!("{}", e)))
     }
 
     fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Self::Error> {
@@ -53,31 +53,31 @@ impl<B: DB> DB for AccountDB<B> {
         let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
         self.db
             .insert(concatenated, value)
-            .or_else(|e| Err(Error::DB(format!("{}", e))))
+            .map_err(|e| Error::DB(format!("{}", e)))
     }
 
     fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
         if H256::from_slice(key) == RLP_NULL {
             return Ok(true);
         }
-        let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
+        let concatenated = combine_key(&self.address_hash.0[..], key);
         self.db
             .contains(concatenated.as_slice())
-            .or_else(|e| Err(Error::DB(format!("{}", e))))
+            .map_err(|e| Error::DB(format!("{}", e)))
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), Self::Error> {
         if H256::from_slice(key) == RLP_NULL {
             return Ok(());
         }
-        let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
+        let concatenated = combine_key(&self.address_hash.0[..], key);
         self.db
             .remove(concatenated.as_slice())
-            .or_else(|e| Err(Error::DB(format!("{}", e))))
+            .map_err(|e| Error::DB(format!("{}", e)))
     }
 
     fn flush(&self) -> Result<(), Self::Error> {
-        self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
+        self.db.flush().map_err(|e| Error::DB(format!("{}", e)))
     }
 }
 

@@ -48,7 +48,7 @@ impl<B: DB> State<B> {
 
     /// Creates new state with existing state root
     pub fn from_existing(db: Arc<B>, root: H256) -> Result<State<B>, Error> {
-        if !db.contains(&root.0[..]).or_else(|e| Err(Error::DB(format!("{}", e))))? {
+        if !db.contains(&root.0[..]).map_err(|e| Error::DB(format!("{}", e)))? {
             return Err(Error::NotFound);
         }
         // This for compatible with cita 0.x,no need to update it
@@ -342,7 +342,7 @@ impl<B: DB> State<B> {
         let mut date = [0; 32];
         date.copy_from_slice(trie.root()?.as_slice());
         self.root = H256::from(date);
-        self.db.flush().or_else(|e| Err(Error::DB(format!("{}", e))))
+        self.db.flush().map_err(|e| Error::DB(format!("{}", e)))
     }
 
     /// Create a recoverable checkpoint of this state. Return the checkpoint index.

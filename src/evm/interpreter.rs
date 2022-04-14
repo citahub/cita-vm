@@ -151,6 +151,7 @@ pub struct InterpreterParams {
     pub nonce: U256,
     pub gas_limit: u64,
     pub gas_price: U256,
+    pub base_fee: U256,
 
     pub read_only: bool,
     pub contract: Contract,
@@ -793,6 +794,9 @@ impl Interpreter {
                 opcodes::OpCode::GASLIMIT => {
                     // Get the block's gas limit
                     self.stack.push(U256::from(self.context.gas_limit));
+                }
+                opcodes::OpCode::BASEFEE => {
+                    self.stack.push(self.params.base_fee);
                 }
                 opcodes::OpCode::POP => {
                     self.stack.pop();
