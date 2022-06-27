@@ -25,7 +25,7 @@ serde_json = "1.0"
 sha2 = "0.8"
 sha3 = "0.8"
 rayon = "1.0"
-cita_trie = { git = "https://github.com/citahub/cita-trie", branch = "cita-snapshot" }
+cita_trie = "3.0"
 
 [dev-dependencies]
 bencher = "0.1"
