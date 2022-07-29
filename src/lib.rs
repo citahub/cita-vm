@@ -1,4 +1,4 @@
-mod common;
+pub mod common;
 mod err;
 pub mod evm;
 mod executive;
