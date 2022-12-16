@@ -6,7 +6,7 @@ Fast EVM implementation for CITA. Tuned for high performance, up to 5x faster th
 
 ```
 [dependencies]
-cita-vm = "0.2.2"
+cita-vm = "0.3.3"
 ```
 
 - [Example](#Example)
