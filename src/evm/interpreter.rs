@@ -851,6 +851,9 @@ impl Interpreter {
                     self.stack.push(U256::from(self.gas));
                 }
                 opcodes::OpCode::JUMPDEST => {}
+                opcodes::OpCode::PUSH0 => {
+                    self.stack.push(U256::zero());
+                }
                 opcodes::OpCode::PUSH1
                 | opcodes::OpCode::PUSH2
                 | opcodes::OpCode::PUSH3

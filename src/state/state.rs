@@ -1,6 +1,9 @@
-use std::cell::RefCell;
-use std::sync::Arc;
-
+use crate::common;
+use crate::common::hash;
+use crate::state::account::StateObject;
+use crate::state::account_db::AccountDB;
+use crate::state::err::Error;
+use crate::state::object_entry::{ObjectStatus, StateObjectEntry};
 use cita_trie::DB;
 use cita_trie::{PatriciaTrie, Trie};
 use ethereum_types::{Address, H256, U256};
@@ -8,14 +11,8 @@ use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
 use log::debug;
 use rayon::prelude::{IntoParallelRefMutIterator, ParallelIterator};
-//use std::str::FromStr;
-
-use crate::common;
-use crate::common::hash;
-use crate::state::account::StateObject;
-use crate::state::account_db::AccountDB;
-use crate::state::err::Error;
-use crate::state::object_entry::{ObjectStatus, StateObjectEntry};
+use std::cell::RefCell;
+use std::sync::Arc;
 
 const PREFIX_LEN: usize = 12;
 const LATEST_ERA_KEY: [u8; PREFIX_LEN] = [b'l', b'a', b's', b't', 0, 0, 0, 0, 0, 0, 0, 0];
@@ -298,7 +295,6 @@ impl<B: DB> State<B> {
     pub fn commit(&mut self) -> Result<(), Error> {
         assert!(self.checkpoints.borrow().is_empty());
         // Firstly, update account storage tree
-        let db = Arc::clone(&self.db);
         self.cache
             .borrow_mut()
             .par_iter_mut()
@@ -309,7 +305,7 @@ impl<B: DB> State<B> {
 
                 if let Some(ref mut state_object) = entry.state_object {
                     // When operate on account element, AccountDB should be used
-                    let accdb = Arc::new(AccountDB::new(*address, Arc::clone(&db)));
+                    let accdb = Arc::new(AccountDB::new(*address, self.db.clone()));
                     state_object.commit_storage(Arc::clone(&accdb))?;
                     state_object.commit_code(Arc::clone(&accdb))?;
                     state_object.commit_abi(Arc::clone(&accdb))?;

@@ -437,7 +437,7 @@ pub fn exec<B: DB + 'static>(
     config: Config,
     tx: Transaction,
 ) -> Result<evm::InterpreterResult, err::Error> {
-    let mut request = &mut reinterpret_tx(tx, state_provider.clone());
+    let request = &mut reinterpret_tx(tx, state_provider.clone());
     // Ensure gas < block_gas_limit
 
     /* TODO : this judgement need be reconsider
