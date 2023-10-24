@@ -1,5 +1,5 @@
 use crate::common::hash::{summary, RLP_NULL};
-use cita_trie::DB;
+use crate::DB;
 use ethereum_types::{Address, H256};
 use std::io::Error;
 use std::sync::Arc;
@@ -30,7 +30,7 @@ impl<B: DB> AccountDB<B> {
     }
 }
 
-impl<B: DB> DB for AccountDB<B> {
+impl<B: DB> cita_trie::DB for AccountDB<B> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
         if H256::from_slice(key) == RLP_NULL {
             return Ok(Some(NULL_RLP_STATIC.to_vec()));

@@ -4,7 +4,7 @@ use crate::state::account::StateObject;
 use crate::state::account_db::AccountDB;
 use crate::state::err::Error;
 use crate::state::object_entry::{ObjectStatus, StateObjectEntry};
-use cita_trie::DB;
+use crate::DB;
 use cita_trie::{PatriciaTrie, Trie};
 use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
