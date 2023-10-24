@@ -1,6 +1,6 @@
 [package]
 name = "cita-vm"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["Cryptape Technologies <contact@cryptape.com>"]
 edition = "2021"
 description = "CITA VM"
@@ -10,10 +10,10 @@ documentation = "https://github.com/cryptape/cita-vm/blob/master/README.md"
 
 [dependencies]
 byteorder = "1.0"
-cita_trie = "3.0"
-env_logger = "0.9"
+cita_trie = "4.0"
+env_logger = "0.10"
 ethereum-types = "0.14"
-hashbrown = { version = "0.12", features = ["rayon"] }
+hashbrown = { version = "0.13", features = ["rayon"] }
 hasher = { version="0.1" }
 hex = "0.4"
 secp256k1 = { package = "libsecp256k1", version = "0.7" }
