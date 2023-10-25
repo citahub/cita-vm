@@ -1,5 +1,5 @@
 use crate::common::hash::{summary, RLP_NULL};
-use crate::DB;
+use cita_trie::CDB;
 use ethereum_types::{Address, H256};
 use std::io::Error;
 use std::sync::Arc;
@@ -17,20 +17,20 @@ fn combine_key(addr_hash: &[u8], key: &[u8]) -> Vec<u8> {
 }
 
 #[derive(Debug)]
-pub struct AccountDB<B: DB> {
+pub struct AccountDB<B: CDB> {
     /// address means address's hash
     address_hash: H256,
     db: Arc<B>,
 }
 
-impl<B: DB> AccountDB<B> {
+impl<B: CDB> AccountDB<B> {
     pub fn new(address: Address, db: Arc<B>) -> Self {
         let address_hash = H256::from_slice(summary(&address[..]).as_slice());
         AccountDB { address_hash, db }
     }
 }
 
-impl<B: DB> cita_trie::DB for AccountDB<B> {
+impl<B: CDB> cita_trie::DB for AccountDB<B> {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
         if H256::from_slice(key) == RLP_NULL {
             return Ok(Some(NULL_RLP_STATIC.to_vec()));
@@ -73,6 +73,7 @@ impl<B: DB> cita_trie::DB for AccountDB<B> {
 mod test_account_db {
     use super::*;
     use cita_trie::MemoryDB;
+    use cita_trie::DB;
 
     #[test]
     fn test_accdb_get() {

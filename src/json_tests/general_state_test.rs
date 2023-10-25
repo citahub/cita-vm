@@ -143,6 +143,7 @@ impl Test {
 mod tests {
     use super::*;
     use std::fs;
+    use std::str::FromStr;
 
     #[test]
     fn test_json_tests_parse() {
@@ -154,7 +155,7 @@ mod tests {
         let v = &t.0["addmodNonConst"];
         assert_eq!(
             v.env.current_coinbase,
-            Address::from("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba")
+            Address::from_str("0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba").unwrap()
         );
     }
 }

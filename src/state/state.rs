@@ -4,8 +4,7 @@ use crate::state::account::StateObject;
 use crate::state::account_db::AccountDB;
 use crate::state::err::Error;
 use crate::state::object_entry::{ObjectStatus, StateObjectEntry};
-use crate::DB;
-use cita_trie::{PatriciaTrie, Trie};
+use cita_trie::{PatriciaTrie, Trie, CDB};
 use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
@@ -26,7 +25,7 @@ pub struct State<B> {
     pub checkpoints: RefCell<Vec<HashMap<Address, Option<StateObjectEntry>>>>,
 }
 
-impl<B: DB> State<B> {
+impl<B: CDB> State<B> {
     /// Creates empty state for test.
     pub fn new(db: Arc<B>) -> Result<State<B>, Error> {
         let mut trie = PatriciaTrie::new(Arc::clone(&db), Arc::new(hash::get_hasher()));
@@ -321,7 +320,7 @@ impl<B: DB> State<B> {
             .cache
             .borrow_mut()
             .par_iter_mut()
-            .filter(|&(_, ref a)| a.is_dirty())
+            .filter(|(_, a)| a.is_dirty())
             .map(|(address, entry)| {
                 entry.status = ObjectStatus::Committed;
                 match entry.state_object {
@@ -423,7 +422,7 @@ pub trait StateObjectInfo {
     fn abi_size(&mut self, a: &Address) -> Result<usize, Error>;
 }
 
-impl<B: DB> StateObjectInfo for State<B> {
+impl<B: CDB> StateObjectInfo for State<B> {
     fn nonce(&mut self, address: &Address) -> Result<U256, Error> {
         self.call_with_cached(address, |a| Ok(a.map_or(U256::zero(), |e| e.nonce)))?
     }
@@ -474,6 +473,7 @@ impl<B: DB> StateObjectInfo for State<B> {
 mod tests {
     use super::*;
     use cita_trie::MemoryDB;
+    use std::str::FromStr;
     use std::sync::Arc;
 
     fn get_temp_state() -> State<MemoryDB> {
@@ -490,14 +490,14 @@ mod tests {
             assert_eq!(state.code(&a).unwrap(), vec![1, 2, 3]);
             assert_eq!(
                 state.code_hash(&a).unwrap(),
-                "0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239".into()
+                H256::from_str("0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239").unwrap()
             );
             assert_eq!(state.code_size(&a).unwrap(), 3);
             state.commit().unwrap();
             assert_eq!(state.code(&a).unwrap(), vec![1, 2, 3]);
             assert_eq!(
                 state.code_hash(&a).unwrap(),
-                "0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239".into()
+                H256::from_str("0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239").unwrap()
             );
             assert_eq!(state.code_size(&a).unwrap(), 3);
             (state.root, state.db)
@@ -507,7 +507,7 @@ mod tests {
         assert_eq!(state.code(&a).unwrap(), vec![1, 2, 3]);
         assert_eq!(
             state.code_hash(&a).unwrap(),
-            "0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239".into()
+            H256::from_str("0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239").unwrap()
         );
         assert_eq!(state.code_size(&a).unwrap(), 3);
     }
@@ -521,14 +521,14 @@ mod tests {
             assert_eq!(state.abi(&a).unwrap(), vec![1, 2, 3]);
             assert_eq!(
                 state.abi_hash(&a).unwrap(),
-                "0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239".into()
+                H256::from_str("0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239").unwrap()
             );
             assert_eq!(state.abi_size(&a).unwrap(), 3);
             state.commit().unwrap();
             assert_eq!(state.abi(&a).unwrap(), vec![1, 2, 3]);
             assert_eq!(
                 state.abi_hash(&a).unwrap(),
-                "0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239".into()
+                H256::from_str("0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239").unwrap()
             );
             assert_eq!(state.abi_size(&a).unwrap(), 3);
             (state.root, state.db)
@@ -538,7 +538,7 @@ mod tests {
         assert_eq!(state.abi(&a).unwrap(), vec![1, 2, 3]);
         assert_eq!(
             state.abi_hash(&a).unwrap(),
-            "0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239".into()
+            H256::from_str("0xf1885eda54b7a053318cd41e2093220dab15d65381b1157a3633a83bfd5c9239").unwrap()
         );
         assert_eq!(state.abi_size(&a).unwrap(), 3);
     }
@@ -549,7 +549,7 @@ mod tests {
         let (root, db) = {
             let mut state = get_temp_state();
             state
-                .set_storage(&a, H256::from(&U256::from(1u64)), H256::from(&U256::from(69u64)))
+                .set_storage(&a, H256::from_low_u64_be(1), H256::from_low_u64_be(69))
                 .unwrap();
             state.commit().unwrap();
             (state.root, state.db)
@@ -557,8 +557,8 @@ mod tests {
 
         let mut state = State::from_existing(db, root).unwrap();
         assert_eq!(
-            state.get_storage(&a, &H256::from(&U256::from(1u64))).unwrap(),
-            H256::from(&U256::from(69u64))
+            state.get_storage(&a, &H256::from_low_u64_be(1u64)).unwrap(),
+            H256::from_low_u64_be(69u64)
         );
     }
 
@@ -623,7 +623,7 @@ mod tests {
     fn alter_balance() {
         let mut state = get_temp_state();
         let a = Address::zero();
-        let b: Address = 1u64.into();
+        let b = Address::from_low_u64_be(1);
 
         state.add_balance(&a, U256::from(69u64)).unwrap();
         assert_eq!(state.balance(&a).unwrap(), U256::from(69u64));
@@ -677,7 +677,7 @@ mod tests {
         state.commit().unwrap();
         assert_eq!(
             state.root,
-            "530acecc6ec873396bb3e90b6578161f9688ed7eeeb93d6fba5684895a93b78a".into()
+            H256::from_str("530acecc6ec873396bb3e90b6578161f9688ed7eeeb93d6fba5684895a93b78a").unwrap()
         );
     }
 
@@ -717,12 +717,12 @@ mod tests {
     fn checkpoint_revert_to_get_storage() {
         let mut state = get_temp_state();
         let a = Address::zero();
-        let k = H256::from(U256::from(0));
+        let k = H256::zero();
 
         state.checkpoint();
         state.checkpoint();
-        state.set_storage(&a, k, H256::from(1u64)).unwrap();
-        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from(1u64));
+        state.set_storage(&a, k, H256::from_low_u64_be(1)).unwrap();
+        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from_low_u64_be(1));
         state.revert_checkpoint();
         assert!(state.get_storage(&a, &k).unwrap().is_zero());
     }
@@ -731,21 +731,21 @@ mod tests {
     fn checkpoint_kill_account() {
         let mut state = get_temp_state();
         let a = Address::zero();
-        let k = H256::from(U256::from(0));
+        let k = H256::zero();
         state.checkpoint();
-        state.set_storage(&a, k, H256::from(U256::from(1))).unwrap();
+        state.set_storage(&a, k, H256::from_low_u64_be(1)).unwrap();
         state.checkpoint();
         state.kill_contract(&a);
         assert!(state.get_storage(&a, &k).unwrap().is_zero());
         state.revert_checkpoint();
-        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from(U256::from(1)));
+        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from_low_u64_be(1));
     }
 
     #[test]
     fn checkpoint_create_contract_fail() {
         let mut state = get_temp_state();
         let orig_root = state.root;
-        let a: Address = 1000.into();
+        let a = Address::from_low_u64_be(1000);
 
         state.checkpoint(); // c1
         state.new_contract(&a, U256::zero(), U256::zero(), vec![]);
@@ -762,25 +762,25 @@ mod tests {
     #[test]
     fn create_contract_fail_previous_storage() {
         let mut state = get_temp_state();
-        let a: Address = 1000.into();
-        let k = H256::from(U256::from(0));
+        let a = Address::from_low_u64_be(1000);
+        let k = H256::zero();
 
-        state.set_storage(&a, k, H256::from(U256::from(0xffff))).unwrap();
+        state.set_storage(&a, k, H256::from_low_u64_be(0xffff)).unwrap();
         state.commit().unwrap();
         state.clear();
 
         let orig_root = state.root;
-        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from(U256::from(0xffff)));
+        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from_low_u64_be(0xffff));
         state.clear();
 
         state.checkpoint(); // c1
         state.new_contract(&a, U256::zero(), U256::zero(), vec![]);
         state.checkpoint(); // c2
-        state.set_storage(&a, k, H256::from(U256::from(2))).unwrap();
+        state.set_storage(&a, k, H256::from_low_u64_be(2)).unwrap();
         state.revert_checkpoint(); // revert to c2
-        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from(U256::from(0)));
+        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from_low_u64_be(0));
         state.revert_checkpoint(); // revert to c1
-        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from(U256::from(0xffff)));
+        assert_eq!(state.get_storage(&a, &k).unwrap(), H256::from_low_u64_be(0xffff));
 
         state.commit().unwrap();
         assert_eq!(orig_root, state.root);
@@ -789,14 +789,19 @@ mod tests {
     #[test]
     fn checkpoint_chores() {
         let mut state = get_temp_state();
-        let a: Address = 1000.into();
-        let b: Address = 2000.into();
+        let a = Address::from_low_u64_be(1000);
+        let b = Address::from_low_u64_be(2000);
         state.new_contract(&a, 5.into(), 0.into(), vec![10u8, 20, 30, 40, 50]);
         state.add_balance(&a, 5.into()).unwrap();
-        state.set_storage(&a, 10.into(), 10.into()).unwrap();
+        state
+            .set_storage(&a, H256::from_low_u64_be(10), H256::from_low_u64_be(10))
+            .unwrap();
         assert_eq!(state.code(&a).unwrap(), vec![10u8, 20, 30, 40, 50]);
         assert_eq!(state.balance(&a).unwrap(), 10.into());
-        assert_eq!(state.get_storage(&a, &10.into()).unwrap(), 10.into());
+        assert_eq!(
+            state.get_storage(&a, &H256::from_low_u64_be(10)).unwrap(),
+            H256::from_low_u64_be(10)
+        );
         state.commit().unwrap();
         let orig_root = state.root;
 
@@ -816,21 +821,37 @@ mod tests {
 
         state.checkpoint(); // c1
         state.sub_balance(&a, 2.into()).unwrap();
-        state.set_storage(&a, 20.into(), 20.into()).unwrap();
+        state
+            .set_storage(&a, H256::from_low_u64_be(20), H256::from_low_u64_be(20))
+            .unwrap();
         assert_eq!(state.balance(&a).unwrap(), 8.into());
-        assert_eq!(state.get_storage(&a, &10.into()).unwrap(), 10.into());
-        assert_eq!(state.get_storage(&a, &20.into()).unwrap(), 20.into());
+        assert_eq!(
+            state.get_storage(&a, &H256::from_low_u64_be(10)).unwrap(),
+            H256::from_low_u64_be(10)
+        );
+        assert_eq!(
+            state.get_storage(&a, &H256::from_low_u64_be(20)).unwrap(),
+            H256::from_low_u64_be(20)
+        );
 
         state.checkpoint(); // c2
         state.new_contract(&b, 30.into(), 0.into(), vec![]);
-        state.set_storage(&a, 10.into(), 15.into()).unwrap();
+        state
+            .set_storage(&a, H256::from_low_u64_be(10), H256::from_low_u64_be(10))
+            .unwrap();
         assert_eq!(state.balance(&b).unwrap(), 30.into());
         assert!(state.code(&b).unwrap().is_empty());
 
         state.revert_checkpoint(); // revert c2
         assert_eq!(state.balance(&a).unwrap(), 8.into());
-        assert_eq!(state.get_storage(&a, &10.into()).unwrap(), 10.into());
-        assert_eq!(state.get_storage(&a, &20.into()).unwrap(), 20.into());
+        assert_eq!(
+            state.get_storage(&a, &H256::from_low_u64_be(10)).unwrap(),
+            H256::from_low_u64_be(10)
+        );
+        assert_eq!(
+            state.get_storage(&a, &H256::from_low_u64_be(20)).unwrap(),
+            H256::from_low_u64_be(20)
+        );
         assert_eq!(state.balance(&b).unwrap(), 0.into());
         assert!(state.code(&b).unwrap().is_empty());
         assert_eq!(state.exist(&b).unwrap(), false);
@@ -838,7 +859,10 @@ mod tests {
         state.revert_checkpoint(); // revert c1
         assert_eq!(state.code(&a).unwrap(), vec![10u8, 20, 30, 40, 50]);
         assert_eq!(state.balance(&a).unwrap(), 10.into());
-        assert_eq!(state.get_storage(&a, &10.into()).unwrap(), 10.into());
+        assert_eq!(
+            state.get_storage(&a, &H256::from_low_u64_be(10)).unwrap(),
+            H256::from_low_u64_be(10)
+        );
 
         state.commit().unwrap();
         assert_eq!(orig_root, state.root);
@@ -847,8 +871,8 @@ mod tests {
     #[test]
     fn get_account_proof() {
         let mut state = get_temp_state();
-        let a: Address = 1000.into();
-        let b: Address = 2000.into();
+        let a = Address::from_low_u64_be(1000);
+        let b = Address::from_low_u64_be(2000);
         state.new_contract(&a, 5.into(), 0.into(), vec![10u8, 20, 30, 40, 50]);
         state.commit().unwrap();
 
@@ -868,28 +892,30 @@ mod tests {
     #[test]
     fn get_storage_proof() {
         let mut state = get_temp_state();
-        let a: Address = 1000.into();
-        let b: Address = 2000.into();
-        let c: Address = 3000.into();
+        let a = Address::from_low_u64_be(1000);
+        let b = Address::from_low_u64_be(2000);
+        let c = Address::from_low_u64_be(3000);
         state.new_contract(&a, 5.into(), 0.into(), vec![10u8, 20, 30, 40, 50]);
-        state.set_storage(&a, 10.into(), 10.into()).unwrap();
+        state
+            .set_storage(&a, H256::from_low_u64_be(10), H256::from_low_u64_be(15))
+            .unwrap();
         state.new_contract(&b, 5.into(), 0.into(), vec![10u8, 20, 30, 40, 50]);
         state.commit().unwrap();
 
         // account not exist
-        let proof = state.get_storage_proof(&c, &10.into()).unwrap();
+        let proof = state.get_storage_proof(&c, &H256::from_low_u64_be(10)).unwrap();
         assert_eq!(proof.len(), 0);
 
         // account who has empty storage trie
-        let proof = state.get_storage_proof(&b, &10.into()).unwrap();
+        let proof = state.get_storage_proof(&b, &H256::from_low_u64_be(10)).unwrap();
         assert_eq!(proof.len(), 0);
 
         // account and storage key exists
-        let proof1 = state.get_storage_proof(&a, &10.into()).unwrap();
+        let proof1 = state.get_storage_proof(&a, &H256::from_low_u64_be(10)).unwrap();
         assert_eq!(proof1.len(), 1);
 
         // account exists but storage key not exist
-        let proof2 = state.get_storage_proof(&a, &20.into()).unwrap();
+        let proof2 = state.get_storage_proof(&a, &H256::from_low_u64_be(20)).unwrap();
         assert_eq!(proof2.len(), 1);
 
         assert_eq!(proof1, proof2);
@@ -907,6 +933,6 @@ mod tests {
         #[cfg(feature = "sm3hash")]
         let expected = "995b949869f80fa1465a9d8b6fa759ec65c3020d59c2624662bdff059bdf19b3";
 
-        assert_eq!(state.root, expected.into());
+        assert_eq!(state.root, H256::from_str(expected).unwrap());
     }
 }

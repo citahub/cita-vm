@@ -13,5 +13,3 @@ pub use executive::{
     create_address_from_address_and_nonce, exec, exec_static, BlockDataProvider, BlockDataProviderMock, Config,
     CreateKind, DataProvider, Executive, Store, Transaction,
 };
-
-pub trait DB: cita_trie::DB + Send + Sync {}

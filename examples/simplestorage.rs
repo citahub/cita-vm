@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use ethereum_types::{Address, U256};
@@ -16,13 +17,13 @@ fn main() {
                 99c66a25d59f0aa78f7ebc40748fa1d1fbc335d8d780f284841b30e0365acd9\
                 60029";
     state.new_contract(
-        &Address::from("0xBd770416a3345F91E4B34576cb804a576fa48EB1"),
+        &Address::from_str("0xBd770416a3345F91E4B34576cb804a576fa48EB1").unwrap(),
         U256::from(10),
         U256::from(1),
         hex::decode(code).unwrap(),
     );
     state.new_contract(
-        &Address::from("0x1000000000000000000000000000000000000000"),
+        &Address::from_str("0x1000000000000000000000000000000000000000").unwrap(),
         U256::from(1_000_000_000_000_000u64),
         U256::from(1),
         vec![],
@@ -34,8 +35,8 @@ fn main() {
     let config = cita_vm::Config::default();
 
     let tx = cita_vm::Transaction {
-        from: Address::from("0x1000000000000000000000000000000000000000"),
-        to: Some(Address::from("0xBd770416a3345F91E4B34576cb804a576fa48EB1")),
+        from: Address::from_str("0x1000000000000000000000000000000000000000").unwrap(),
+        to: Some(Address::from_str("0xBd770416a3345F91E4B34576cb804a576fa48EB1").unwrap()),
         value: U256::from(0),
         nonce: U256::from(1),
         gas_limit: 80000,
@@ -53,8 +54,8 @@ fn main() {
     println!("return={:?}", r);
 
     let tx = cita_vm::Transaction {
-        from: Address::from("0x1000000000000000000000000000000000000000"),
-        to: Some(Address::from("0xBd770416a3345F91E4B34576cb804a576fa48EB1")),
+        from: Address::from_str("0x1000000000000000000000000000000000000000").unwrap(),
+        to: Some(Address::from_str("0xBd770416a3345F91E4B34576cb804a576fa48EB1").unwrap()),
         value: U256::from(0),
         nonce: U256::from(2),
         gas_limit: 80000,

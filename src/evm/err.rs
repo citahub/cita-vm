@@ -21,18 +21,18 @@ impl error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::OutOfBounds => return write!(f, "OutOfBounds"),
-            Error::OutOfGas => return write!(f, "OutOfGas"),
-            Error::OutOfStack => return write!(f, "OutOfStack"),
-            Error::OutOfCode => return write!(f, "OutOfCode"),
-            Error::OutOfData => return write!(f, "OutOfData"),
-            Error::MutableCallInStaticContext => return write!(f, "MutableCallInStaticContext"),
-            Error::InvalidOpcode => return write!(f, "InvalidOpcode"),
-            Error::CallError => return write!(f, "CallError"),
-            Error::ExccedMaxCodeSize => return write!(f, "ExccedMaxCodeSize"),
-            Error::InvalidJumpDestination => return write!(f, "InvalidJumpDestination"),
-            Error::Internal(err) => return write!(f, "Internal error {}", err),
-            Error::StackUnderflow => return write!(f, "StackUnderflow"),
-        };
+            Error::OutOfBounds => write!(f, "OutOfBounds"),
+            Error::OutOfGas => write!(f, "OutOfGas"),
+            Error::OutOfStack => write!(f, "OutOfStack"),
+            Error::OutOfCode => write!(f, "OutOfCode"),
+            Error::OutOfData => write!(f, "OutOfData"),
+            Error::MutableCallInStaticContext => write!(f, "MutableCallInStaticContext"),
+            Error::InvalidOpcode => write!(f, "InvalidOpcode"),
+            Error::CallError => write!(f, "CallError"),
+            Error::ExccedMaxCodeSize => write!(f, "ExccedMaxCodeSize"),
+            Error::InvalidJumpDestination => write!(f, "InvalidJumpDestination"),
+            Error::Internal(err) => write!(f, "Internal error {}", err),
+            Error::StackUnderflow => write!(f, "StackUnderflow"),
+        }
     }
 }

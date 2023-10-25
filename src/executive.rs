@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use crate::DB;
+use cita_trie::CDB;
 use ethereum_types::{Address, H256, U256};
 use evm::InterpreterParams;
 use hashbrown::{HashMap, HashSet};
@@ -12,7 +12,7 @@ use crate::common;
 use crate::err;
 use crate::evm;
 use crate::native;
-use crate::state::{self, State, StateObjectInfo};
+use crate::state::{State, StateObjectInfo};
 use hasher::Hasher;
 
 /// BlockDataProvider provides functions to get block's hash from chain.
@@ -87,7 +87,7 @@ pub struct DataProvider<B> {
     store: Arc<RefCell<Store>>,
 }
 
-impl<B: DB> DataProvider<B> {
+impl<B: CDB> DataProvider<B> {
     /// Create a new instance. It's obvious.
     pub fn new(b: Arc<dyn BlockDataProvider>, s: Arc<RefCell<State<B>>>, store: Arc<RefCell<Store>>) -> Self {
         DataProvider {
@@ -141,8 +141,8 @@ pub fn get_interpreter_conf() -> evm::InterpreterConf {
 /// retroactively starting from genesis.
 ///
 /// See: EIP 684
-pub fn can_create<B: DB + 'static>(
-    state_provider: Arc<RefCell<state::State<B>>>,
+pub fn can_create<B: CDB + 'static>(
+    state_provider: Arc<RefCell<State<B>>>,
     address: &Address,
 ) -> Result<bool, err::Error> {
     let a = state_provider.borrow_mut().nonce(address)?;
@@ -181,8 +181,8 @@ pub fn get_refund(store: Arc<RefCell<Store>>, request: &InterpreterParams, gas_l
 }
 
 /// Liquidtion for a transaction.
-pub fn clear<B: DB + 'static>(
-    state_provider: Arc<RefCell<state::State<B>>>,
+pub fn clear<B: CDB + 'static>(
+    state_provider: Arc<RefCell<State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
     gas_left: u64,
@@ -217,9 +217,9 @@ impl Default for Config {
 }
 
 /// Function call_pure enters into the specific contract with no check or checkpoints.
-fn call_pure<B: DB + 'static>(
+fn call_pure<B: CDB + 'static>(
     block_provider: Arc<dyn BlockDataProvider>,
-    state_provider: Arc<RefCell<state::State<B>>>,
+    state_provider: Arc<RefCell<State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
 ) -> Result<evm::InterpreterResult, err::Error> {
@@ -255,9 +255,9 @@ fn call_pure<B: DB + 'static>(
 }
 
 /// Function call enters into the specific contract.
-fn call<B: DB + 'static>(
+fn call<B: CDB + 'static>(
     block_provider: Arc<dyn BlockDataProvider>,
-    state_provider: Arc<RefCell<state::State<B>>>,
+    state_provider: Arc<RefCell<State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
 ) -> Result<evm::InterpreterResult, err::Error> {
@@ -294,9 +294,9 @@ fn call<B: DB + 'static>(
 }
 
 /// Function create creates a new contract.
-fn create<B: DB + 'static>(
+fn create<B: CDB + 'static>(
     block_provider: Arc<dyn BlockDataProvider>,
-    state_provider: Arc<RefCell<state::State<B>>>,
+    state_provider: Arc<RefCell<State<B>>>,
     store: Arc<RefCell<Store>>,
     request: &InterpreterParams,
     create_kind: CreateKind,
@@ -399,10 +399,7 @@ pub struct Transaction {
 }
 
 /// Reinterpret tx to interpreter params.
-fn reinterpret_tx<B: DB + 'static>(
-    tx: Transaction,
-    state_provider: Arc<RefCell<state::State<B>>>,
-) -> InterpreterParams {
+fn reinterpret_tx<B: CDB + 'static>(tx: Transaction, state_provider: Arc<RefCell<State<B>>>) -> InterpreterParams {
     let mut request = InterpreterParams {
         origin: tx.from,
         sender: tx.from,
@@ -430,9 +427,9 @@ fn reinterpret_tx<B: DB + 'static>(
 }
 
 /// Execute the transaction from transaction pool
-pub fn exec<B: DB + 'static>(
+pub fn exec<B: CDB + 'static>(
     block_provider: Arc<dyn BlockDataProvider>,
-    state_provider: Arc<RefCell<state::State<B>>>,
+    state_provider: Arc<RefCell<State<B>>>,
     evm_context: evm::Context,
     config: Config,
     tx: Transaction,
@@ -551,9 +548,9 @@ pub fn exec<B: DB + 'static>(
 ///
 /// This function is similar with `exec`, but all check & checkpoints are removed.
 #[allow(unused_variables)]
-pub fn exec_static<B: DB + 'static>(
+pub fn exec_static<B: CDB + 'static>(
     block_provider: Arc<dyn BlockDataProvider>,
-    state_provider: Arc<RefCell<state::State<B>>>,
+    state_provider: Arc<RefCell<State<B>>>,
     evm_context: evm::Context,
     config: Config,
     tx: Transaction,
@@ -575,12 +572,12 @@ pub fn exec_static<B: DB + 'static>(
 
 pub struct Executive<B> {
     pub block_provider: Arc<dyn BlockDataProvider>,
-    pub state_provider: Arc<RefCell<state::State<B>>>,
+    pub state_provider: Arc<RefCell<State<B>>>,
     pub config: Config,
 }
 
-impl<B: DB + 'static> Executive<B> {
-    pub fn new(block_provider: Arc<dyn BlockDataProvider>, state_provider: state::State<B>, config: Config) -> Self {
+impl<B: CDB + 'static> Executive<B> {
+    pub fn new(block_provider: Arc<dyn BlockDataProvider>, state_provider: State<B>, config: Config) -> Self {
         Self {
             block_provider,
             state_provider: Arc::new(RefCell::new(state_provider)),
@@ -634,7 +631,7 @@ impl<B: DB + 'static> Executive<B> {
 
     pub fn exec_static(
         block_provider: Arc<dyn BlockDataProvider>,
-        state_provider: state::State<B>,
+        state_provider: State<B>,
         evm_context: evm::Context,
         config: Config,
         tx: Transaction,
@@ -654,7 +651,7 @@ impl<B: DB + 'static> Executive<B> {
     }
 }
 
-impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
+impl<B: CDB + 'static> evm::DataProvider for DataProvider<B> {
     fn get_balance(&self, address: &Address) -> U256 {
         self.state_provider
             .borrow_mut()
