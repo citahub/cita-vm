@@ -1,7 +1,7 @@
 use crate::common::hash::{summary, RLP_NULL};
-use cita_trie::CDB;
+use crate::state::Error;
+use cita_trie::DB;
 use ethereum_types::{Address, H256};
-use std::io::Error;
 use std::sync::Arc;
 
 static NULL_RLP_STATIC: [u8; 1] = [0x80; 1];
@@ -17,27 +17,30 @@ fn combine_key(addr_hash: &[u8], key: &[u8]) -> Vec<u8> {
 }
 
 #[derive(Debug)]
-pub struct AccountDB<B: CDB> {
+pub struct AccountDB<B: DB> {
     /// address means address's hash
     address_hash: H256,
     db: Arc<B>,
 }
 
-impl<B: CDB> AccountDB<B> {
+impl<B: DB> AccountDB<B> {
     pub fn new(address: Address, db: Arc<B>) -> Self {
         let address_hash = H256::from_slice(summary(&address[..]).as_slice());
         AccountDB { address_hash, db }
     }
 }
 
-impl<B: CDB> cita_trie::DB for AccountDB<B> {
+impl<B: DB> DB for AccountDB<B> {
+    type Error = Error;
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
         if H256::from_slice(key) == RLP_NULL {
             return Ok(Some(NULL_RLP_STATIC.to_vec()));
         }
 
         let concatenated = combine_key(&self.address_hash.0[..], key);
-        self.db.get(concatenated.as_slice())
+        self.db
+            .get(concatenated.as_slice())
+            .map_err(|e| Error::DB(format!("{}", e)))
     }
 
     fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
@@ -45,7 +48,9 @@ impl<B: CDB> cita_trie::DB for AccountDB<B> {
             return Ok(());
         }
         let concatenated = combine_key(&self.address_hash.0[..], &key[..]);
-        self.db.insert(concatenated, value)
+        self.db
+            .insert(concatenated, value)
+            .map_err(|e| Error::DB(format!("{}", e)))
     }
 
     fn contains(&self, key: &[u8]) -> Result<bool, Error> {
@@ -53,7 +58,9 @@ impl<B: CDB> cita_trie::DB for AccountDB<B> {
             return Ok(true);
         }
         let concatenated = combine_key(&self.address_hash.0[..], key);
-        self.db.contains(concatenated.as_slice())
+        self.db
+            .contains(concatenated.as_slice())
+            .map_err(|e| Error::DB(format!("{}", e)))
     }
 
     fn remove(&self, key: &[u8]) -> Result<(), Error> {
@@ -61,11 +68,13 @@ impl<B: CDB> cita_trie::DB for AccountDB<B> {
             return Ok(());
         }
         let concatenated = combine_key(&self.address_hash.0[..], key);
-        self.db.remove(concatenated.as_slice())
+        self.db
+            .remove(concatenated.as_slice())
+            .map_err(|e| Error::DB(format!("{}", e)))
     }
 
     fn flush(&self) -> Result<(), Error> {
-        self.db.flush()
+        self.db.flush().map_err(|e| Error::DB(format!("{}", e)))
     }
 }
 

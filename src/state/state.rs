@@ -4,7 +4,7 @@ use crate::state::account::StateObject;
 use crate::state::account_db::AccountDB;
 use crate::state::err::Error;
 use crate::state::object_entry::{ObjectStatus, StateObjectEntry};
-use cita_trie::{PatriciaTrie, Trie, CDB};
+use cita_trie::{PatriciaTrie, Trie, DB};
 use ethereum_types::{Address, H256, U256};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
@@ -25,7 +25,7 @@ pub struct State<B> {
     pub checkpoints: RefCell<Vec<HashMap<Address, Option<StateObjectEntry>>>>,
 }
 
-impl<B: CDB> State<B> {
+impl<B: DB> State<B> {
     /// Creates empty state for test.
     pub fn new(db: Arc<B>) -> Result<State<B>, Error> {
         let mut trie = PatriciaTrie::new(Arc::clone(&db), Arc::new(hash::get_hasher()));
@@ -422,7 +422,7 @@ pub trait StateObjectInfo {
     fn abi_size(&mut self, a: &Address) -> Result<usize, Error>;
 }
 
-impl<B: CDB> StateObjectInfo for State<B> {
+impl<B: DB> StateObjectInfo for State<B> {
     fn nonce(&mut self, address: &Address) -> Result<U256, Error> {
         self.call_with_cached(address, |a| Ok(a.map_or(U256::zero(), |e| e.nonce)))?
     }
