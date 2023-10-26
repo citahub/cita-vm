@@ -663,7 +663,7 @@ impl Interpreter {
                         let shift = shift.as_u32() as usize;
                         let mut shifted = value >> shift;
                         if sign {
-                            shifted = shifted | (U256::max_value() << (256 - shift));
+                            shifted |= U256::max_value() << (256 - shift);
                         }
                         shifted
                     };
@@ -788,7 +788,7 @@ impl Interpreter {
                 opcodes::OpCode::NUMBER => {
                     self.stack.push(self.context.number);
                 }
-                opcodes::OpCode::DIFFICULTY => {
+                opcodes::OpCode::PREVRANDAO => {
                     self.stack.push(self.context.difficulty);
                 }
                 opcodes::OpCode::GASLIMIT => {
@@ -851,6 +851,9 @@ impl Interpreter {
                     self.stack.push(U256::from(self.gas));
                 }
                 opcodes::OpCode::JUMPDEST => {}
+                opcodes::OpCode::PUSH0 => {
+                    self.stack.push(U256::zero());
+                }
                 opcodes::OpCode::PUSH1
                 | opcodes::OpCode::PUSH2
                 | opcodes::OpCode::PUSH3
@@ -1771,10 +1774,16 @@ mod tests {
             let mut it = default_interpreter();
             it.cfg.eip1283 = true;
             assert_eq!(it.gas, it.context.gas_limit);
-            it.data_provider
-                .set_storage_origin(&it.params.contract.code_address, H256::zero(), H256::from(origin));
-            it.data_provider
-                .set_storage(&it.params.contract.code_address, H256::zero(), H256::from(origin));
+            it.data_provider.set_storage_origin(
+                &it.params.contract.code_address,
+                H256::zero(),
+                H256::from_low_u64_be(origin),
+            );
+            it.data_provider.set_storage(
+                &it.params.contract.code_address,
+                H256::zero(),
+                H256::from_low_u64_be(origin),
+            );
             it.params.contract.code_data = hex::decode(code).unwrap();
             it.run().unwrap();
             assert_eq!(it.gas, it.context.gas_limit - use_gas);

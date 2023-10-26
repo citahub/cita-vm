@@ -376,6 +376,7 @@ impl StateObject {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn state_object_new() {
@@ -409,10 +410,10 @@ mod tests {
         assert_eq!(a.code_state, CodeState::Clean);
         assert_eq!(
             a.code_hash,
-            "af231e631776a517ca23125370d542873eca1fb4d613ed9b5d5335a46ae5b7eb".into()
+            H256::from_str("af231e631776a517ca23125370d542873eca1fb4d613ed9b5d5335a46ae5b7eb").unwrap()
         );
 
-        let k = a.code_hash.to_vec();
+        let k = a.code_hash.0.to_vec();
         assert_eq!(db.get(&k).unwrap().unwrap(), vec![0x55, 0x44, 0xffu8]);
         a.init_code(vec![0x55]);
         assert_eq!(a.code_state, CodeState::Dirty);
@@ -420,10 +421,10 @@ mod tests {
         a.commit_code(Arc::clone(&db)).unwrap();
         assert_eq!(
             a.code_hash,
-            "37bf2238b11b68cdc8382cece82651b59d3c3988873b6e0f33d79694aa45f1be".into()
+            H256::from_str("37bf2238b11b68cdc8382cece82651b59d3c3988873b6e0f33d79694aa45f1be").unwrap()
         );
 
-        let k = a.code_hash.to_vec();
+        let k = a.code_hash.0.to_vec();
         assert_eq!(db.get(&k).unwrap().unwrap(), vec![0x55]);
     }
 
@@ -431,11 +432,11 @@ mod tests {
     fn state_object_storage_1() {
         let mut a = StateObject::new(69u8.into(), 0.into());
         let db = Arc::new(cita_trie::MemoryDB::new(false));
-        a.set_storage(0.into(), 0x1234.into());
+        a.set_storage(H256::zero(), H256::from_low_u64_be(0x1234));
         a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
             a.storage_root,
-            "71623f5ec821de33ad5aa81f8c82f0916c6f60de0a536f8c466d440c56715bd5".into()
+            H256::from_str("71623f5ec821de33ad5aa81f8c82f0916c6f60de0a536f8c466d440c56715bd5").unwrap()
         );
     }
 
@@ -443,26 +444,26 @@ mod tests {
     fn state_object_storage_2() {
         let mut a = StateObject::new(69u8.into(), 0.into());
         let db = Arc::new(cita_trie::MemoryDB::new(false));
-        a.set_storage(0.into(), 0x1234.into());
+        a.set_storage(H256::zero(), H256::from_low_u64_be(0x1234));
         a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
             a.storage_root,
             //"c57e1afb758b07f8d2c8f13a3b6e44fa5ff94ab266facc5a4fd3f062426e50b2".into()
-            "71623f5ec821de33ad5aa81f8c82f0916c6f60de0a536f8c466d440c56715bd5".into()
+            H256::from_str("71623f5ec821de33ad5aa81f8c82f0916c6f60de0a536f8c466d440c56715bd5").unwrap()
         );
-        a.set_storage(1.into(), 0x1234.into());
+        a.set_storage(H256::from_low_u64_be(1), H256::from_low_u64_be(0x1234));
         a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
             a.storage_root,
             //"4e49574efd650366d071855e0a3975123ea9d64cc945e8f5de8c8c517e1b4ca5".into()
-            "a3db671bd0653a641fb031dccb869982da390eade9e6f993802ed09c4f6b7b2a".into()
+            H256::from_str("a3db671bd0653a641fb031dccb869982da390eade9e6f993802ed09c4f6b7b2a").unwrap()
         );
-        a.set_storage(1.into(), 0.into());
+        a.set_storage(H256::from_low_u64_be(1), H256::zero());
         a.commit_storage(Arc::clone(&db)).unwrap();
         assert_eq!(
             a.storage_root,
             //"c57e1afb758b07f8d2c8f13a3b6e44fa5ff94ab266facc5a4fd3f062426e50b2".into()
-            "71623f5ec821de33ad5aa81f8c82f0916c6f60de0a536f8c466d440c56715bd5".into()
+            H256::from_str("71623f5ec821de33ad5aa81f8c82f0916c6f60de0a536f8c466d440c56715bd5").unwrap()
         );
     }
 
@@ -471,7 +472,7 @@ mod tests {
         let mut a = StateObject::new(69u8.into(), 0.into());
         let db = Arc::new(cita_trie::MemoryDB::new(false));
         let a_rlp = {
-            a.set_storage(0x00u64.into(), 0x1234u64.into());
+            a.set_storage(H256::zero(), H256::from_low_u64_be(0x1234));
             a.commit_storage(Arc::clone(&db)).unwrap();
             a.init_code(vec![]);
             a.commit_code(Arc::clone(&db)).unwrap();
@@ -481,13 +482,13 @@ mod tests {
         assert_eq!(
             a.storage_root,
             //"c57e1afb758b07f8d2c8f13a3b6e44fa5ff94ab266facc5a4fd3f062426e50b2".into()
-            "71623f5ec821de33ad5aa81f8c82f0916c6f60de0a536f8c466d440c56715bd5".into()
+            H256::from_str("71623f5ec821de33ad5aa81f8c82f0916c6f60de0a536f8c466d440c56715bd5").unwrap()
         );
         assert_eq!(
-            a.get_storage(Arc::clone(&db), &0x00u64.into()).unwrap().unwrap(),
-            0x1234u64.into()
+            a.get_storage(Arc::clone(&db), &H256::zero()).unwrap().unwrap(),
+            H256::from_low_u64_be(0x1234)
         );
-        assert_eq!(a.get_storage(Arc::clone(&db), &0x01u64.into()).unwrap(), None);
+        assert_eq!(a.get_storage(Arc::clone(&db), &H256::from_low_u64_be(1)).unwrap(), None);
     }
 
     #[test]

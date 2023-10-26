@@ -74,7 +74,7 @@ pub fn rpad(slice: Vec<u8>, n: usize) -> Vec<u8> {
         let mut padded: Vec<u8> = Vec::with_capacity(n);
         let mut part1 = slice;
         padded.append(&mut part1);
-        let mut part2 = vec![0; n as usize - slice_len];
+        let mut part2 = vec![0; n - slice_len];
         padded.append(&mut part2);
         padded
     }

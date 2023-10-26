@@ -118,7 +118,7 @@ impl ext::DataProvider for DataProviderMock {
                 let mut it = interpreter::Interpreter::new(
                     interpreter::Context::default(),
                     interpreter::InterpreterConf::default(),
-                    Box::new(DataProviderMock::default()),
+                    Box::<DataProviderMock>::default(),
                     params,
                 );
                 let data_provider = DataProviderMock {

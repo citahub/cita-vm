@@ -26,20 +26,20 @@ impl error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::Evm(e) => return write!(f, "{}", e),
-            Error::Secp256k1(e) => return write!(f, "{:?}", e),
-            Error::State(e) => return write!(f, "{}", e),
-            Error::IO(e) => return write!(f, "{:?}", e),
-            Error::Str(e) => return write!(f, "{:?}", e),
-            Error::NotEnoughBaseGas => return write!(f, "NotEnoughBaseGas"),
-            Error::NotEnoughBalance => return write!(f, "NotEnoughBalance"),
-            Error::InvalidNonce => return write!(f, "InvalidNonce"),
-            Error::ContractAlreadyExist => return write!(f, "ContractAlreadyExist"),
-            Error::ExccedMaxCodeSize => return write!(f, "ExccedMaxCodeSize"),
-            Error::ExccedMaxBlockGasLimit => return write!(f, "ExccedMaxBlockGasLimit"),
-            Error::ExccedMaxCallDepth => return write!(f, "ExccedMaxCallDepth"),
-            Error::CreateInStaticCall => return write!(f, "CreateInStaticCall"),
-        };
+            Error::Evm(e) => write!(f, "{}", e),
+            Error::Secp256k1(e) => write!(f, "{:?}", e),
+            Error::State(e) => write!(f, "{}", e),
+            Error::IO(e) => write!(f, "{:?}", e),
+            Error::Str(e) => write!(f, "{:?}", e),
+            Error::NotEnoughBaseGas => write!(f, "NotEnoughBaseGas"),
+            Error::NotEnoughBalance => write!(f, "NotEnoughBalance"),
+            Error::InvalidNonce => write!(f, "InvalidNonce"),
+            Error::ContractAlreadyExist => write!(f, "ContractAlreadyExist"),
+            Error::ExccedMaxCodeSize => write!(f, "ExccedMaxCodeSize"),
+            Error::ExccedMaxBlockGasLimit => write!(f, "ExccedMaxBlockGasLimit"),
+            Error::ExccedMaxCallDepth => write!(f, "ExccedMaxCallDepth"),
+            Error::CreateInStaticCall => write!(f, "CreateInStaticCall"),
+        }
     }
 }
 

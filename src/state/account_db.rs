@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use crate::common::hash::{summary, RLP_NULL};
+use crate::state::Error;
 use cita_trie::DB;
 use ethereum_types::{Address, H256};
-
-use crate::state::err::Error;
+use std::sync::Arc;
 
 static NULL_RLP_STATIC: [u8; 1] = [0x80; 1];
 
@@ -34,8 +32,7 @@ impl<B: DB> AccountDB<B> {
 
 impl<B: DB> DB for AccountDB<B> {
     type Error = Error;
-
-    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
         if H256::from_slice(key) == RLP_NULL {
             return Ok(Some(NULL_RLP_STATIC.to_vec()));
         }
@@ -46,7 +43,7 @@ impl<B: DB> DB for AccountDB<B> {
             .map_err(|e| Error::DB(format!("{}", e)))
     }
 
-    fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Self::Error> {
+    fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Error> {
         if H256::from_slice(key.as_slice()) == RLP_NULL {
             return Ok(());
         }
@@ -56,7 +53,7 @@ impl<B: DB> DB for AccountDB<B> {
             .map_err(|e| Error::DB(format!("{}", e)))
     }
 
-    fn contains(&self, key: &[u8]) -> Result<bool, Self::Error> {
+    fn contains(&self, key: &[u8]) -> Result<bool, Error> {
         if H256::from_slice(key) == RLP_NULL {
             return Ok(true);
         }
@@ -66,7 +63,7 @@ impl<B: DB> DB for AccountDB<B> {
             .map_err(|e| Error::DB(format!("{}", e)))
     }
 
-    fn remove(&self, key: &[u8]) -> Result<(), Self::Error> {
+    fn remove(&self, key: &[u8]) -> Result<(), Error> {
         if H256::from_slice(key) == RLP_NULL {
             return Ok(());
         }
@@ -76,7 +73,7 @@ impl<B: DB> DB for AccountDB<B> {
             .map_err(|e| Error::DB(format!("{}", e)))
     }
 
-    fn flush(&self) -> Result<(), Self::Error> {
+    fn flush(&self) -> Result<(), Error> {
         self.db.flush().map_err(|e| Error::DB(format!("{}", e)))
     }
 }
@@ -85,6 +82,7 @@ impl<B: DB> DB for AccountDB<B> {
 mod test_account_db {
     use super::*;
     use cita_trie::MemoryDB;
+    use cita_trie::DB;
 
     #[test]
     fn test_accdb_get() {
