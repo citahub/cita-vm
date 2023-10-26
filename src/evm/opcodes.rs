@@ -391,6 +391,7 @@ impl OpCode {
             0x59 => Some(OpCode::MSIZE),
             0x5a => Some(OpCode::GAS),
             0x5b => Some(OpCode::JUMPDEST),
+            0x5f => Some(OpCode::PUSH0),
             0x60 => Some(OpCode::PUSH1),
             0x61 => Some(OpCode::PUSH2),
             0x62 => Some(OpCode::PUSH3),
