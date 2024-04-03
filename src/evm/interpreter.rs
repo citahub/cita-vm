@@ -1,6 +1,7 @@
 use std::cmp;
 
 use ethereum_types::{Address, BigEndianHash, H256, U256, U512};
+use hashbrown::HashMap;
 use log::debug;
 
 use crate::evm::common;
@@ -78,6 +79,7 @@ pub struct InterpreterConf {
     pub gas_ext_code_hash: u64, // Piad for a EXTCODEHASH operation. http://eips.ethereum.org/EIPS/eip-1052
     pub gas_chain_id: u64,     // istanbul,eip155
     pub gas_self_balance: u64, // istanbul
+    pub gas_transit_storage: u64, // cancun, eip1153
 }
 
 impl Default for InterpreterConf {
@@ -129,6 +131,7 @@ impl Default for InterpreterConf {
             gas_ext_code_hash: 400,
             gas_chain_id: 2,
             gas_self_balance: 5,
+            gas_transit_storage: 100,
         }
     }
 }
@@ -152,6 +155,7 @@ pub struct InterpreterParams {
     pub gas_limit: u64,
     pub gas_price: U256,
     pub base_fee: U256,
+    pub blob_base_fee: U256,
 
     pub read_only: bool,
     pub contract: Contract,
@@ -174,6 +178,7 @@ pub struct Interpreter {
     return_data: Vec<u8>,
     mem_gas: u64,
     gas_tmp: u64,
+    transient_storage: HashMap<Address, HashMap<H256, H256>>,
 }
 
 impl Interpreter {
@@ -196,6 +201,7 @@ impl Interpreter {
             return_data: Vec::new(),
             mem_gas: 0,
             gas_tmp: 0,
+            transient_storage: HashMap::new(),
         }
     }
 
@@ -362,6 +368,16 @@ impl Interpreter {
                 }
                 opcodes::OpCode::JUMPDEST => {
                     self.use_gas(self.cfg.gas_jumpdest)?;
+                }
+                opcodes::OpCode::TLOAD | opcodes::OpCode::TSTORE => {
+                    self.use_gas(self.cfg.gas_transit_storage)?;
+                }
+                opcodes::OpCode::MCOPY => {
+                    let mem_offset = self.stack.back(0);
+                    let mem_len = self.stack.back(2);
+                    self.mem_gas_work(mem_offset, mem_len)?;
+                    let gas = common::to_word_size(mem_len.low_u64()) * self.cfg.gas_copy;
+                    self.use_gas(gas)?;
                 }
                 opcodes::OpCode::LOG0
                 | opcodes::OpCode::LOG1
@@ -798,6 +814,9 @@ impl Interpreter {
                 opcodes::OpCode::BASEFEE => {
                     self.stack.push(self.params.base_fee);
                 }
+                opcodes::OpCode::BLOBBASEFEE => {
+                    self.stack.push(self.params.blob_base_fee);
+                }
                 opcodes::OpCode::POP => {
                     self.stack.pop();
                 }
@@ -851,6 +870,23 @@ impl Interpreter {
                     self.stack.push(U256::from(self.gas));
                 }
                 opcodes::OpCode::JUMPDEST => {}
+                opcodes::OpCode::TLOAD => {
+                    let location = H256::from_uint(&self.stack.pop());
+                    let value = self.get_transit_storage(&self.params.address, &location);
+                    self.stack.push(U256::from(value.0))
+                }
+                opcodes::OpCode::TSTORE => {
+                    let location = H256::from_uint(&self.stack.pop());
+                    let value = H256::from_uint(&self.stack.pop());
+                    self.set_transit_storage(self.params.address, location, value)
+                }
+                opcodes::OpCode::MCOPY => {
+                    let mem_offset = self.stack.pop().low_u64() as usize;
+                    let raw_offset = self.stack.pop().low_u64() as usize;
+                    let size = self.stack.pop().low_u64() as usize;
+                    let data = self.mem.get(raw_offset, size).to_vec();
+                    self.mem.set(mem_offset, &data);
+                }
                 opcodes::OpCode::PUSH0 => {
                     self.stack.push(U256::zero());
                 }
@@ -1260,6 +1296,25 @@ impl Interpreter {
             debug!("[{}] {:#x}", i, self.stack.back(i));
         }
         debug!("[MEM] len={}", self.mem.len());
+    }
+
+    fn get_transit_storage(&self, addr: &Address, location: &H256) -> H256 {
+        if let Some(state) = self.transient_storage.get(addr) {
+            if let Some(v) = state.get(location) {
+                return *v;
+            }
+        }
+        H256::zero()
+    }
+
+    fn set_transit_storage(&mut self, addr: Address, location: H256, value: H256) {
+        if let Some(state) = self.transient_storage.get_mut(&addr) {
+            state.insert(location, value);
+        } else {
+            let mut state = HashMap::new();
+            state.insert(location, value);
+            self.transient_storage.insert(addr, state);
+        }
     }
 }
 
@@ -1798,5 +1853,60 @@ mod tests {
         let r = it.run();
         assert!(r.is_err());
         assert_eq!(r.err(), Some(err::Error::InvalidOpcode))
+    }
+
+    #[test]
+    fn test_op_mcopy() {
+        let mut it = default_interpreter();
+        it.mem.expand(64);
+
+        it.params.contract.code_data = vec![opcodes::OpCode::MCOPY as u8];
+        it.stack.push_n(&[U256::from(32), U256::from(32), U256::from(0)]);
+        it.mem.set(0, hex::decode("0000000000000000000000000000000000000000000000000000000000000000000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f").unwrap().as_slice());
+        let r = it.run();
+        assert!(r.is_ok());
+        assert_eq!(
+            hex::encode(it.mem.get(0, 32)),
+            "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+        );
+
+        it.params.contract.code_data = vec![opcodes::OpCode::MCOPY as u8];
+        it.stack.push_n(&[U256::from(32), U256::from(0), U256::from(0)]);
+        it.mem.set(
+            0,
+            hex::decode("0101010101010101010101010101010101010101010101010101010101010101")
+                .unwrap()
+                .as_slice(),
+        );
+        let r = it.run();
+        assert!(r.is_ok());
+        assert_eq!(
+            hex::encode(it.mem.get(0, 32)),
+            "0101010101010101010101010101010101010101010101010101010101010101"
+        );
+
+        it.params.contract.code_data = vec![opcodes::OpCode::MCOPY as u8];
+        it.stack.push_n(&[U256::from(8), U256::from(1), U256::from(0)]);
+        it.mem.set(
+            0,
+            hex::decode("0001020304050607080000000000000000000000000000000000000000000000")
+                .unwrap()
+                .as_slice(),
+        );
+        let r = it.run();
+        assert!(r.is_ok());
+        assert_eq!(hex::encode(it.mem.get(0, 8)), "0102030405060708");
+
+        it.params.contract.code_data = vec![opcodes::OpCode::MCOPY as u8];
+        it.stack.push_n(&[U256::from(8), U256::from(0), U256::from(1)]);
+        it.mem.set(
+            0,
+            hex::decode("0001020304050607080000000000000000000000000000000000000000000000")
+                .unwrap()
+                .as_slice(),
+        );
+        let r = it.run();
+        assert!(r.is_ok());
+        assert_eq!(hex::encode(it.mem.get(0, 8)), "0000010203040506");
     }
 }

@@ -65,11 +65,7 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn set_storage(&mut self, address: &Address, key: H256, value: H256) {
-        self.db
-            .entry(*address)
-            .or_insert_with(Account::default)
-            .storage
-            .insert(key, value);
+        self.db.entry(*address).or_default().storage.insert(key, value);
     }
 
     fn get_storage_origin(&self, address: &Address, key: &H256) -> H256 {
@@ -79,11 +75,7 @@ impl ext::DataProvider for DataProviderMock {
     }
 
     fn set_storage_origin(&mut self, address: &Address, key: H256, value: H256) {
-        self.db_origin
-            .entry(*address)
-            .or_insert_with(Account::default)
-            .storage
-            .insert(key, value);
+        self.db_origin.entry(*address).or_default().storage.insert(key, value);
     }
 
     fn selfdestruct(&mut self, address: &Address, _: &Address) -> bool {

@@ -717,7 +717,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
             .borrow_mut()
             .origin
             .entry(*address)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .entry(key)
             .or_insert(a);
         if let Err(e) = self.state_provider.borrow_mut().set_storage(address, key, value) {
