@@ -306,13 +306,13 @@ impl Interpreter {
                 }
                 opcodes::OpCode::SSTORE => {
                     let address = H256::from_uint(&self.stack.back(0));
-                    let current_value = U256::from(
+                    let current_value = U256::from_big_endian(
                         self.data_provider
                             .get_storage(&self.params.address, &address)
                             .as_bytes(),
                     );
                     let new_value = self.stack.back(1);
-                    let original_value = U256::from(
+                    let original_value = U256::from_big_endian(
                         self.data_provider
                             .get_storage_origin(&self.params.address, &address)
                             .as_bytes(),
@@ -691,7 +691,7 @@ impl Interpreter {
                     let k = self
                         .data_provider
                         .sha3(self.mem.get(mem_offset.low_u64() as usize, mem_len.low_u64() as usize));
-                    self.stack.push(U256::from(k.as_bytes()));
+                    self.stack.push(U256::from_big_endian(k.as_bytes()));
                 }
                 opcodes::OpCode::ADDRESS => {
                     self.stack.push(common::address_to_u256(self.params.address));
@@ -727,7 +727,7 @@ impl Interpreter {
                         if id < bound && big_id < U256::from(self.params.input.len()) {
                             let mut v = [0u8; 32];
                             v[0..bound - id].clone_from_slice(&self.params.input[id..bound]);
-                            self.stack.push(U256::from(&v[..]))
+                            self.stack.push(U256::from_big_endian(&v[..]))
                         } else {
                             self.stack.push(U256::zero())
                         }
@@ -788,12 +788,12 @@ impl Interpreter {
                 opcodes::OpCode::EXTCODEHASH => {
                     let address = common::u256_to_address(&self.stack.pop());
                     let hash = self.data_provider.get_code_hash(&address);
-                    self.stack.push(U256::from(hash.as_bytes()));
+                    self.stack.push(U256::from_big_endian(hash.as_bytes()));
                 }
                 opcodes::OpCode::BLOCKHASH => {
                     let block_number = self.stack.pop();
                     let block_hash = self.data_provider.get_block_hash(&block_number);
-                    self.stack.push(U256::from(block_hash.as_bytes()));
+                    self.stack.push(U256::from_big_endian(block_hash.as_bytes()));
                 }
                 opcodes::OpCode::COINBASE => {
                     self.stack.push(common::address_to_u256(self.context.coinbase));
@@ -823,12 +823,12 @@ impl Interpreter {
                 opcodes::OpCode::MLOAD => {
                     let offset = self.stack.pop().as_u64();
                     let word = self.mem.get(offset as usize, 32);
-                    self.stack.push(U256::from(word));
+                    self.stack.push(U256::from_big_endian(word));
                 }
                 opcodes::OpCode::MSTORE => {
                     let offset = self.stack.pop();
                     let word = self.stack.pop();
-                    let word = &<[u8; 32]>::from(word)[..];
+                    let word = &word.to_big_endian()[..];
                     self.mem.set(offset.low_u64() as usize, word);
                 }
                 opcodes::OpCode::MSTORE8 => {
@@ -838,7 +838,7 @@ impl Interpreter {
                 }
                 opcodes::OpCode::SLOAD => {
                     let key = H256::from_uint(&self.stack.pop());
-                    let word = U256::from(self.data_provider.get_storage(&self.params.address, &key).as_bytes());
+                    let word = U256::from_big_endian(self.data_provider.get_storage(&self.params.address, &key).as_bytes());
                     self.stack.push(word);
                 }
                 opcodes::OpCode::SSTORE => {
@@ -873,7 +873,7 @@ impl Interpreter {
                 opcodes::OpCode::TLOAD => {
                     let location = H256::from_uint(&self.stack.pop());
                     let value = self.get_transit_storage(&self.params.address, &location);
-                    self.stack.push(U256::from(value.0))
+                    self.stack.push(U256::from_big_endian(&value.0))
                 }
                 opcodes::OpCode::TSTORE => {
                     let location = H256::from_uint(&self.stack.pop());
@@ -925,7 +925,7 @@ impl Interpreter {
                     let n = op as u8 - opcodes::OpCode::PUSH1 as u8 + 1;
                     let e = pc + u64::from(n);
                     let e = cmp::min(e, self.params.contract.code_data.len() as u64);
-                    let r = U256::from(&self.params.contract.code_data[pc as usize..e as usize]);
+                    let r = U256::from_big_endian(&self.params.contract.code_data[pc as usize..e as usize]);
                     pc = e;
                     self.stack.push(r);
                 }
@@ -1283,7 +1283,7 @@ impl Interpreter {
                 if pc + u64::from(n) > self.params.contract.code_data.len() as u64 {
                     U256::zero()
                 } else {
-                    U256::from(&self.params.contract.code_data[pc as usize..(pc + u64::from(n)) as usize])
+                    U256::from_big_endian(&self.params.contract.code_data[pc as usize..(pc + u64::from(n)) as usize])
                 }
             };
             debug!("[OP] {} {:#x} gas={}", op, r, self.gas);

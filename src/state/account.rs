@@ -287,7 +287,7 @@ impl StateObject {
             if v.is_zero() {
                 trie.remove(k.as_bytes())?;
             } else {
-                trie.insert(k.0.to_vec(), rlp::encode(&U256::from(v.as_bytes())).to_vec())?;
+                trie.insert(k.0.to_vec(), rlp::encode(&U256::from_big_endian(v.as_bytes())).to_vec())?;
             }
         }
 

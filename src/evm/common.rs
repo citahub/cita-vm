@@ -44,7 +44,7 @@ pub fn u256_to_address(value: &U256) -> Address {
 
 #[inline]
 pub fn address_to_u256(value: Address) -> U256 {
-    U256::from(value.as_bytes())
+    U256::from_little_endian(value.as_bytes())
 }
 
 #[inline]

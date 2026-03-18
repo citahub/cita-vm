@@ -30,7 +30,7 @@ pub trait PrecompiledContract: Send + Sync {
 
 /// Function get returns a pre-compiled contract by given address.
 pub fn get(address: Address) -> Box<dyn PrecompiledContract> {
-    match U256::from(H256::from(address).as_bytes()).low_u64() {
+    match U256::from_big_endian(H256::from(address).as_bytes()).low_u64() {
         0x01 => Box::new(EcRecover {}) as Box<dyn PrecompiledContract>,
         0x02 => Box::new(SHA256Hash {}) as Box<dyn PrecompiledContract>,
         0x03 => Box::new(RIPEMD160Hash {}) as Box<dyn PrecompiledContract>,
@@ -45,7 +45,7 @@ pub fn get(address: Address) -> Box<dyn PrecompiledContract> {
 
 /// Check if an address is pre-compiled contract.
 pub fn contains(address: &Address) -> bool {
-    let i = U256::from(H256::from(*address).as_bytes());
+    let i = U256::from_big_endian(H256::from(*address).as_bytes());
     i <= U256::from(8) && !i.is_zero()
 }
 

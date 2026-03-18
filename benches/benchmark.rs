@@ -1,6 +1,6 @@
-use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::SystemTime;
+use std::{cell::RefCell, str::FromStr};
 
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use ethereum_types::{Address, U256};
@@ -9,13 +9,13 @@ fn wrapper(bench: &mut Bencher, code: &str, data: &str) {
     let db = Arc::new(cita_vm::state::MemoryDB::new(false));
     let mut state = cita_vm::state::State::new(db).unwrap();
     state.new_contract(
-        &Address::from("0xBd770416a3345F91E4B34576cb804a576fa48EB1"),
+        &Address::from_str("0xBd770416a3345F91E4B34576cb804a576fa48EB1").unwrap(),
         U256::from(10),
         U256::from(1),
         hex::decode(code).unwrap(),
     );
     state.new_contract(
-        &Address::from("0x1000000000000000000000000000000000000000"),
+        &Address::from_str("0x1000000000000000000000000000000000000000").unwrap(),
         U256::from(1_000_000_000_000_000u64),
         U256::from(1),
         vec![],
@@ -26,8 +26,8 @@ fn wrapper(bench: &mut Bencher, code: &str, data: &str) {
     let config = cita_vm::Config::default();
 
     let mut tx = cita_vm::Transaction {
-        from: Address::from("0x1000000000000000000000000000000000000000"),
-        to: Some(Address::from("0xBd770416a3345F91E4B34576cb804a576fa48EB1")),
+        from: Address::from_str("0x1000000000000000000000000000000000000000").unwrap(),
+        to: Some(Address::from_str("0xBd770416a3345F91E4B34576cb804a576fa48EB1").unwrap()),
         value: U256::from(0),
         nonce: U256::from(1),
         gas_limit: 80000,
@@ -195,8 +195,8 @@ const ERC20_CODE: &str = "606060405234620000005760405162001617380380620016178339
 fn bench_new_contract(bench: &mut Bencher) {
     let db = Arc::new(cita_vm::state::MemoryDB::new(false));
     let mut state = cita_vm::state::State::new(db).unwrap();
-    let address0 = Address::from("0x1000000000000000000000000000000000000000");
-    let address1 = Address::from("0x1000000000000000000000000000000000000001");
+    let address0 = Address::from_str("0x1000000000000000000000000000000000000000").unwrap();
+    let address1 = Address::from_str("0x1000000000000000000000000000000000000001").unwrap();
 
     state.new_contract(&address0, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
     state.new_contract(&address1, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
@@ -244,8 +244,8 @@ fn bench_new_contract(bench: &mut Bencher) {
 fn bench_erc20(bench: &mut Bencher) {
     let db = Arc::new(cita_vm::state::MemoryDB::new(false));
     let mut state = cita_vm::state::State::new(db).unwrap();
-    let address0 = Address::from("0x1000000000000000000000000000000000000000");
-    let address1 = Address::from("0x1000000000000000000000000000000000000001");
+    let address0 = Address::from_str("0x1000000000000000000000000000000000000000").unwrap();
+    let address1 = Address::from_str("0x1000000000000000000000000000000000000001").unwrap();
 
     state.new_contract(&address0, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
     state.new_contract(&address1, U256::from(100_000_000_000_000_000u64), U256::from(1), vec![]);
