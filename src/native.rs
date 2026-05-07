@@ -13,7 +13,7 @@ use std::io::Write;
 use std::str::FromStr;
 
 use ethereum_types::{Address, H256, H512, U256};
-use ripemd::{Digest, Ripemd160};
+use ripemd::{Digest as _, Ripemd160};
 use sha2::Sha256;
 
 use crate::common;
