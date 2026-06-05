@@ -1,5 +1,5 @@
 use ethereum_types::H256;
-use hasher::Hasher;
+use cita_hasher::Hasher;
 
 #[cfg(feature = "sha3hash")]
 pub const NIL_DATA: H256 = H256([
@@ -14,8 +14,8 @@ pub const RLP_NULL: H256 = H256([
 ]);
 
 #[cfg(feature = "sha3hash")]
-pub fn get_hasher() -> hasher::HasherKeccak {
-    hasher::HasherKeccak::new()
+pub fn get_hasher() -> cita_hasher::HasherKeccak {
+    cita_hasher::HasherKeccak::new()
 }
 
 #[cfg(feature = "blake2bhash")]

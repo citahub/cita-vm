@@ -13,7 +13,7 @@ use crate::err;
 use crate::evm;
 use crate::native;
 use crate::state::{State, StateObjectInfo};
-use hasher::Hasher;
+use cita_hasher::Hasher;
 
 /// BlockDataProvider provides functions to get block's hash from chain.
 ///
@@ -761,7 +761,7 @@ impl<B: DB + 'static> evm::DataProvider for DataProvider<B> {
     }
 
     fn sha3(&self, data: &[u8]) -> H256 {
-        H256::from_slice(hasher::HasherKeccak::new().digest(data).as_slice())
+        H256::from_slice(cita_hasher::HasherKeccak::new().digest(data).as_slice())
     }
 
     fn is_empty(&self, address: &Address) -> bool {

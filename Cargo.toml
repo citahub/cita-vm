@@ -1,6 +1,6 @@
 [package]
 name = "cita-vm"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Cryptape Technologies <contact@cryptape.com>"]
 edition = "2021"
 description = "CITA VM"
@@ -14,7 +14,7 @@ cita_trie = "6.0"
 env_logger = "0.11"
 ethereum-types = "0.16"
 hashbrown = { version = "0.17", features = ["rayon"] }
-hasher = { version = "0.1" }
+cita-hasher = "0.1"
 hex = "0.4"
 secp256k1 = { package = "libsecp256k1", version = "0.7" }
 log = "0.4"
@@ -36,6 +36,6 @@ harness = false
 
 [features]
 default = ["sha3hash"]
-sha3hash = ["hasher/hash-keccak"]
-blake2bhash = ["hasher/hash-blake2b"]
-sm3hash = ["hasher/hash-sm3"]
+sha3hash = ["cita-hasher/hash-keccak"]
+blake2bhash = ["cita-hasher/hash-blake2b"]
+sm3hash = ["cita-hasher/hash-sm3"]
