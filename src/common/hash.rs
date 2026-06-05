@@ -31,8 +31,8 @@ pub const RLP_NULL: H256 = H256([
 ]);
 
 #[cfg(feature = "blake2bhash")]
-pub fn get_hasher() -> hasher::HasherBlake2B {
-    hasher::HasherBlake2B::new("CryptapeCryptape".as_bytes().to_vec())
+pub fn get_hasher() -> cita_hasher::HasherBlake2B {
+    cita_hasher::HasherBlake2B::new("CryptapeCryptape".as_bytes().to_vec())
 }
 
 #[cfg(feature = "sm3hash")]
@@ -48,8 +48,8 @@ pub const RLP_NULL: H256 = H256([
 ]);
 
 #[cfg(feature = "sm3hash")]
-pub fn get_hasher() -> hasher::HasherSM3 {
-    hasher::HasherSM3::new()
+pub fn get_hasher() -> cita_hasher::HasherSM3 {
+    cita_hasher::HasherSM3::new()
 }
 
 pub fn summary(data: &[u8]) -> Vec<u8> {
